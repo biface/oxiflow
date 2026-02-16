@@ -1,0 +1,10 @@
+[package]
+name = "oxiflow"
+version = "0.0.1"
+edition = "2024"
+description = "Modular reactive transport solver (Work in Progress)"
+license = "Apache-2.0"
+keywords = ["pde", "transport", "solver", "numerical", "simulation"]
+categories = ["science", "simulation", "algorithms"]
+
+[dependencies]
