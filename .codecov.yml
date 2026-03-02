@@ -1,0 +1,229 @@
+# Codecov Configuration — oxiflow
+# Generic numerical library for transport-reaction-diffusion problems
+# Documentation: https://docs.codecov.com/docs/codecov-yaml
+
+# ============================================================================
+# PARAMÈTRES GLOBAUX
+# ============================================================================
+codecov:
+  require_ci_to_pass: yes
+  notify:
+    wait_for_ci: yes
+
+# ============================================================================
+# COUVERTURE GÉNÉRALE
+# ============================================================================
+coverage:
+  precision: 2        # 85.42%
+  round: down         # Conservateur
+  range: 70...90      # vert >90%, jaune 70-90%, rouge <70%
+
+  status:
+    project:
+      default:
+        target: 85%
+        threshold: 2%
+    patch:
+      default:
+        target: 80%   # Tout nouveau code doit être couvert à 80%
+        threshold: 5%
+
+# ============================================================================
+# FLAGS — Feature flags Rust
+# ============================================================================
+flags:
+  unittests:
+    paths:
+      - src/
+    carryforward: false
+  parallel:
+    paths:
+      - src/
+    carryforward: true   # Conserve si le workflow parallel n'a pas tourné
+
+# ============================================================================
+# COMMENTAIRES SUR LES PULL REQUESTS
+# ============================================================================
+comment:
+  layout: reach,diff,flags,components,files
+  behavior: default
+  require_changes: false
+
+# ============================================================================
+# COMPONENTS — Architecture oxiflow
+#
+# Correspondance avec les jalons du programme de développement :
+#   context   → J1 (v0.2)  — cœur architectural
+#   boundary  → J2 (v0.3)  — conditions aux limites requirantes
+#   coupling  → J3 (v0.4)  — couplage inter-domaines (INV-3)
+#   solver    → J4 (v0.5-0.6) — intégrateurs + opérateurs
+#   mesh      → J1 (v0.2)  — trait Mesh abstrait (INV-1)
+#
+# Pour ajouter un composant : copier un bloc, adapter paths + target.
+# ============================================================================
+component_management:
+
+  default_rules:
+    statuses:
+      - type: project
+        target: 85%
+      - type: patch
+        target: 80%
+
+  individual_components:
+
+    # --------------------------------------------------------------------------
+    # CONTEXT : Cœur architectural — ContextValue, OxiflowError,
+    #           RequiresContext, ComputeContext, chaîne de calculateurs
+    # Cible élevée : c'est le contrat de toute l'architecture (J1)
+    # --------------------------------------------------------------------------
+    - component_id: context
+      name: "Context Architecture"
+      paths:
+        - src/context/**
+      statuses:
+        - type: project
+          target: 90%
+        - type: patch
+          target: 85%
+
+    # --------------------------------------------------------------------------
+    # MESH : Trait Mesh abstrait + implémentations de grilles (INV-1 FEM)
+    # Cible élevée : invariant de compatibilité v2.0 (J1)
+    # --------------------------------------------------------------------------
+    - component_id: mesh
+      name: "Mesh Abstraction (INV-1)"
+      paths:
+        - src/mesh/**
+      statuses:
+        - type: project
+          target: 90%
+
+    # --------------------------------------------------------------------------
+    # MODEL : Modèles physiques (PhysicalModel, traits, implémentations)
+    # --------------------------------------------------------------------------
+    - component_id: model
+      name: "Physical Models"
+      paths:
+        - src/model/**
+
+    # --------------------------------------------------------------------------
+    # BOUNDARY : Conditions aux limites requirantes (J2)
+    # --------------------------------------------------------------------------
+    - component_id: boundary
+      name: "Boundary Conditions"
+      paths:
+        - src/boundary/**
+
+    # --------------------------------------------------------------------------
+    # QUANTITY : PhysicalQuantity indexé + PhysicalState multi-champs (J3)
+    # --------------------------------------------------------------------------
+    - component_id: quantity
+      name: "Physical Quantities"
+      paths:
+        - src/quantity.rs
+        - src/state/**
+
+    # --------------------------------------------------------------------------
+    # COUPLING : CouplingOperator inter-domaines (INV-3 FEM, J3)
+    # Cible élevée : invariant de compatibilité v2.0
+    # --------------------------------------------------------------------------
+    - component_id: coupling
+      name: "Coupling Operators (INV-3)"
+      paths:
+        - src/coupling/**
+      statuses:
+        - type: project
+          target: 90%
+
+    # --------------------------------------------------------------------------
+    # SOLVER TEMPORAL : Intégrateurs temporels (J4a)
+    # --------------------------------------------------------------------------
+    - component_id: solver_temporal
+      name: "Temporal Integrators"
+      paths:
+        - src/solver/temporal/**
+
+    # --------------------------------------------------------------------------
+    # SOLVER SPATIAL : DiscreteOperator abstrait + FD/FV (INV-2 FEM, J4b)
+    # Cible élevée : invariant de compatibilité v2.0
+    # --------------------------------------------------------------------------
+    - component_id: solver_spatial
+      name: "Spatial Operators (INV-2)"
+      paths:
+        - src/solver/spatial/**
+      statuses:
+        - type: project
+          target: 90%
+
+    # --------------------------------------------------------------------------
+    # SOLVER LINEAR : Solveurs linéaires (délégation à nalgebra/faer, J4)
+    # Cible plus souple : on teste l'interface, pas nalgebra elle-même
+    # --------------------------------------------------------------------------
+    - component_id: solver_linear
+      name: "Linear Solvers"
+      paths:
+        - src/solver/linear/**
+      statuses:
+        - type: project
+          target: 75%
+
+    # --------------------------------------------------------------------------
+    # SCENARIO : Agrégation et validation des besoins (J2)
+    # --------------------------------------------------------------------------
+    - component_id: scenario
+      name: "Scenario & Validation"
+      paths:
+        - src/scenario.rs
+
+    # --------------------------------------------------------------------------
+    # FEATURE PARALLEL : Code conditionnel #[cfg(feature = "parallel")] (J5)
+    # Décommenter à partir de J5
+    # --------------------------------------------------------------------------
+    # - component_id: parallel
+    #   name: "Parallel Feature"
+    #   paths:
+    #     - src/**/parallel*
+    #   statuses:
+    #     - type: project
+    #       target: 80%
+
+    # --------------------------------------------------------------------------
+    # FEATURE SERDE : Sérialisation (J5-J6)
+    # Décommenter quand le module sera implémenté
+    # --------------------------------------------------------------------------
+    # - component_id: serde_support
+    #   name: "Serde Support"
+    #   paths:
+    #     - src/**/serde*
+    #   statuses:
+    #     - type: project
+    #       target: 75%
+
+    # --------------------------------------------------------------------------
+    # FEATURE HDF5 : Export/import HDF5 (J5-J6)
+    # Décommenter quand le module sera implémenté
+    # --------------------------------------------------------------------------
+    # - component_id: hdf5_support
+    #   name: "HDF5 Support"
+    #   paths:
+    #     - src/**/hdf5*
+    #   statuses:
+    #     - type: project
+    #       target: 75%
+
+# ============================================================================
+# FICHIERS IGNORÉS
+# ============================================================================
+ignore:
+  - tests/
+  - examples/
+  - benches/
+  - "**/*_test.rs"
+  - src/main.rs
+
+# ============================================================================
+# INTÉGRATION GITHUB
+# ============================================================================
+github_checks:
+  annotations: true
