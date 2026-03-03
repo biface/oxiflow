@@ -18,7 +18,7 @@ jobs:
       - name: Push mirror to GitLab
         run: |
           git remote add gitlab \
-            https://oauth2:${GITLAB_TOKEN}@gitlab.com/open-work/oxiflow.git
+            https://oauth2:${GITLAB_TOKEN}@gitlab.com/open-works/oxiflow.git
           git push gitlab --mirror
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_MIRROR_TOKEN }}
