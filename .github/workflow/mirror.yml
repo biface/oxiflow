@@ -1,0 +1,24 @@
+name: Mirror to GitLab
+
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+  delete:
+
+jobs:
+  mirror:
+    name: Push mirror
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push mirror to GitLab
+        run: |
+          git remote add gitlab \
+            https://oauth2:${GITLAB_TOKEN}@gitlab.com/open-work/oxiflow.git
+          git push gitlab --mirror
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_MIRROR_TOKEN }}
