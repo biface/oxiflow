@@ -39,7 +39,7 @@ flags:
   parallel:
     paths:
       - src/
-    carryforward: true   # Conserve si le workflow parallel n'a pas tourné
+    carryforward: true   # Conserve si le workflows parallel n'a pas tourné
 
 # ============================================================================
 # COMMENTAIRES SUR LES PULL REQUESTS
