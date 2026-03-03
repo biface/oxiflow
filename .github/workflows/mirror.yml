@@ -2,9 +2,9 @@ name: Mirror to GitLab
 
 on:
   push:
-    branches: ['**']
-    tags: ['**']
-  delete:
+    branches: ['**']   # toutes les branches
+    tags: ['**']       # tous les tags (inclut les releases)
+  delete:              # synchronise aussi les suppressions de branches/tags
 
 jobs:
   mirror:
@@ -13,12 +13,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # historique complet obligatoire
 
       - name: Push mirror to GitLab
         run: |
           git remote add gitlab \
-            https://oauth2:${GITLAB_TOKEN}@gitlab.com/open-works/oxiflow.git
-          git push gitlab --mirror
+            https://oauth2:${GITLAB_TOKEN}@gitlab.com/open-work/oxiflow.git
+
+          # --mirror pousse aussi refs/remotes/* que GitLab refuse.
+          # On pousse uniquement les branches et les tags explicitement.
+          git push gitlab \
+            --prune \
+            "+refs/heads/*:refs/heads/*" \
+            "+refs/tags/*:refs/tags/*"
         env:
           GITLAB_TOKEN: ${{ secrets.GITLAB_MIRROR_TOKEN }}

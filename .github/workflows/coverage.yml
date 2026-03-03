@@ -1,125 +1,92 @@
-name: Code Coverage
-
-# Génère et publie le rapport de couverture sur codecov.io
-# Utilise cargo-llvm-cov (source-based coverage via LLVM)
+name: Coverage
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - 'feature/**'
+    branches: [main, develop]
   pull_request:
-    branches:
-      - main
-      - master
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
 
 jobs:
   coverage:
-    name: Generate Coverage Report
+    name: Code Coverage
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # Historique complet pour le suivi de branche codecov
+          fetch-depth: 0   # full history required for Codecov branch tracking
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
 
-      # - name: Install system dependencies
-      #  run: |
-      #    sudo apt-get update
-      #    sudo apt-get install -y pkg-config
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-
-      - name: Cache cargo index
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-index-
-
-      - name: Cache cargo build
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-coverage-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-coverage-
+      - uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Generate code coverage (default features)
-        run: |
-          cargo llvm-cov --workspace --lcov --output-path lcov.info
+      # ── Dépendances système (à activer si nécessaire) ──────────────────────
+      # Certains modules peuvent requérir des bibliothèques système installées
+      # via apt avant que les tests puissent s'exécuter.
+      # Décommenter et adapter si un tel besoin apparaît :
+      #
+      # - name: Install system dependencies
+      #   run: |
+      #     sudo apt-get update -q
+      #     sudo apt-get install -y --no-install-recommends \
+      #       libnom-du-paquet-dev \
+      #       autre-paquet-dev
+      # ──────────────────────────────────────────────────────────────────────
 
-      - name: Generate code coverage (all features)
+      # ── Run 1 : default features (core engine) ────────────────────────────
+      # Seul run actif tant que les features parallel/serde ne sont pas
+      # déclarés dans Cargo.toml. À compléter au fur et à mesure des jalons.
+      - name: Coverage — default features
         run: |
-          cargo llvm-cov --workspace --all-features --lcov --output-path lcov-all-features.info
+          cargo llvm-cov --all-targets \
+            --lcov --output-path lcov-default.info
 
-      # Les feature flags parallel/serde/hdf5 sont testés séparément
-      # pour isoler leur couverture dans les composants codecov
-      - name: Generate coverage — feature parallel
-        run: |
-          cargo llvm-cov --workspace --features parallel --lcov \
-            --output-path lcov-parallel.info
+      # ── Run 2 : all features ──────────────────────────────────────────────
+      # À activer dès qu'au moins un feature optionnel est déclaré dans
+      # Cargo.toml (parallel, serde, hdf5...).
+      #
+      # - name: Coverage — all features
+      #   run: |
+      #     cargo llvm-cov --all-targets --all-features \
+      #       --lcov --output-path lcov-all.info
 
-      - name: Generate coverage — feature serde
-        run: |
-          cargo llvm-cov --workspace --features serde --lcov \
-            --output-path lcov-serde.info
+      # ── Run 3 : parallel feature only ─────────────────────────────────────
+      # À activer quand Cargo.toml contient : [features] parallel = [...]
+      #
+      # - name: Coverage — parallel feature
+      #   run: |
+      #     cargo llvm-cov --all-targets --features parallel \
+      #       --lcov --output-path lcov-parallel.info
 
-      # Upload principal : all-features (couverture la plus complète)
-      - name: Upload coverage to Codecov
+      # ── Run 4 : serde feature only ────────────────────────────────────────
+      # À activer quand Cargo.toml contient : [features] serde = [...]
+      #
+      # - name: Coverage — serde feature
+      #   run: |
+      #     cargo llvm-cov --all-targets --features serde \
+      #       --lcov --output-path lcov-serde.info
+
+      # ── FEM invariants integration test ───────────────────────────────────
+      # Dédié aux tests INV-1/2/3 dans tests/fem_invariants.rs.
+      # À activer quand ce fichier de test existe.
+      #
+      # - name: Coverage — FEM invariants
+      #   run: |
+      #     cargo llvm-cov --test fem_invariants \
+      #       --lcov --output-path lcov-fem.info
+
+      # ── Upload to Codecov ─────────────────────────────────────────────────
+      - name: Upload to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: lcov-all-features.info
-          fail_ci_if_error: false
-          flags: unittests
-          name: codecov-oxiflow
+          files: lcov-default.info
+          fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
-          verbose: true
-
-      # Upload secondaire : feature parallel (flag dédié)
-      - name: Upload coverage — parallel feature
-        uses: codecov/codecov-action@v4
-        with:
-          files: lcov-parallel.info
-          fail_ci_if_error: false
-          flags: parallel
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Archive coverage reports
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-reports
-          path: |
-            lcov.info
-            lcov-all-features.info
-            lcov-parallel.info
-            lcov-serde.info
-          retention-days: 30
-
-      - name: Display coverage summary
-        run: |
-          echo "📊 Coverage Report Generated"
-          echo "Branch  : ${{ github.ref_name }}"
-          echo "Commit  : ${{ github.sha }}"
-          echo "Report  : https://codecov.io/gh/${{ github.repository }}"
