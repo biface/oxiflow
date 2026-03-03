@@ -118,14 +118,14 @@ fn main() -> Result<(), OxiflowError> {
 The engine is domain-agnostic. Any problem of the canonical form
 `∂u/∂t + ∇·F(u, ∇u) = S(u, x, t)` is a candidate:
 
-| Domain | Example | Target framework |
-|---|---|---|
-| Chromatography | Multi-solute gradient elution | `oxiflow-chrom` |
-| Heat transfer | 1D transient bar cooling | `oxiflow-thermo` |
-| Reaction–diffusion | Gray–Scott Turing patterns | engine direct |
-| Fluid mechanics | Burgers boundary layer | engine direct |
-| Geomechanics | Terzaghi consolidation | engine direct |
-| Surface geophysics | Lahar–lake wave generation | `oxiflow-geo` |
+| Domain             | Example                       | Target framework |
+|--------------------|-------------------------------|------------------|
+| Chromatography     | Multi-solute gradient elution | `oxiflow-chrom`  |
+| Heat transfer      | 1D transient bar cooling      | `oxiflow-thermo` |
+| Reaction–diffusion | Gray–Scott Turing patterns    | engine direct    |
+| Fluid mechanics    | Burgers boundary layer        | engine direct    |
+| Geomechanics       | Terzaghi consolidation        | engine direct    |
+| Surface geophysics | Lahar–lake wave generation    | `oxiflow-geo`    |
 
 ---
 
@@ -134,28 +134,28 @@ The engine is domain-agnostic. Any problem of the canonical form
 Four constraints guarantee a non-breaking evolution from v1.0 to v3.0, and ensure that
 third-party frameworks remain compatible across engine versions:
 
-| Invariant | Description | Introduced |
-|---|---|---|
-| **INV-1** | `Mesh` is abstract — `PhysicalState` carries no grid assumptions | v0.2 |
-| **INV-2** | `DiscreteOperator` is abstract — integrators are generic over the scheme | v0.6 |
-| **INV-3** | `CouplingOperator` supports distinct domains with moving interfaces | v0.4 |
-| **INV-4** | All public traits are object-safe — third-party crates can implement them | v2.0 |
+| Invariant | Description                                                               | Introduced |
+|-----------|---------------------------------------------------------------------------|------------|
+| **INV-1** | `Mesh` is abstract — `PhysicalState` carries no grid assumptions          | v0.2       |
+| **INV-2** | `DiscreteOperator` is abstract — integrators are generic over the scheme  | v0.6       |
+| **INV-3** | `CouplingOperator` supports distinct domains with moving interfaces       | v0.4       |
+| **INV-4** | All public traits are object-safe — third-party crates can implement them | v2.0       |
 
 ---
 
 ## Development Status
 
-| Milestone | Version | Status | Theme |
-|---|---|---|---|
-| J0 — Foundations | v0.1 | ✅ Published | Placeholder · CI · project structure |
-| J1 — Core Architecture | v0.2 | 🔄 In progress | ContextValue · OxiflowError · Mesh (INV-1) |
-| J2 — Complete Context | v0.3 | ⏳ Planned | Requiring BCs · topological ordering |
-| J3 — Multi-Component | v0.4 | ⏳ Planned | PhysicalQuantity · CouplingOperator (INV-3) |
-| J4 — Solvers | v0.5–0.6 | ⏳ Planned | Integrators · DiscreteOperator (INV-2) |
-| J5 — Performance | v0.7 | ⏳ Planned | Rayon · cache · benchmarks |
-| J6 — Ecosystem v1.0 | v1.0 | ⏳ Planned | 7 examples · FEM audit · stable API |
-| J7 — FEM | v2.0 | 🔭 Horizon | Unstructured meshes · ALE · INV-4 plugin-safe |
-| J8 — Frameworks | v3.0 | 🔭 Horizon | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run` |
+| Milestone              | Version  | Status         | Theme                                           |
+|------------------------|----------|----------------|-------------------------------------------------|
+| J0 — Foundations       | v0.1     | ✅ Published    | Placeholder · CI · project structure            |
+| J1 — Core Architecture | v0.2     | 🔄 In progress | ContextValue · OxiflowError · Mesh (INV-1)      |
+| J2 — Complete Context  | v0.3     | ⏳ Planned      | Requiring BCs · topological ordering            |
+| J3 — Multi-Component   | v0.4     | ⏳ Planned      | PhysicalQuantity · CouplingOperator (INV-3)     |
+| J4 — Solvers           | v0.5–0.6 | ⏳ Planned      | Integrators · DiscreteOperator (INV-2)          |
+| J5 — Performance       | v0.7     | ⏳ Planned      | Rayon · cache · benchmarks                      |
+| J6 — Ecosystem v1.0    | v1.0     | ⏳ Planned      | 7 examples · FEM audit · stable API             |
+| J7 — FEM               | v2.0     | 🔭 Horizon     | Unstructured meshes · ALE · INV-4 plugin-safe   |
+| J8 — Frameworks        | v3.0     | 🔭 Horizon     | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run` |
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the full architectural specification.
 
@@ -163,12 +163,12 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for the full architectural specification.
 
 ## Feature Flags
 
-| Flag | Description | Available from |
-|---|---|---|
-| *(default)* | Engine core, serial execution | v0.2 |
-| `parallel` | Rayon parallelism for independent calculators | v0.7 |
-| `serde` | Serialisation of states and scenarios | v0.7 |
-| `hdf5` | HDF5 import/export for tabulated external data | v0.7 |
+| Flag        | Description                                    | Available from |
+|-------------|------------------------------------------------|----------------|
+| *(default)* | Engine core, serial execution                  | v0.2           |
+| `parallel`  | Rayon parallelism for independent calculators  | v0.7           |
+| `serde`     | Serialisation of states and scenarios          | v0.7           |
+| `hdf5`      | HDF5 import/export for tabulated external data | v0.7           |
 
 ---
 
@@ -191,7 +191,7 @@ target ≥ 85% overall, ≥ 90% on INV components.
 
 Copyright 2026 [ton nom]
 
-Licensed under the [Apache License, Version 2.0](LICENSE-2.0.txt).
+Licensed under the [Apache License, Version 2.0](LICENSE.txt).
 
 You may use, distribute and modify this software freely, including for commercial purposes,
 provided you retain the copyright notice and the `NOTICE` file in any redistribution.
