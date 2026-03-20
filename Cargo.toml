@@ -1,10 +1,73 @@
 [package]
-name = "oxiflow"
-version = "0.0.1"
-edition = "2024"
-description = "Modular reactive transport solver (Work in Progress)"
-license = "Apache-2.0"
-keywords = ["pde", "transport", "solver", "numerical", "simulation"]
-categories = ["science", "simulation", "algorithms"]
+name        = "oxiflow"
+version     = "0.0.5"
+edition     = "2021"
+rust-version = "1.80"
+
+description = "Generic PDE solving engine for transport, reaction and diffusion phenomena (∂u/∂t + ∇·F = S)"
+license     = "Apache-2.0"
+repository  = "https://github.com/biface/oxiflow"
+homepage    = "https://github.com/biface/oxiflow"
+documentation = "https://docs.rs/oxiflow"
+readme      = "README.md"
+
+keywords    = ["pde", "solver", "transport", "diffusion", "numerical"]
+categories  = ["science", "algorithms"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Dépendances de production / Production dependencies
+# ──────────────────────────────────────────────────────────────────────────────
 
 [dependencies]
+# Algèbre linéaire — vecteurs, matrices, champs / Linear algebra — vectors, matrices, fields
+nalgebra  = "0.33"
+# Gestion des erreurs typées / Typed error handling (DD-004)
+thiserror = "2"
+
+# Optionnelles / Optional
+# feature `parallel` — parallélisme opt-in via Rayon (DD-014, J5)
+rayon = { version = "1", optional = true }
+# feature `serde`    — sérialisation des types publics (J6)
+serde = { version = "1", features = ["derive"], optional = true }
+# feature `hdf5`     — lecture/écriture de données externes (J2)
+hdf5  = { version = "0.8", optional = true }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Features
+# ──────────────────────────────────────────────────────────────────────────────
+
+[features]
+default  = []
+
+# Parallélisme opt-in via Rayon — activé uniquement au-delà du seuil configurable
+# Opt-in parallelism via Rayon — activated only beyond the configurable threshold
+parallel = ["dep:rayon"]
+
+# Sérialisation des types publics via serde
+# Public types serialization via serde
+serde    = ["dep:serde", "nalgebra/serde-serialize"]
+
+# Support HDF5 pour les données expérimentales volumineuses
+# HDF5 support for large experimental datasets
+hdf5     = ["dep:hdf5"]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Dépendances de développement / Development dependencies
+# ──────────────────────────────────────────────────────────────────────────────
+
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
+
+# Benchmarks Criterion — activés à J5 (v0.7) lorsque benches/ sera créé
+# Criterion benchmarks — activated at J5 (v0.7) when benches/ is created
+# [[bench]]
+# name    = "oxiflow_benchmarks"
+# harness = false
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Profils / Build profiles
+# ──────────────────────────────────────────────────────────────────────────────
+
+[profile.release]
+opt-level = 3
+lto       = true
