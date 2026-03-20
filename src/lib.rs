@@ -48,3 +48,14 @@ pub mod mesh;
 pub mod model;
 pub mod operators;
 pub mod solver;
+
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    // Placeholder test — ensures llvm-cov generates a valid profdata
+    // even when no module is implemented yet.
+    // Remove once the first J1 tests are in place.
+    #[test]
+    fn placeholder() {}
+}
