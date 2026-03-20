@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["boundary","context","coupling","mesh","model","operators","solver"]};

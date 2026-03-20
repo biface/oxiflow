@@ -1,0 +1,2 @@
+createSrcSidebar('[["oxiflow",["",[["boundary",[],["mod.rs"]],["context",[],["compute.rs","error.rs","mod.rs"]],["coupling",[],["mod.rs"]],["mesh",[],["mod.rs"]],["model",[],["mod.rs"]],["operators",[],["mod.rs"]],["solver",[["methods",[],["mod.rs"]]],["chain.rs","config.rs","mod.rs","scenario.rs"]]],["lib.rs"]]]]');
+//{"start":19,"fragment_lengths":[295]}
