@@ -19,13 +19,13 @@
 
 // ── Modules (skeleton — implementation starts at v0.1.0) ────────────────────
 
-pub mod context;
-pub mod model;
-pub mod mesh;
-pub mod solver;
 pub mod boundary;
+pub mod context;
 pub mod coupling;
+pub mod mesh;
+pub mod model;
 pub mod operators;
+pub mod solver;
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
