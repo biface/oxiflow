@@ -1,0 +1,160 @@
+name: "🐛 Bug"
+description: >
+  Report an incorrect behaviour, a panic, or an unexpected result.
+title: "[BUG] "
+labels:
+  - "type: bug"
+  - "status: triage"
+  - "priority: high"
+
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: "Summary"
+      description: "One sentence: what happens vs what should happen."
+      placeholder: >
+        When calling `Scenario::new()` with an unconfigured model,
+        the solver panics instead of returning `OxiflowError::InvalidDomain`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Expected behaviour"
+      placeholder: >
+        Return `Err(OxiflowError::InvalidDomain("…"))` with an explicit message.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "Observed behaviour"
+      placeholder: |
+        ```
+        thread 'main' panicked at 'called `Option::unwrap()` on a `None` value',
+        src/solver/scenario.rs:42
+        ```
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: "Reproduction steps"
+      description: >
+        Minimal Rust code reproducing the issue (MCVE).
+        A failing `#[test]` is ideal.
+      placeholder: |
+        ```rust
+        #[test]
+        fn test_repro() {
+            let scenario = Scenario::new(Box::new(EmptyModel), DomainBoundaries::default());
+            let result = EulerSolver::new().solve(&scenario, &SolverConfiguration::time_evolution(1.0, 10));
+            assert!(matches!(result, Err(OxiflowError::InvalidDomain(_))));
+        }
+        ```
+      render: markdown
+    validations:
+      required: true
+
+  - type: input
+    id: rust-version
+    attributes:
+      label: "Rust version"
+      description: "Output of `rustc --version`."
+      placeholder: "rustc 1.85.0 (4d91de4e4 2025-02-17)"
+    validations:
+      required: true
+
+  - type: input
+    id: oxiflow-version
+    attributes:
+      label: "oxiflow version"
+      description: "Version declared in your `Cargo.toml` or output of `cargo pkgid oxiflow`."
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: "Environment"
+      description: "OS, relevant crate versions."
+      placeholder: |
+        - OS: Ubuntu 24.04 / macOS 15 / Windows 11
+        - nalgebra: 0.33
+        - rayon: 1.10 (if feature `parallel` enabled)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: "Operating system"
+      options:
+        - "Linux"
+        - "macOS"
+        - "Windows"
+        - "Other"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: "Affected module(s)"
+      description: "Apply the matching `scope:` labels manually after creation."
+      options:
+        - label: "`api` — public trait or type (`PhysicalModel`, `Mesh`, `Solver`…)"
+        - label: "`tests` — test suite or doctests"
+        - label: "`docs` — rustdoc, examples"
+        - label: "`ci` — GitHub Actions, coverage"
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Severity"
+      description: "`priority: high` is applied by default. Adjust if needed."
+      options:
+        - "high — panic, data corruption, public regression"
+        - "medium — incorrect behaviour, workaround available"
+        - "low — cosmetic, imprecise error message"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: "Estimated fix effort"
+      description: "Apply the matching `effort:` label after creation."
+      options:
+        - "XS — typo, missing guard clause"
+        - "S  — localised fix (1 module)"
+        - "M  — multi-module fix"
+        - "L  — refactoring required"
+        - "XL — architectural impact"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: breaking-fix
+    attributes:
+      label: "Is the fix a breaking change?"
+      description: "If yes, also add `type: breaking`."
+      options:
+        - "No — transparent fix"
+        - "Yes — public API change required"
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: "Additional context"
+      description: "Full backtrace, `RUST_BACKTRACE=1` output, `Cargo.lock` excerpt, etc."
+    validations:
+      required: false

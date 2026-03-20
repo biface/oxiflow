@@ -1,0 +1,16 @@
+blank_issues_enabled: true
+
+contact_links:
+  - name: "💬 General question or idea"
+    url: https://github.com/biface/oxiflow/discussions
+    about: >
+      For usage questions, informal proposals, or experience reports —
+      please use Discussions rather than opening an issue.
+
+  - name: "📖 API Documentation"
+    url: https://docs.rs/oxiflow
+    about: "Check the full API documentation on docs.rs before opening an issue."
+
+  - name: "📦 crates.io"
+    url: https://crates.io/crates/oxiflow
+    about: "Published versions and release history."

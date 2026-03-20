@@ -1,0 +1,170 @@
+name: "🧭 Design Decision (DD)"
+description: >
+  Propose or document an architecture / design decision.
+title: "[DD-] "
+labels:
+  - "type: decision"
+  - "status: triage"
+
+body:
+  - type: input
+    id: dd-id
+    attributes:
+      label: "DD Identifier"
+      description: >
+        Sequential number with dash separator (e.g. DD-019).
+        Check DESIGN_DECISIONS.md for the next available number.
+      placeholder: "DD-NNN"
+    validations:
+      required: true
+
+  - type: input
+    id: target-version
+    attributes:
+      label: "Target version"
+      description: "oxiflow version where this decision takes effect."
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: "Context"
+      description: >
+        Why is this decision necessary?
+        What constraint, gap, or opportunity motivates it?
+      placeholder: |
+        The `xxx` module does not yet support…
+        The current abstraction `yyy` causes the following issue…
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: "Options considered"
+      description: "List the alternatives with their trade-offs."
+      placeholder: |
+        | Option | Advantage | Risk |
+        |--------|-----------|------|
+        | **A** — … | … | … |
+        | **B** — … | … | … |
+        | **C** — … | … | … |
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: decision
+    attributes:
+      label: "Decision"
+      description: "The chosen option and a brief justification."
+      placeholder: "Option A — because…"
+    validations:
+      required: false
+
+  - type: textarea
+    id: consequences
+    attributes:
+      label: "Consequences"
+      description: >
+        Impact on the public API, dependencies, tests,
+        backward compatibility, FEM invariants, or future decisions.
+      placeholder: |
+        - Changes the signature of `xxx` → breaking change if not feature-flagged
+        - Requires a new dependency: `yyy`
+        - Activates invariant INV-N
+        - Related: #xx (DD-NNN)
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: "Affected scopes"
+      description: "Apply the matching `scope:` labels manually after creation."
+      options:
+        - label: "`api` — public traits or types (`PhysicalModel`, `Mesh`, `Solver`…)"
+        - label: "`docs` — rustdoc, examples, guides"
+        - label: "`tests` — unit tests, integration tests, doctests"
+        - label: "`ci` — GitHub Actions, coverage, semver-checks"
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      description: "Apply the matching `priority:` label after creation."
+      options:
+        - "none — informational, not urgent"
+        - "low — to address in target version"
+        - "medium — blocks a feature"
+        - "high — blocks the release"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: "Estimated effort"
+      description: >
+        Time to document, validate, and integrate the decision.
+        Apply the matching `effort:` label after creation.
+      options:
+        - "XS — < 1 h (obvious, immediate consensus)"
+        - "S  — half-day (light research)"
+        - "M  — 1 day (prototype or benchmark needed)"
+        - "L  — 2–3 days (refactoring involved)"
+        - "XL — > 3 days (major architectural impact)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ecosystem
+    attributes:
+      label: "Ecosystem layer"
+      description: "Apply the matching `ecosystem:` label after creation."
+      options:
+        - "language — Rust idioms, borrow checker, traits, generics, MSRV"
+        - "framework — nalgebra, faer, rayon, thiserror"
+        - "ops — crates.io publishing, packaging, NOTICE"
+        - "pipeline — cargo, cargo-llvm-cov, clippy, cargo-semver-checks, GitHub Actions"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: fem-invariant
+    attributes:
+      label: "FEM invariant impacted"
+      description: "If this decision activates or constrains an INV, note it here."
+      options:
+        - "None"
+        - "INV-1 — Mesh abstrait"
+        - "INV-2 — DiscreteOperator générique"
+        - "INV-3 — CouplingOperator inter-domaines"
+        - "INV-4 — API plugin-safe"
+    validations:
+      required: false
+
+  - type: textarea
+    id: references
+    attributes:
+      label: "Related issues & references"
+      description: "Previous DD issues, GitHub issues, PRs, relevant Rust RFCs."
+      placeholder: |
+        - Follows from: #xx (DD-001 — licence)
+        - Blocks: #xx (feat: UniformGrid1D)
+        - Rust RFC: https://…
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: done-checklist
+    attributes:
+      label: "Closing checklist"
+      description: "Check all boxes before closing the issue."
+      options:
+        - label: "Affected modules are identified"
+        - label: "Implementation issues / PRs are linked"
+        - label: "DESIGN_DECISIONS.md updated (status → Closed)"
+        - label: "The `status: closed` label has been applied"
