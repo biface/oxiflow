@@ -113,6 +113,11 @@ jobs:
       - name: cargo doc — build with KaTeX header
         run: RUSTDOCFLAGS="--html-in-header docs/katex-header.html" cargo doc --no-deps
 
+      - name: Add root redirect to oxiflow/index.html
+        run: |
+          echo '<meta http-equiv="refresh" content="0; url=oxiflow/index.html">' \
+            > target/doc/index.html
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
