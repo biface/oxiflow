@@ -1,7 +1,7 @@
 name: "🧭 Design Decision (DD)"
 description: >
   Propose or document an architecture / design decision.
-title: "[DD-] "
+title: "[DD-NNN] "
 labels:
   - "type: decision"
   - "status: triage"
@@ -12,7 +12,7 @@ body:
     attributes:
       label: "DD Identifier"
       description: >
-        Sequential number with dash separator (e.g. DD-019).
+        Three-digit sequential number with dash separator (e.g. DD-019).
         Check DESIGN_DECISIONS.md for the next available number.
       placeholder: "DD-NNN"
     validations:
@@ -22,7 +22,7 @@ body:
     id: target-version
     attributes:
       label: "Target version"
-      description: "oxiflow version where this decision takes effect."
+      description: "Project version where this decision takes effect (= milestone)."
       placeholder: "0.1.0"
     validations:
       required: true
@@ -132,20 +132,6 @@ body:
     validations:
       required: false
 
-  - type: dropdown
-    id: fem-invariant
-    attributes:
-      label: "FEM invariant impacted"
-      description: "If this decision activates or constrains an INV, note it here."
-      options:
-        - "None"
-        - "INV-1 — Mesh abstrait"
-        - "INV-2 — DiscreteOperator générique"
-        - "INV-3 — CouplingOperator inter-domaines"
-        - "INV-4 — API plugin-safe"
-    validations:
-      required: false
-
   - type: textarea
     id: references
     attributes:
@@ -166,5 +152,4 @@ body:
       options:
         - label: "Affected modules are identified"
         - label: "Implementation issues / PRs are linked"
-        - label: "DESIGN_DECISIONS.md updated (status → Closed)"
         - label: "The `status: closed` label has been applied"

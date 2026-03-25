@@ -14,8 +14,8 @@ body:
         What problem does this feature solve?
         Which use case is currently impossible or cumbersome?
       placeholder: |
-        As a user, I cannot express a boundary condition that depends on…
-        The current `Mesh` trait does not allow…
+        As a user, I cannot…
+        The current limitation of the `xxx` module forces me to…
     validations:
       required: true
 
@@ -25,8 +25,8 @@ body:
       label: "What?"
       description: "Precise description of the desired feature."
       placeholder: |
-        Add a method `xxx` on `YyyTrait` that…
-        The `zzz` module should expose an interface enabling…
+        Add a method `xxx` on `YyyStruct` that…
+        The `zzz` module should expose a trait enabling…
     validations:
       required: true
 
@@ -35,12 +35,14 @@ body:
     attributes:
       label: "Acceptance criteria"
       description: >
-        Verifiable conditions. Each criterion should map to a test or doctest.
+        Verifiable conditions. Each criterion should map to
+        a unit test or documentation test.
       placeholder: |
-        - [ ] `cargo test` passes — coverage ≥ 80%
+        - [ ] `cargo test` passes — coverage ≥ 85 %
         - [ ] `cargo clippy -- -D warnings`: 0 errors
-        - [ ] Doctests compile and pass (`cargo test --doc`)
-        - [ ] Existing public API unchanged (or breaking change documented)
+        - [ ] `cargo fmt --check`: no diff
+        - [ ] Doctests compile and pass
+        - [ ] Existing public API unchanged (verified by `cargo-semver-checks`)
         - [ ] `CHANGELOG.md` updated
       render: markdown
     validations:
@@ -51,16 +53,19 @@ body:
     attributes:
       label: "API sketch (optional)"
       description: >
-        Proposed trait signatures, usage examples, or Cargo feature changes.
+        Proposed signatures, usage examples, or trait definitions.
         Need not be final.
       placeholder: |
         ```rust
-        pub trait NewTrait: RequiresContext + Send + Sync {
-            fn compute(&self, ctx: &ComputeContext) -> Result<ContextValue, OxiflowError>;
+        pub trait MyFormatter {
+            fn format(&self, config: &AppConfig) -> String;
         }
 
-        // Usage
-        let result = model.compute(&ctx)?;
+        impl Builder {
+            pub fn set_formatter<F: MyFormatter>(mut self, f: F) -> Self {
+                ...
+            }
+        }
         ```
       render: markdown
     validations:
@@ -71,7 +76,7 @@ body:
     attributes:
       label: "Related Design Decisions"
       description: "DD issue numbers covering the associated architecture choices."
-      placeholder: "#xx (DD-003), #xx (DD-006)"
+      placeholder: "#xx (DD-010), #xx (DD-012)"
     validations:
       required: false
 
@@ -84,7 +89,7 @@ body:
         - label: "`api` — public traits or types"
         - label: "`docs` — rustdoc, examples, guides"
         - label: "`tests` — unit tests, integration tests, doctests"
-        - label: "`ci` — GitHub Actions, coverage, cargo features"
+        - label: "`ci` — GitHub Actions, coverage, semver-checks"
 
   - type: dropdown
     id: priority
@@ -120,25 +125,12 @@ body:
       description: >
         If yes, replace `type: feature` with `type: breaking`
         and update the version constraints accordingly.
+        `cargo-semver-checks` will be run in CI to confirm.
       options:
         - "No — backward-compatible"
         - "Yes — requires a minor or major version bump"
     validations:
       required: true
-
-  - type: dropdown
-    id: fem-invariant
-    attributes:
-      label: "FEM invariant impacted"
-      description: "If this feature must comply with or activates an INV, note it."
-      options:
-        - "None"
-        - "INV-1 — Mesh abstrait"
-        - "INV-2 — DiscreteOperator générique"
-        - "INV-3 — CouplingOperator inter-domaines"
-        - "INV-4 — API plugin-safe"
-    validations:
-      required: false
 
   - type: checkboxes
     id: submit-checklist
@@ -147,6 +139,6 @@ body:
       options:
         - label: "The feature does not already exist (checked docs and open issues)"
           required: true
-        - label: "Backward-compatibility constraint has been assessed"
+        - label: "The backward-compatibility constraint has been assessed"
           required: true
         - label: "A DD issue is created or referenced if architecture choices are involved"

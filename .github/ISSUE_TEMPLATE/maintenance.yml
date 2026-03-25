@@ -15,13 +15,13 @@ body:
         Select the primary type, then replace `status: triage`
         with the matching `type:` label after creation.
       options:
-        - "chore       — Cargo.toml, deps, housekeeping, configuration"
-        - "docs        — rustdoc, examples, README, guides"
-        - "test        — adding or fixing tests, coverage, doctests"
+        - "chore       — dependencies, housekeeping, configuration"
+        - "docs        — rustdoc, README, guides, examples"
+        - "test        — adding or fixing tests, coverage"
         - "refactor    — restructuring without behaviour change"
-        - "ci          — GitHub Actions, cargo-llvm-cov, clippy, release pipeline"
-        - "perf        — performance optimisation, benchmarks"
-        - "deprecation — mark obsolete API with #[deprecated]"
+        - "ci          — cargo, GitHub Actions, pipeline config"
+        - "perf        — performance optimisation"
+        - "deprecation — mark obsolete code with deprecation warnings"
     validations:
       required: true
 
@@ -31,9 +31,8 @@ body:
       label: "Description"
       description: "What needs to be done, and why now?"
       placeholder: >
-        Update `nalgebra` from `0.32` to `0.33` following the upstream
-        changelog. Verify that `DVector` and `DMatrix` operations are
-        unaffected after the update.
+        Update `serde` from `1.0.195` to `1.0.197` following the upstream
+        changelog. Verify serialisation behaviour is identical after the update.
     validations:
       required: true
 
@@ -45,8 +44,8 @@ body:
       placeholder: |
         - [ ] `cargo test` passes
         - [ ] `cargo clippy -- -D warnings`: 0 errors
-        - [ ] `cargo doc --no-deps`: 0 warnings
-        - [ ] Coverage ≥ threshold defined in `.codecov.yml`
+        - [ ] `cargo fmt --check`: no diff
+        - [ ] Coverage ≥ threshold defined in `.cargo/config.toml`
         - [ ] `CHANGELOG.md` updated if necessary
         - [ ] `Cargo.toml` and `Cargo.lock` committed if a dependency was updated
       render: markdown
@@ -59,8 +58,7 @@ body:
       label: "Urgency (optional)"
       description: >
         Why this task now rather than later?
-        E.g.: vulnerability (CVE), blocking technical debt, prerequisite for a feature,
-        FEM invariant compliance check.
+        E.g.: vulnerability (CVE, RUSTSEC), blocking technical debt, prerequisite for a feature.
     validations:
       required: false
 
@@ -73,7 +71,7 @@ body:
         - label: "`api` — public traits or types"
         - label: "`docs` — rustdoc, examples, guides"
         - label: "`tests` — unit tests, integration tests, doctests"
-        - label: "`ci` — GitHub Actions, coverage, release pipeline"
+        - label: "`ci` — GitHub Actions, coverage, semver-checks"
 
   - type: dropdown
     id: priority
@@ -81,7 +79,7 @@ body:
       label: "Priority"
       description: "Apply the matching `priority:` label after creation."
       options:
-        - "none — someday, out of current milestone"
+        - "none — someday, out of sprint"
         - "low — before the next minor version"
         - "medium — in the target version"
         - "high — blocks the release or CI"
@@ -108,8 +106,8 @@ body:
       label: "Ecosystem layer"
       description: "Apply the matching `ecosystem:` label after creation."
       options:
-        - "language — Rust edition, MSRV, unsafe, borrow checker"
-        - "framework — nalgebra, faer, rayon, thiserror, serde"
+        - "language — Rust idioms, borrow checker, traits, generics, MSRV"
+        - "framework — nalgebra, faer, rayon, thiserror"
         - "ops — crates.io publishing, packaging, NOTICE"
         - "pipeline — cargo, cargo-llvm-cov, clippy, cargo-semver-checks, GitHub Actions"
     validations:
@@ -121,10 +119,11 @@ body:
       label: "Dependency update detail (optional)"
       description: "Fill in only for a dependency-update `type: chore`."
       placeholder: |
-        | Crate     | Before  | After   | Breaking? |
-        |-----------|---------|---------|-----------|
-        | nalgebra  | 0.32.x  | 0.33.x  | No        |
-        | thiserror | 1.x     | 2.x     | Yes       |
+        | Crate    | Before   | After    | Breaking? | Advisory            |
+        |----------|----------|----------|-----------|---------------------|
+        | serde    | 1.0.195  | 1.0.197  | No        | —                   |
+        | thiserror| 1.x      | 2.x      | Yes       | —                   |
+        | openssl  | 0.10.64  | 0.10.66  | No        | RUSTSEC-2024-XXXX   |
       render: markdown
     validations:
       required: false
