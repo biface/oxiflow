@@ -19,6 +19,7 @@ pub mod variable;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 
+pub use compute::ComputeContext;
 pub use error::OxiflowError;
 pub use value::ContextValue;
 pub use variable::ContextVariable;
