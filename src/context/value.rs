@@ -68,7 +68,6 @@ use crate::context::error::OxiflowError;
 #[derive(Debug, Clone, PartialEq)]
 pub enum ContextValue {
     // ── Pointwise algebraic objects ───────────────────────────────────────────
-
     /// Rank-0 scalar: time, step size, uniform coefficient.
     Scalar(f64),
 
@@ -86,7 +85,6 @@ pub enum ContextValue {
     Matrix(DMatrix<f64>),
 
     // ── Nodal fields ──────────────────────────────────────────────────────────
-
     /// One scalar value per mesh node: porosity(x), temperature field T(x).
     ///
     /// Length equals the number of degrees of freedom (`Mesh::n_dof()`).
@@ -110,10 +108,10 @@ impl ContextValue {
     /// Used to build `OxiflowError::TypeMismatch` messages.
     pub fn variant_name(&self) -> &'static str {
         match self {
-            Self::Scalar(_)      => "Scalar",
-            Self::Boolean(_)     => "Boolean",
-            Self::Vector(_)      => "Vector",
-            Self::Matrix(_)      => "Matrix",
+            Self::Scalar(_) => "Scalar",
+            Self::Boolean(_) => "Boolean",
+            Self::Vector(_) => "Vector",
+            Self::Matrix(_) => "Matrix",
             Self::ScalarField(_) => "ScalarField",
             Self::VectorField(_) => "VectorField",
         }
@@ -131,7 +129,7 @@ impl ContextValue {
             Self::Scalar(v) => Ok(*v),
             other => Err(OxiflowError::TypeMismatch {
                 expected: "Scalar",
-                actual:   other.variant_name(),
+                actual: other.variant_name(),
             }),
         }
     }
@@ -146,7 +144,7 @@ impl ContextValue {
             Self::Boolean(v) => Ok(*v),
             other => Err(OxiflowError::TypeMismatch {
                 expected: "Boolean",
-                actual:   other.variant_name(),
+                actual: other.variant_name(),
             }),
         }
     }
@@ -161,7 +159,7 @@ impl ContextValue {
             Self::Vector(v) => Ok(v),
             other => Err(OxiflowError::TypeMismatch {
                 expected: "Vector",
-                actual:   other.variant_name(),
+                actual: other.variant_name(),
             }),
         }
     }
@@ -176,7 +174,7 @@ impl ContextValue {
             Self::Matrix(m) => Ok(m),
             other => Err(OxiflowError::TypeMismatch {
                 expected: "Matrix",
-                actual:   other.variant_name(),
+                actual: other.variant_name(),
             }),
         }
     }
@@ -193,7 +191,7 @@ impl ContextValue {
             Self::ScalarField(v) => Ok(v),
             other => Err(OxiflowError::TypeMismatch {
                 expected: "ScalarField",
-                actual:   other.variant_name(),
+                actual: other.variant_name(),
             }),
         }
     }
@@ -210,7 +208,7 @@ impl ContextValue {
             Self::VectorField(m) => Ok(m),
             other => Err(OxiflowError::TypeMismatch {
                 expected: "VectorField",
-                actual:   other.variant_name(),
+                actual: other.variant_name(),
             }),
         }
     }
@@ -218,17 +216,29 @@ impl ContextValue {
     // ── Type predicates ───────────────────────────────────────────────────────
 
     /// Returns `true` if this is a `Scalar`.
-    pub fn is_scalar(&self)       -> bool { matches!(self, Self::Scalar(_)) }
+    pub fn is_scalar(&self) -> bool {
+        matches!(self, Self::Scalar(_))
+    }
     /// Returns `true` if this is a `Boolean`.
-    pub fn is_bool(&self)         -> bool { matches!(self, Self::Boolean(_)) }
+    pub fn is_bool(&self) -> bool {
+        matches!(self, Self::Boolean(_))
+    }
     /// Returns `true` if this is a `Vector`.
-    pub fn is_vector(&self)       -> bool { matches!(self, Self::Vector(_)) }
+    pub fn is_vector(&self) -> bool {
+        matches!(self, Self::Vector(_))
+    }
     /// Returns `true` if this is a `Matrix`.
-    pub fn is_matrix(&self)       -> bool { matches!(self, Self::Matrix(_)) }
+    pub fn is_matrix(&self) -> bool {
+        matches!(self, Self::Matrix(_))
+    }
     /// Returns `true` if this is a `ScalarField`.
-    pub fn is_scalar_field(&self) -> bool { matches!(self, Self::ScalarField(_)) }
+    pub fn is_scalar_field(&self) -> bool {
+        matches!(self, Self::ScalarField(_))
+    }
     /// Returns `true` if this is a `VectorField`.
-    pub fn is_vector_field(&self) -> bool { matches!(self, Self::VectorField(_)) }
+    pub fn is_vector_field(&self) -> bool {
+        matches!(self, Self::VectorField(_))
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -240,25 +250,44 @@ mod tests {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    fn scalar()       -> ContextValue { ContextValue::Scalar(3.14) }
-    fn boolean()      -> ContextValue { ContextValue::Boolean(true) }
-    fn vector()       -> ContextValue { ContextValue::Vector(DVector::from_vec(vec![1.0, 2.0, 3.0])) }
-    fn matrix()       -> ContextValue { ContextValue::Matrix(DMatrix::from_element(2, 2, 1.0)) }
-    fn scalar_field() -> ContextValue { ContextValue::ScalarField(DVector::from_vec(vec![0.1, 0.2])) }
-    fn vector_field() -> ContextValue { ContextValue::VectorField(DMatrix::from_element(3, 2, 0.5)) }
+    fn scalar() -> ContextValue {
+        ContextValue::Scalar(3.14)
+    }
+    fn boolean() -> ContextValue {
+        ContextValue::Boolean(true)
+    }
+    fn vector() -> ContextValue {
+        ContextValue::Vector(DVector::from_vec(vec![1.0, 2.0, 3.0]))
+    }
+    fn matrix() -> ContextValue {
+        ContextValue::Matrix(DMatrix::from_element(2, 2, 1.0))
+    }
+    fn scalar_field() -> ContextValue {
+        ContextValue::ScalarField(DVector::from_vec(vec![0.1, 0.2]))
+    }
+    fn vector_field() -> ContextValue {
+        ContextValue::VectorField(DMatrix::from_element(3, 2, 0.5))
+    }
 
     fn all_variants() -> Vec<ContextValue> {
-        vec![scalar(), boolean(), vector(), matrix(), scalar_field(), vector_field()]
+        vec![
+            scalar(),
+            boolean(),
+            vector(),
+            matrix(),
+            scalar_field(),
+            vector_field(),
+        ]
     }
 
     // ── variant_name ─────────────────────────────────────────────────────────
 
     #[test]
     fn variant_names_are_correct() {
-        assert_eq!(scalar().variant_name(),       "Scalar");
-        assert_eq!(boolean().variant_name(),      "Boolean");
-        assert_eq!(vector().variant_name(),       "Vector");
-        assert_eq!(matrix().variant_name(),       "Matrix");
+        assert_eq!(scalar().variant_name(), "Scalar");
+        assert_eq!(boolean().variant_name(), "Boolean");
+        assert_eq!(vector().variant_name(), "Vector");
+        assert_eq!(matrix().variant_name(), "Matrix");
         assert_eq!(scalar_field().variant_name(), "ScalarField");
         assert_eq!(vector_field().variant_name(), "VectorField");
     }
@@ -272,10 +301,22 @@ mod tests {
 
     #[test]
     fn as_scalar_on_wrong_variant_returns_type_mismatch() {
-        for v in [boolean(), vector(), matrix(), scalar_field(), vector_field()] {
+        for v in [
+            boolean(),
+            vector(),
+            matrix(),
+            scalar_field(),
+            vector_field(),
+        ] {
             let err = v.as_scalar().unwrap_err();
             assert!(
-                matches!(err, OxiflowError::TypeMismatch { expected: "Scalar", .. }),
+                matches!(
+                    err,
+                    OxiflowError::TypeMismatch {
+                        expected: "Scalar",
+                        ..
+                    }
+                ),
                 "expected TypeMismatch for {:?}",
                 v
             );
@@ -294,7 +335,13 @@ mod tests {
     fn as_bool_on_wrong_variant_returns_type_mismatch() {
         for v in [scalar(), vector(), matrix(), scalar_field(), vector_field()] {
             let err = v.as_bool().unwrap_err();
-            assert!(matches!(err, OxiflowError::TypeMismatch { expected: "Boolean", .. }));
+            assert!(matches!(
+                err,
+                OxiflowError::TypeMismatch {
+                    expected: "Boolean",
+                    ..
+                }
+            ));
         }
     }
 
@@ -310,9 +357,21 @@ mod tests {
 
     #[test]
     fn as_vector_on_wrong_variant_returns_type_mismatch() {
-        for v in [scalar(), boolean(), matrix(), scalar_field(), vector_field()] {
+        for v in [
+            scalar(),
+            boolean(),
+            matrix(),
+            scalar_field(),
+            vector_field(),
+        ] {
             let err = v.as_vector().unwrap_err();
-            assert!(matches!(err, OxiflowError::TypeMismatch { expected: "Vector", .. }));
+            assert!(matches!(
+                err,
+                OxiflowError::TypeMismatch {
+                    expected: "Vector",
+                    ..
+                }
+            ));
         }
     }
 
@@ -327,9 +386,21 @@ mod tests {
 
     #[test]
     fn as_matrix_on_wrong_variant_returns_type_mismatch() {
-        for v in [scalar(), boolean(), vector(), scalar_field(), vector_field()] {
+        for v in [
+            scalar(),
+            boolean(),
+            vector(),
+            scalar_field(),
+            vector_field(),
+        ] {
             let err = v.as_matrix().unwrap_err();
-            assert!(matches!(err, OxiflowError::TypeMismatch { expected: "Matrix", .. }));
+            assert!(matches!(
+                err,
+                OxiflowError::TypeMismatch {
+                    expected: "Matrix",
+                    ..
+                }
+            ));
         }
     }
 
@@ -347,7 +418,13 @@ mod tests {
     fn as_scalar_field_on_wrong_variant_returns_type_mismatch() {
         for v in [scalar(), boolean(), vector(), matrix(), vector_field()] {
             let err = v.as_scalar_field().unwrap_err();
-            assert!(matches!(err, OxiflowError::TypeMismatch { expected: "ScalarField", .. }));
+            assert!(matches!(
+                err,
+                OxiflowError::TypeMismatch {
+                    expected: "ScalarField",
+                    ..
+                }
+            ));
         }
     }
 
@@ -364,7 +441,13 @@ mod tests {
     fn as_vector_field_on_wrong_variant_returns_type_mismatch() {
         for v in [scalar(), boolean(), vector(), matrix(), scalar_field()] {
             let err = v.as_vector_field().unwrap_err();
-            assert!(matches!(err, OxiflowError::TypeMismatch { expected: "VectorField", .. }));
+            assert!(matches!(
+                err,
+                OxiflowError::TypeMismatch {
+                    expected: "VectorField",
+                    ..
+                }
+            ));
         }
     }
 
@@ -382,7 +465,13 @@ mod tests {
 
     #[test]
     fn is_scalar_returns_false_for_other_variants() {
-        for v in [boolean(), vector(), matrix(), scalar_field(), vector_field()] {
+        for v in [
+            boolean(),
+            vector(),
+            matrix(),
+            scalar_field(),
+            vector_field(),
+        ] {
             assert!(!v.is_scalar(), "expected false for {:?}", v);
         }
     }

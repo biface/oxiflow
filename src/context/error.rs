@@ -58,7 +58,7 @@ pub enum OxiflowError {
     #[error("type mismatch: expected {expected}, actual {actual}")]
     TypeMismatch {
         expected: &'static str,
-        actual:   &'static str,
+        actual: &'static str,
     },
 
     /// The mesh or domain configuration is invalid.
@@ -71,10 +71,7 @@ pub enum OxiflowError {
 
     /// The solver produced a non-finite state and cannot continue.
     #[error("solver divergence at t={time:.4e}: {reason}")]
-    SolverDivergence {
-        time:   f64,
-        reason: String,
-    },
+    SolverDivergence { time: f64, reason: String },
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -86,7 +83,10 @@ mod tests {
     #[test]
     fn missing_calculator_matches_variable() {
         let err = OxiflowError::MissingCalculator(ContextVariable::Time);
-        assert!(matches!(err, OxiflowError::MissingCalculator(ContextVariable::Time)));
+        assert!(matches!(
+            err,
+            OxiflowError::MissingCalculator(ContextVariable::Time)
+        ));
     }
 
     #[test]
@@ -133,13 +133,25 @@ mod tests {
 
     #[test]
     fn type_mismatch_fields_are_accessible() {
-        let err = OxiflowError::TypeMismatch { expected: "Scalar", actual: "Vector" };
-        assert!(matches!(err, OxiflowError::TypeMismatch { expected: "Scalar", actual: "Vector" }));
+        let err = OxiflowError::TypeMismatch {
+            expected: "Scalar",
+            actual: "Vector",
+        };
+        assert!(matches!(
+            err,
+            OxiflowError::TypeMismatch {
+                expected: "Scalar",
+                actual: "Vector"
+            }
+        ));
     }
 
     #[test]
     fn type_mismatch_display_contains_both_types() {
-        let err = OxiflowError::TypeMismatch { expected: "Matrix", actual: "ScalarField" };
+        let err = OxiflowError::TypeMismatch {
+            expected: "Matrix",
+            actual: "ScalarField",
+        };
         let msg = err.to_string();
         assert!(msg.contains("Matrix"));
         assert!(msg.contains("ScalarField"));
@@ -170,7 +182,10 @@ mod tests {
 
     #[test]
     fn solver_divergence_time_formatted_scientific() {
-        let err = OxiflowError::SolverDivergence { time: 0.001, reason: "diverged".into() };
+        let err = OxiflowError::SolverDivergence {
+            time: 0.001,
+            reason: "diverged".into(),
+        };
         assert!(err.to_string().contains("e-"));
     }
 
@@ -179,10 +194,16 @@ mod tests {
         let variants: Vec<Box<dyn std::fmt::Debug>> = vec![
             Box::new(OxiflowError::MissingCalculator(ContextVariable::Time)),
             Box::new(OxiflowError::CircularDependency(ContextVariable::TimeStep)),
-            Box::new(OxiflowError::TypeMismatch { expected: "Scalar", actual: "Boolean" }),
+            Box::new(OxiflowError::TypeMismatch {
+                expected: "Scalar",
+                actual: "Boolean",
+            }),
             Box::new(OxiflowError::InvalidDomain("test".into())),
             Box::new(OxiflowError::ExternalData("test".into())),
-            Box::new(OxiflowError::SolverDivergence { time: 0.0, reason: "test".into() }),
+            Box::new(OxiflowError::SolverDivergence {
+                time: 0.0,
+                reason: "test".into(),
+            }),
         ];
         for v in &variants {
             assert!(!format!("{:?}", v).is_empty());

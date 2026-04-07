@@ -111,14 +111,20 @@ mod tests {
 
     #[test]
     fn external_same_name_equal() {
-        let a = ContextVariable::External { name: "temperature" };
-        let b = ContextVariable::External { name: "temperature" };
+        let a = ContextVariable::External {
+            name: "temperature",
+        };
+        let b = ContextVariable::External {
+            name: "temperature",
+        };
         assert_eq!(a, b);
     }
 
     #[test]
     fn external_different_name_not_equal() {
-        let a = ContextVariable::External { name: "temperature" };
+        let a = ContextVariable::External {
+            name: "temperature",
+        };
         let b = ContextVariable::External { name: "pressure" };
         assert_ne!(a, b);
     }
