@@ -1,6 +1,6 @@
 # oxiflow
 
-[![CI](https://github.com/[USER]/oxiflow/actions/workflows/ci.yml/badge.svg)](https://github.com/biface/oxiflow/actions/workflows/ci.yml)
+[![CI](https://github.com/biface/oxiflow/actions/workflows/ci.yml/badge.svg)](https://github.com/biface/oxiflow/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/[USER]/oxiflow/branch/main/graph/badge.svg)](https://codecov.io/gh/biface/oxiflow)
 [![Crates.io](https://img.shields.io/crates/v/oxiflow.svg)](https://crates.io/crates/oxiflow)
 [![Docs.rs](https://docs.rs/oxiflow/badge.svg)](https://docs.rs/oxiflow)
