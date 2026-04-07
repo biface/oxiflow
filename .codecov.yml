@@ -146,7 +146,7 @@ component_management:
 # Pull request comments
 # ──────────────────────────────────────────────────────────────────────────────
 comment:
-  layout: "reach,diff,flags,components,files"
+  layout: reach,diff,flags,components,files
   behavior: default
   require_changes: true
 
