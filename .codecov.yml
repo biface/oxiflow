@@ -1,18 +1,37 @@
+# Codecov configuration for oxiflow
+# Generic PDE engine — transport, reaction, diffusion
+# Documentation: https://docs.codecov.com/docs/codecov-yaml
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Global settings
+# ──────────────────────────────────────────────────────────────────────────────
+codecov:
+  require_ci_to_pass: yes
+  notify:
+    wait_for_ci: yes
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Coverage targets
+# Non-negotiable constraints: 80–90% global (DEVELOPPEMENT.md)
+# ──────────────────────────────────────────────────────────────────────────────
 coverage:
+  precision: 2      # e.g. 85.42%
+  round: down       # conservative rounding
+  range: 80...90  # green >90%, yellow 80–90%, red <80%
+
   status:
     project:
       default:
-        # Minimum global coverage
-        target: 80%
-        # Regression tolerance between commits
-        threshold: 2%
+        target: 85%   # global project target
+        threshold: 2% # regression tolerance between commits
     patch:
       default:
-        # Minimum coverage of changed lines
-        target: 80%
+        target: 80%   # every new line of code must be covered at 80%
+        threshold: 5%
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Flags — coverage runs per features configuration
+# Flags — one upload per feature configuration
+# Activate feature flags in coverage.yml as features are declared in Cargo.toml
 # ──────────────────────────────────────────────────────────────────────────────
 flags:
   default:
@@ -20,40 +39,128 @@ flags:
       - src/
     carryforward: false
 
-  # J5 (v0.7) — activate when --features parallel is declared in coverage.yml
+  # J5 (v0.6) — activate when `parallel` feature is declared in Cargo.toml
   # parallel:
   #   paths:
   #     - src/
   #   carryforward: false
 
-  # J5 (v0.7) — activate when --features serde is declared in coverage.yml
+  # J5 (v0.6) — activate when `serde` feature is declared in Cargo.toml
   # serde:
   #   paths:
   #     - src/
   #   carryforward: false
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Components — coverage per FEM invariant
-# J7 (v2.0) — activate when FEM modules are implemented
+# Components — per-module coverage visibility
+#
+# Convention:
+#   - Active components reflect implemented jalons
+#   - Commented blocks are activated when the jalon lands
+#   - Target 90% for architectural contracts (traits, invariants)
+#   - Target 85% for implementations
 # ──────────────────────────────────────────────────────────────────────────────
-# component_management:
-#   individual_components:
-#     - component_id: fem_invariants
-#       name: "FEM Invariants (INV-1/2/3)"
-#       paths:
-#         - src/mesh/
-#         - src/operators/
-#         - src/coupling/
-#     - component_id: context
-#       name: "Context & Calculators"
-#       paths:
-#         - src/context/
-#     - component_id: solver
-#       name: "Solver & Integrators"
-#       paths:
-#         - src/solver/
+component_management:
 
+  default_rules:
+    statuses:
+      - type: project
+        target: 85%
+      - type: patch
+        target: 80%
+
+  individual_components:
+
+    # ── J1 (v0.1.0) — active ─────────────────────────────────────────────────
+
+    # Context layer: ContextVariable, OxiflowError, ContextValue, ComputeContext
+    # Architectural contract — highest coverage target
+    - component_id: context
+      name: "Context & Calculators"
+      paths:
+        - src/context/
+      statuses:
+        - type: project
+          target: 90%
+
+    # Model traits: RequiresContext
+    # Architectural contract — high target
+    - component_id: model
+      name: "Model Traits"
+      paths:
+        - src/model/
+      statuses:
+        - type: project
+          target: 90%
+
+    # Mesh abstraction: Mesh trait + UniformGrid1D (INV-1)
+    # Architectural contract — high target
+    - component_id: mesh
+      name: "Mesh Abstraction (INV-1)"
+      paths:
+        - src/mesh/
+      statuses:
+        - type: project
+          target: 90%
+
+    # Solver orchestration: Scenario, SolverConfiguration, Solver trait
+    - component_id: solver
+      name: "Solver Orchestration"
+      paths:
+        - src/solver/
+
+    # ── J2 (v0.2.0) — activate when boundary conditions are implemented ───────
+
+    # - component_id: boundary
+    #   name: "Boundary Conditions"
+    #   paths:
+    #     - src/boundary/
+
+    # ── J3 (v0.3.0) — activate when CouplingOperator is implemented ───────────
+
+    # - component_id: coupling
+    #   name: "Multi-Domain Coupling (INV-3)"
+    #   paths:
+    #     - src/coupling/
+
+    # ── J5 (v0.5.0) — activate when DiscreteOperator is implemented ───────────
+
+    # - component_id: operators
+    #   name: "Discrete Operators (INV-2)"
+    #   paths:
+    #     - src/operators/
+
+    # ── J7 (v2.0.0) — activate for FEM invariant audit ───────────────────────
+
+    # - component_id: fem_invariants
+    #   name: "FEM Invariants (INV-1/2/3)"
+    #   paths:
+    #     - src/mesh/
+    #     - src/operators/
+    #     - src/coupling/
+    #   statuses:
+    #     - type: project
+    #       target: 90%
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Pull request comments
+# ──────────────────────────────────────────────────────────────────────────────
 comment:
-  layout: "reach,diff,flags,tree"
+  layout: "reach,diff,flags,components,files"
   behavior: default
   require_changes: true
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Ignored paths — no coverage measurement for tests, examples, benchmarks
+# ──────────────────────────────────────────────────────────────────────────────
+ignore:
+  - tests/
+  - examples/
+  - benches/
+  - "**/*_test.rs"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# GitHub annotations on PRs
+# ──────────────────────────────────────────────────────────────────────────────
+github_checks:
+  annotations: true
