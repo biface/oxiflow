@@ -64,7 +64,7 @@ impl UniformGrid1D {
     /// # Examples
     ///
     /// ```rust
-    /// use oxiflow::mesh::UniformGrid1D;
+    /// use oxiflow::mesh::{Mesh, UniformGrid1D};
     ///
     /// let grid = UniformGrid1D::new(100, 0.0, 1.0).unwrap();
     /// assert_eq!(grid.n_dof(), 100);
