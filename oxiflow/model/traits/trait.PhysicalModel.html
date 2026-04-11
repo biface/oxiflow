@@ -1,0 +1,86 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Physical model — declares needs and computes field derivatives."><title>PhysicalModel in oxiflow::model::traits - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-77263533.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.1 (e408947bf 2026-03-25)" data-channel="1.94.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc trait"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">PhysicalModel</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.0.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Physical<wbr>Model</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#naming" title="Naming">Naming</a></li><li><a href="#examples" title="Examples">Examples</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.compute_physics" title="compute_physics">compute_physics</a></li><li><a href="#tymethod.initial_state" title="initial_state">initial_state</a></li><li><a href="#tymethod.name" title="name">name</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.description" title="description">description</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In oxiflow::<wbr>model::<wbr>traits</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">model</a>::<wbr><a href="index.html">traits</a></div><h1>Trait <span class="trait">Physical<wbr>Model</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/model/traits.rs.html#109-138">Source</a> </span></div><pre class="rust item-decl"><code>pub trait PhysicalModel:
+    <a class="trait" href="trait.RequiresContext.html" title="trait oxiflow::model::traits::RequiresContext">RequiresContext</a>
+    + <a class="trait" href="https://doc.rust-lang.org/1.94.1/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a>
+    + <a class="trait" href="https://doc.rust-lang.org/1.94.1/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> {
+    // Required methods
+    fn <a href="#tymethod.compute_physics" class="fn">compute_physics</a>(
+        &amp;self,
+        state: &amp;<a class="enum" href="../../context/value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue">ContextValue</a>,
+        ctx: &amp;<a class="struct" href="../../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext">ComputeContext</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.94.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="../../context/value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue">ContextValue</a>, <a class="enum" href="../../context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.initial_state" class="fn">initial_state</a>(&amp;self, mesh: &amp;dyn <a class="trait" href="../../mesh/trait.Mesh.html" title="trait oxiflow::mesh::Mesh">Mesh</a>) -&gt; <a class="enum" href="../../context/value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue">ContextValue</a>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.name" class="fn">name</a>(&amp;self) -&gt; &amp;<a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.str.html">str</a>;
+
+    // Provided method
+    fn <a href="#method.description" class="fn">description</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.94.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;<a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.str.html">str</a>&gt; { ... }
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Physical model — declares needs and computes field derivatives.</p>
+<p>Supertrait of <code>RequiresContext</code>. A model declares <em>what</em> context variables
+it needs and <em>how</em> to compute the time derivative of the primary field:</p>
+<p>$$\frac{\partial u}{\partial t} = -\nabla \cdot F(u, \nabla u) + S(u, \mathbf{x}, t)$$
+It does not configure solving nor orchestrate the time loop — those are
+the responsibilities of <code>SolverConfiguration</code> and <code>Solver</code>.</p>
+<h2 id="naming"><a class="doc-anchor" href="#naming">§</a>Naming</h2>
+<p>The method is named <code>compute_physics</code> (not <code>compute_physics_v2</code>).
+oxiflow never had a v1 API — the <code>_v2</code> suffix was a chrom-rs migration
+artifact that does not apply here (DD-006).</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>oxiflow::model::traits::{PhysicalModel, RequiresContext};
+<span class="kw">use </span>oxiflow::context::variable::ContextVariable;
+<span class="kw">use </span>oxiflow::context::value::ContextValue;
+<span class="kw">use </span>oxiflow::context::compute::ComputeContext;
+<span class="kw">use </span>oxiflow::context::error::OxiflowError;
+<span class="kw">use </span>oxiflow::mesh::Mesh;
+<span class="kw">use </span>nalgebra::DVector;
+
+<span class="kw">struct </span>PureDecay { rate: f64 }
+
+<span class="kw">impl </span>RequiresContext <span class="kw">for </span>PureDecay {
+    <span class="kw">fn </span>required_variables(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;ContextVariable&gt; {
+        <span class="macro">vec!</span>[ContextVariable::Time]
+    }
+}
+
+<span class="kw">impl </span>PhysicalModel <span class="kw">for </span>PureDecay {
+    <span class="kw">fn </span>compute_physics(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        state: <span class="kw-2">&amp;</span>ContextValue,
+        _ctx: <span class="kw-2">&amp;</span>ComputeContext,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;ContextValue, OxiflowError&gt; {
+        <span class="kw">let </span>u = state.as_scalar_field()<span class="question-mark">?</span>;
+        <span class="kw">let </span>du_dt = u.map(|v| -<span class="self">self</span>.rate * v);
+        <span class="prelude-val">Ok</span>(ContextValue::ScalarField(du_dt))
+    }
+
+    <span class="kw">fn </span>initial_state(<span class="kw-2">&amp;</span><span class="self">self</span>, mesh: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Mesh) -&gt; ContextValue {
+        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), <span class="number">1.0</span>))
+    }
+
+    <span class="kw">fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str { <span class="string">"pure_decay" </span>}
+}</code></pre></div></div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.compute_physics" class="method"><a class="src rightside" href="../../../src/oxiflow/model/traits.rs.html#122-126">Source</a><h4 class="code-header">fn <a href="#tymethod.compute_physics" class="fn">compute_physics</a>(
+    &amp;self,
+    state: &amp;<a class="enum" href="../../context/value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue">ContextValue</a>,
+    ctx: &amp;<a class="struct" href="../../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext">ComputeContext</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.94.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="../../context/value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue">ContextValue</a>, <a class="enum" href="../../context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;</h4></section></summary><div class="docblock"><p>Computes the time derivative <code>du/dt</code> of the primary field.</p>
+<h5 id="arguments"><a class="doc-anchor" href="#arguments">§</a>Arguments</h5>
+<ul>
+<li><code>state</code> — current field <code>u</code>, typically <code>ContextValue::ScalarField</code>
+for 1D problems or <code>ContextValue::VectorField</code> for multi-component.</li>
+<li><code>ctx</code>   — fully populated context for this time step; all variables
+declared in <code>required_variables()</code> are guaranteed present.</li>
+</ul>
+<h5 id="returns"><a class="doc-anchor" href="#returns">§</a>Returns</h5>
+<p>The derivative field $\partial u / \partial t$, same shape as <code>state</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.initial_state" class="method"><a class="src rightside" href="../../../src/oxiflow/model/traits.rs.html#129">Source</a><h4 class="code-header">fn <a href="#tymethod.initial_state" class="fn">initial_state</a>(&amp;self, mesh: &amp;dyn <a class="trait" href="../../mesh/trait.Mesh.html" title="trait oxiflow::mesh::Mesh">Mesh</a>) -&gt; <a class="enum" href="../../context/value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue">ContextValue</a></h4></section></summary><div class="docblock"><p>Returns the initial condition <code>u(x, t_start)</code> on <code>mesh</code>.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.name" class="method"><a class="src rightside" href="../../../src/oxiflow/model/traits.rs.html#132">Source</a><h4 class="code-header">fn <a href="#tymethod.name" class="fn">name</a>(&amp;self) -&gt; &amp;<a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.str.html">str</a></h4></section></summary><div class="docblock"><p>Human-readable identifier for logging and <code>SimulationResult</code> metadata.</p>
+</div></details></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.description" class="method"><a class="src rightside" href="../../../src/oxiflow/model/traits.rs.html#135-137">Source</a><h4 class="code-header">fn <a href="#method.description" class="fn">description</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.94.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;&amp;<a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.str.html">str</a>&gt;</h4></section></summary><div class="docblock"><p>Optional longer description.</p>
+</div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"></div><script src="../../../trait.impl/oxiflow/model/traits/trait.PhysicalModel.js" async></script></section></div></main></body></html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Abstract spatial mesh — INV-1 invariant."><title>Mesh in oxiflow::mesh - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-77263533.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.1 (e408947bf 2026-03-25)" data-channel="1.94.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../../static.files/storage-e2aeef58.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc trait"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Mesh</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../oxiflow/index.html">oxiflow</a><span class="version">0.0.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Mesh</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#object-safety" title="Object safety">Object safety</a></li><li><a href="#implementing-mesh" title="Implementing `Mesh`">Implementing <code>Mesh</code></a></li><li><a href="#inv-1-compliance" title="INV-1 compliance">INV-1 compliance</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.characteristic_length" title="characteristic_length">characteristic_length</a></li><li><a href="#tymethod.coordinates" title="coordinates">coordinates</a></li><li><a href="#tymethod.n_dof" title="n_dof">n_dof</a></li><li><a href="#tymethod.spatial_dimension" title="spatial_dimension">spatial_dimension</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In oxiflow::<wbr>mesh</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">oxiflow</a>::<wbr><a href="index.html">mesh</a></div><h1>Trait <span class="trait">Mesh</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/oxiflow/mesh/mod.rs.html#76-108">Source</a> </span></div><pre class="rust item-decl"><code>pub trait Mesh: <a class="trait" href="https://doc.rust-lang.org/1.94.1/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a> + <a class="trait" href="https://doc.rust-lang.org/1.94.1/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> {
+    // Required methods
+    fn <a href="#tymethod.n_dof" class="fn">n_dof</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.usize.html">usize</a>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.coordinates" class="fn">coordinates</a>(&amp;self, i: <a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.usize.html">usize</a>) -&gt; &amp;[<a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.f64.html">f64</a>];
+<span class="item-spacer"></span>    fn <a href="#tymethod.spatial_dimension" class="fn">spatial_dimension</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.usize.html">usize</a>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.characteristic_length" class="fn">characteristic_length</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.f64.html">f64</a>;
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Abstract spatial mesh — INV-1 invariant.</p>
+<p>All spatial information consumed by the engine passes through this trait.
+No implementation detail (<code>dx</code>, <code>nx</code>, node table) leaks into the public API.</p>
+<h2 id="object-safety"><a class="doc-anchor" href="#object-safety">§</a>Object safety</h2>
+<p>This trait is object-safe: it can be used as <code>Box&lt;dyn Mesh&gt;</code> and <code>&amp;dyn Mesh</code>.
+Required for INV-4 (plugin-safe API, J7).</p>
+<h2 id="implementing-mesh"><a class="doc-anchor" href="#implementing-mesh">§</a>Implementing <code>Mesh</code></h2>
+<p>A minimal implementation for a 1D uniform grid:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>oxiflow::mesh::Mesh;
+
+<span class="kw">struct </span>MyGrid { n: usize, dx: f64 }
+
+<span class="kw">impl </span>Mesh <span class="kw">for </span>MyGrid {
+    <span class="kw">fn </span>n_dof(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize { <span class="self">self</span>.n }
+    <span class="kw">fn </span>coordinates(<span class="kw-2">&amp;</span><span class="self">self</span>, i: usize) -&gt; <span class="kw-2">&amp;</span>[f64] {
+        <span class="comment">// In practice, return a slice into a pre-computed node table.
+        // This example uses a workaround for illustration only.
+        </span>std::slice::from_ref(Box::leak(Box::new(i <span class="kw">as </span>f64 * <span class="self">self</span>.dx)))
+    }
+    <span class="kw">fn </span>spatial_dimension(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize { <span class="number">1 </span>}
+    <span class="kw">fn </span>characteristic_length(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; f64 { <span class="self">self</span>.dx }
+}</code></pre></div><h2 id="inv-1-compliance"><a class="doc-anchor" href="#inv-1-compliance">§</a>INV-1 compliance</h2>
+<p>Implementations must <strong>not</strong> expose <code>dx</code>, <code>nx</code> or raw indices in any public
+method beyond those defined here. Spatial parameters are internal details.</p>
+</div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.n_dof" class="method"><a class="src rightside" href="../../src/oxiflow/mesh/mod.rs.html#81">Source</a><h4 class="code-header">fn <a href="#tymethod.n_dof" class="fn">n_dof</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.usize.html">usize</a></h4></section></summary><div class="docblock"><p>Total number of degrees of freedom (nodes) in the mesh.</p>
+<p>For a 1D uniform grid: <code>n_dof() == n_points</code>.
+For a 2D FEM mesh: <code>n_dof()</code> is the number of mesh nodes.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.coordinates" class="method"><a class="src rightside" href="../../src/oxiflow/mesh/mod.rs.html#93">Source</a><h4 class="code-header">fn <a href="#tymethod.coordinates" class="fn">coordinates</a>(&amp;self, i: <a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.usize.html">usize</a>) -&gt; &amp;[<a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.f64.html">f64</a>]</h4></section></summary><div class="docblock"><p>Coordinates of node <code>i</code> as a slice of length <code>spatial_dimension()</code>.</p>
+<p>Returns <code>&amp;[f64]</code> — zero allocation. Callers must not store the returned
+reference beyond the lifetime of the mesh. Implementors typically return
+a slice into a pre-computed node coordinate table.</p>
+<h5 id="panics"><a class="doc-anchor" href="#panics">§</a>Panics</h5>
+<p>Implementations may panic if <code>i &gt;= n_dof()</code>. Use <code>n_dof()</code> to guard
+iteration bounds.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.spatial_dimension" class="method"><a class="src rightside" href="../../src/oxiflow/mesh/mod.rs.html#100">Source</a><h4 class="code-header">fn <a href="#tymethod.spatial_dimension" class="fn">spatial_dimension</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.usize.html">usize</a></h4></section></summary><div class="docblock"><p>Number of spatial dimensions of this mesh.</p>
+<ul>
+<li><code>1</code> for 1D grids (chromatography column, 1D heat transfer)</li>
+<li><code>2</code> for 2D meshes (surface flow, 2D diffusion)</li>
+<li><code>3</code> for 3D meshes (volumetric FEM)</li>
+</ul>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.characteristic_length" class="method"><a class="src rightside" href="../../src/oxiflow/mesh/mod.rs.html#107">Source</a><h4 class="code-header">fn <a href="#tymethod.characteristic_length" class="fn">characteristic_length</a>(&amp;self) -&gt; <a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.f64.html">f64</a></h4></section></summary><div class="docblock"><p>A representative spatial length scale of the mesh.</p>
+<p>Used by integrators and operators for stability estimates (CFL condition,
+Péclet number). For a uniform 1D grid: <code>dx</code>. For unstructured meshes:
+the minimum element diameter or average edge length.</p>
+</div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><section id="impl-Mesh-for-UniformGrid1D" class="impl"><a class="src rightside" href="../../src/oxiflow/mesh/structured/mod.rs.html#105-131">Source</a><a href="#impl-Mesh-for-UniformGrid1D" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.Mesh.html" title="trait oxiflow::mesh::Mesh">Mesh</a> for <a class="struct" href="structured/struct.UniformGrid1D.html" title="struct oxiflow::mesh::structured::UniformGrid1D">UniformGrid1D</a></h3></section></div><script src="../../trait.impl/oxiflow/mesh/trait.Mesh.js" async></script></section></div></main></body></html>

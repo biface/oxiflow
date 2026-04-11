@@ -8,22 +8,112 @@
         ]
     });">
 </script>
-</head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">oxiflow/mesh/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Module `mesh`
+</head><body class="rustdoc src"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content"><div class="main-heading"><h1><div class="sub-heading">oxiflow/mesh/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Module `mesh`
 <a href=#2 id=2 data-nosnippet>2</a>//!
-<a href=#3 id=3 data-nosnippet>3</a>//! Spatial mesh abstraction — INV-1 invariant.
+<a href=#3 id=3 data-nosnippet>3</a>//! Spatial mesh abstraction — INV-1 invariant (DD-007, DD-019, issue #31).
 <a href=#4 id=4 data-nosnippet>4</a>//!
 <a href=#5 id=5 data-nosnippet>5</a>//! ## Core principle (INV-1)
 <a href=#6 id=6 data-nosnippet>6</a>//!
 <a href=#7 id=7 data-nosnippet>7</a>//! No public engine API exposes `dx`, `nx` or raw indices as first-class spatial
-<a href=#8 id=8 data-nosnippet>8</a>//! parameters. All spatial references go through the `Mesh` trait, of which
-<a href=#9 id=9 data-nosnippet>9</a>//! `UniformGrid1D` will be the first implementation (J1, v0.2) and unstructured
-<a href=#10 id=10 data-nosnippet>10</a>//! FEM meshes the second (J7, v2.0).
+<a href=#8 id=8 data-nosnippet>8</a>//! parameters. All spatial references go through the `Mesh` trait. This guarantees
+<a href=#9 id=9 data-nosnippet>9</a>//! forward compatibility with FEM unstructured meshes at J7 — zero breaking change
+<a href=#10 id=10 data-nosnippet>10</a>//! on existing code when `unstructured/` is added.
 <a href=#11 id=11 data-nosnippet>11</a>//!
-<a href=#12 id=12 data-nosnippet>12</a>//! ## Planned implementations
+<a href=#12 id=12 data-nosnippet>12</a>//! ## Module hierarchy (DD-019)
 <a href=#13 id=13 data-nosnippet>13</a>//!
-<a href=#14 id=14 data-nosnippet>14</a>//! | Type | Description | Milestone |
-<a href=#15 id=15 data-nosnippet>15</a>//! |---|---|---|
-<a href=#16 id=16 data-nosnippet>16</a>//! | `UniformGrid1D` | 1D uniform grid | J1 — v0.2 |
-<a href=#17 id=17 data-nosnippet>17</a>//! | `UnstructuredMesh2D` | 2D triangular mesh | J7 — v2.0 |
-<a href=#18 id=18 data-nosnippet>18</a>//! | `TetrahedralMesh3D` | 3D tetrahedral mesh | J7 — v2.0 |
-</span></code></pre></div></section></main></body></html>
+<a href=#14 id=14 data-nosnippet>14</a>//! ```text
+<a href=#15 id=15 data-nosnippet>15</a>//! src/mesh/
+<a href=#16 id=16 data-nosnippet>16</a>//! ├── mod.rs              — Mesh trait + public re-exports
+<a href=#17 id=17 data-nosnippet>17</a>//! ├── structured/
+<a href=#18 id=18 data-nosnippet>18</a>//! │   └── mod.rs          — UniformGrid1D (J1); UniformGrid2D (J4b+)
+<a href=#19 id=19 data-nosnippet>19</a>//! └── unstructured/       — RESERVED J7 (UnstructuredMesh2D, TetrahedralMesh3D)
+<a href=#20 id=20 data-nosnippet>20</a>//! ```
+<a href=#21 id=21 data-nosnippet>21</a>//!
+<a href=#22 id=22 data-nosnippet>22</a>//! ## Implementations
+<a href=#23 id=23 data-nosnippet>23</a>//!
+<a href=#24 id=24 data-nosnippet>24</a>//! | Type | Family | Description | Milestone |
+<a href=#25 id=25 data-nosnippet>25</a>//! |---|---|---|---|
+<a href=#26 id=26 data-nosnippet>26</a>//! | [`UniformGrid1D`] | structured | 1D uniform grid, FD/FV | J1 — v0.1.0 |
+<a href=#27 id=27 data-nosnippet>27</a>//! | `UnstructuredMesh2D` | unstructured | 2D triangular mesh, FEM | J7 — v2.0.0 |
+<a href=#28 id=28 data-nosnippet>28</a>//! | `TetrahedralMesh3D` | unstructured | 3D tetrahedral mesh, FEM | J7 — v2.0.0 |
+<a href=#29 id=29 data-nosnippet>29</a>
+<a href=#30 id=30 data-nosnippet>30</a></span><span class="kw">pub mod </span>structured;
+<a href=#31 id=31 data-nosnippet>31</a>
+<a href=#32 id=32 data-nosnippet>32</a><span class="comment">// unstructured/ — RESERVED J7
+<a href=#33 id=33 data-nosnippet>33</a>// pub mod unstructured;
+<a href=#34 id=34 data-nosnippet>34</a>
+<a href=#35 id=35 data-nosnippet>35</a>// ── Public re-exports ─────────────────────────────────────────────────────────
+<a href=#36 id=36 data-nosnippet>36</a>
+<a href=#37 id=37 data-nosnippet>37</a></span><span class="kw">pub use </span>structured::UniformGrid1D;
+<a href=#38 id=38 data-nosnippet>38</a>
+<a href=#39 id=39 data-nosnippet>39</a><span class="comment">// ── Mesh trait ────────────────────────────────────────────────────────────────
+<a href=#40 id=40 data-nosnippet>40</a>
+<a href=#41 id=41 data-nosnippet>41</a></span><span class="doccomment">/// Abstract spatial mesh — INV-1 invariant.
+<a href=#42 id=42 data-nosnippet>42</a>///
+<a href=#43 id=43 data-nosnippet>43</a>/// All spatial information consumed by the engine passes through this trait.
+<a href=#44 id=44 data-nosnippet>44</a>/// No implementation detail (`dx`, `nx`, node table) leaks into the public API.
+<a href=#45 id=45 data-nosnippet>45</a>///
+<a href=#46 id=46 data-nosnippet>46</a>/// # Object safety
+<a href=#47 id=47 data-nosnippet>47</a>///
+<a href=#48 id=48 data-nosnippet>48</a>/// This trait is object-safe: it can be used as `Box&lt;dyn Mesh&gt;` and `&amp;dyn Mesh`.
+<a href=#49 id=49 data-nosnippet>49</a>/// Required for INV-4 (plugin-safe API, J7).
+<a href=#50 id=50 data-nosnippet>50</a>///
+<a href=#51 id=51 data-nosnippet>51</a>/// # Implementing `Mesh`
+<a href=#52 id=52 data-nosnippet>52</a>///
+<a href=#53 id=53 data-nosnippet>53</a>/// A minimal implementation for a 1D uniform grid:
+<a href=#54 id=54 data-nosnippet>54</a>///
+<a href=#55 id=55 data-nosnippet>55</a>/// ```rust
+<a href=#56 id=56 data-nosnippet>56</a>/// use oxiflow::mesh::Mesh;
+<a href=#57 id=57 data-nosnippet>57</a>///
+<a href=#58 id=58 data-nosnippet>58</a>/// struct MyGrid { n: usize, dx: f64 }
+<a href=#59 id=59 data-nosnippet>59</a>///
+<a href=#60 id=60 data-nosnippet>60</a>/// impl Mesh for MyGrid {
+<a href=#61 id=61 data-nosnippet>61</a>///     fn n_dof(&amp;self) -&gt; usize { self.n }
+<a href=#62 id=62 data-nosnippet>62</a>///     fn coordinates(&amp;self, i: usize) -&gt; &amp;[f64] {
+<a href=#63 id=63 data-nosnippet>63</a>///         // In practice, return a slice into a pre-computed node table.
+<a href=#64 id=64 data-nosnippet>64</a>///         // This example uses a workaround for illustration only.
+<a href=#65 id=65 data-nosnippet>65</a>///         std::slice::from_ref(Box::leak(Box::new(i as f64 * self.dx)))
+<a href=#66 id=66 data-nosnippet>66</a>///     }
+<a href=#67 id=67 data-nosnippet>67</a>///     fn spatial_dimension(&amp;self) -&gt; usize { 1 }
+<a href=#68 id=68 data-nosnippet>68</a>///     fn characteristic_length(&amp;self) -&gt; f64 { self.dx }
+<a href=#69 id=69 data-nosnippet>69</a>/// }
+<a href=#70 id=70 data-nosnippet>70</a>/// ```
+<a href=#71 id=71 data-nosnippet>71</a>///
+<a href=#72 id=72 data-nosnippet>72</a>/// # INV-1 compliance
+<a href=#73 id=73 data-nosnippet>73</a>///
+<a href=#74 id=74 data-nosnippet>74</a>/// Implementations must **not** expose `dx`, `nx` or raw indices in any public
+<a href=#75 id=75 data-nosnippet>75</a>/// method beyond those defined here. Spatial parameters are internal details.
+<a href=#76 id=76 data-nosnippet>76</a></span><span class="kw">pub trait </span>Mesh: Send + Sync {
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="doccomment">/// Total number of degrees of freedom (nodes) in the mesh.
+<a href=#78 id=78 data-nosnippet>78</a>    ///
+<a href=#79 id=79 data-nosnippet>79</a>    /// For a 1D uniform grid: `n_dof() == n_points`.
+<a href=#80 id=80 data-nosnippet>80</a>    /// For a 2D FEM mesh: `n_dof()` is the number of mesh nodes.
+<a href=#81 id=81 data-nosnippet>81</a>    </span><span class="kw">fn </span>n_dof(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize;
+<a href=#82 id=82 data-nosnippet>82</a>
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="doccomment">/// Coordinates of node `i` as a slice of length `spatial_dimension()`.
+<a href=#84 id=84 data-nosnippet>84</a>    ///
+<a href=#85 id=85 data-nosnippet>85</a>    /// Returns `&amp;[f64]` — zero allocation. Callers must not store the returned
+<a href=#86 id=86 data-nosnippet>86</a>    /// reference beyond the lifetime of the mesh. Implementors typically return
+<a href=#87 id=87 data-nosnippet>87</a>    /// a slice into a pre-computed node coordinate table.
+<a href=#88 id=88 data-nosnippet>88</a>    ///
+<a href=#89 id=89 data-nosnippet>89</a>    /// # Panics
+<a href=#90 id=90 data-nosnippet>90</a>    ///
+<a href=#91 id=91 data-nosnippet>91</a>    /// Implementations may panic if `i &gt;= n_dof()`. Use `n_dof()` to guard
+<a href=#92 id=92 data-nosnippet>92</a>    /// iteration bounds.
+<a href=#93 id=93 data-nosnippet>93</a>    </span><span class="kw">fn </span>coordinates(<span class="kw-2">&amp;</span><span class="self">self</span>, i: usize) -&gt; <span class="kw-2">&amp;</span>[f64];
+<a href=#94 id=94 data-nosnippet>94</a>
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="doccomment">/// Number of spatial dimensions of this mesh.
+<a href=#96 id=96 data-nosnippet>96</a>    ///
+<a href=#97 id=97 data-nosnippet>97</a>    /// - `1` for 1D grids (chromatography column, 1D heat transfer)
+<a href=#98 id=98 data-nosnippet>98</a>    /// - `2` for 2D meshes (surface flow, 2D diffusion)
+<a href=#99 id=99 data-nosnippet>99</a>    /// - `3` for 3D meshes (volumetric FEM)
+<a href=#100 id=100 data-nosnippet>100</a>    </span><span class="kw">fn </span>spatial_dimension(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize;
+<a href=#101 id=101 data-nosnippet>101</a>
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="doccomment">/// A representative spatial length scale of the mesh.
+<a href=#103 id=103 data-nosnippet>103</a>    ///
+<a href=#104 id=104 data-nosnippet>104</a>    /// Used by integrators and operators for stability estimates (CFL condition,
+<a href=#105 id=105 data-nosnippet>105</a>    /// Péclet number). For a uniform 1D grid: `dx`. For unstructured meshes:
+<a href=#106 id=106 data-nosnippet>106</a>    /// the minimum element diameter or average edge length.
+<a href=#107 id=107 data-nosnippet>107</a>    </span><span class="kw">fn </span>characteristic_length(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; f64;
+<a href=#108 id=108 data-nosnippet>108</a>}
+</code></pre></div></section></main></body></html>

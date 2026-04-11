@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {};
+window.SIDEBAR_ITEMS = {"enum":["IntegratorKind","StepControl"],"struct":["SolverConfiguration","TimeConfiguration"]};

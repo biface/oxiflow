@@ -1,0 +1,77 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Computes one context variable and injects it into `ComputeContext`."><title>ContextCalculator in oxiflow::context::calculator - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-77263533.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.1 (e408947bf 2026-03-25)" data-channel="1.94.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc trait"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">ContextCalculator</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.0.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Context<wbr>Calculator</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#contract" title="Contract">Contract</a></li><li><a href="#discreteoperator-inv-2-j4b" title="DiscreteOperator (INV-2, J4b)">DiscreteOperator (INV-2, J4b)</a></li><li><a href="#examples" title="Examples">Examples</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.compute" title="compute">compute</a></li><li><a href="#tymethod.provides" title="provides">provides</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.name" title="name">name</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In oxiflow::<wbr>context::<wbr>calculator</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">context</a>::<wbr><a href="index.html">calculator</a></div><h1>Trait <span class="trait">Context<wbr>Calculator</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/context/calculator.rs.html#70-92">Source</a> </span></div><pre class="rust item-decl"><code>pub trait ContextCalculator:
+    <a class="trait" href="../../model/traits/trait.RequiresContext.html" title="trait oxiflow::model::traits::RequiresContext">RequiresContext</a>
+    + <a class="trait" href="https://doc.rust-lang.org/1.94.1/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a>
+    + <a class="trait" href="https://doc.rust-lang.org/1.94.1/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> {
+    // Required methods
+    fn <a href="#tymethod.provides" class="fn">provides</a>(&amp;self) -&gt; <a class="enum" href="../variable/enum.ContextVariable.html" title="enum oxiflow::context::variable::ContextVariable">ContextVariable</a>;
+<span class="item-spacer"></span>    fn <a href="#tymethod.compute" class="fn">compute</a>(
+        &amp;self,
+        state: &amp;<a class="enum" href="../value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue">ContextValue</a>,
+        ctx: &amp;<a class="struct" href="../compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext">ComputeContext</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.94.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="../value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue">ContextValue</a>, <a class="enum" href="../error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;;
+
+    // Provided method
+    fn <a href="#method.name" class="fn">name</a>(&amp;self) -&gt; &amp;<a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.str.html">str</a> { ... }
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Computes one context variable and injects it into <code>ComputeContext</code>.</p>
+<p>The solver calls calculators in topological order — a calculator that
+<code>depends_on()</code> variable X is guaranteed to run after the calculator that
+<code>provides()</code> X. Within a dependency tier, execution order is determined
+by <code>priority()</code> (inherited from <code>RequiresContext</code>).</p>
+<h2 id="contract"><a class="doc-anchor" href="#contract">§</a>Contract</h2>
+<ul>
+<li><code>provides()</code> must return a stable <code>ContextVariable</code> — the same value
+across calls for a given calculator instance.</li>
+<li><code>compute()</code> receives the current field state and a <strong>partially populated</strong>
+<code>ComputeContext</code> (variables with lower priority already resolved).</li>
+<li><code>compute()</code> must not modify <code>ctx</code> directly — the solver inserts the result.</li>
+</ul>
+<h2 id="discreteoperator-inv-2-j4b"><a class="doc-anchor" href="#discreteoperator-inv-2-j4b">§</a>DiscreteOperator (INV-2, J4b)</h2>
+<p>Spatial calculators (gradient, Laplacian, flux) may internally hold a
+<code>DiscreteOperator</code> implementation. This is an implementation detail of the
+calculator — <code>DiscreteOperator</code> is never exposed in <code>SolverConfiguration</code>.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>oxiflow::context::calculator::ContextCalculator;
+<span class="kw">use </span>oxiflow::context::variable::ContextVariable;
+<span class="kw">use </span>oxiflow::context::value::ContextValue;
+<span class="kw">use </span>oxiflow::context::compute::ComputeContext;
+<span class="kw">use </span>oxiflow::context::error::OxiflowError;
+<span class="kw">use </span>oxiflow::model::traits::RequiresContext;
+
+<span class="kw">struct </span>TimeCalculator;
+
+<span class="kw">impl </span>RequiresContext <span class="kw">for </span>TimeCalculator {
+    <span class="kw">fn </span>required_variables(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;ContextVariable&gt; { <span class="macro">vec!</span>[] }
+    <span class="kw">fn </span>priority(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 { <span class="number">0 </span>}
+}
+
+<span class="kw">impl </span>ContextCalculator <span class="kw">for </span>TimeCalculator {
+    <span class="kw">fn </span>provides(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ContextVariable { ContextVariable::Time }
+    <span class="kw">fn </span>compute(<span class="kw-2">&amp;</span><span class="self">self</span>, _state: <span class="kw-2">&amp;</span>ContextValue, ctx: <span class="kw-2">&amp;</span>ComputeContext)
+        -&gt; <span class="prelude-ty">Result</span>&lt;ContextValue, OxiflowError&gt;
+    {
+        <span class="prelude-val">Ok</span>(ContextValue::Scalar(ctx.time()))
+    }
+    <span class="kw">fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str { <span class="string">"time" </span>}
+}</code></pre></div></div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.provides" class="method"><a class="src rightside" href="../../../src/oxiflow/context/calculator.rs.html#75">Source</a><h4 class="code-header">fn <a href="#tymethod.provides" class="fn">provides</a>(&amp;self) -&gt; <a class="enum" href="../variable/enum.ContextVariable.html" title="enum oxiflow::context::variable::ContextVariable">ContextVariable</a></h4></section></summary><div class="docblock"><p>The context variable this calculator produces.</p>
+<p>Must be stable across calls. The solver uses this to match calculators
+against <code>RequiresContext::required_variables()</code> declarations.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.compute" class="method"><a class="src rightside" href="../../../src/oxiflow/context/calculator.rs.html#82-86">Source</a><h4 class="code-header">fn <a href="#tymethod.compute" class="fn">compute</a>(
+    &amp;self,
+    state: &amp;<a class="enum" href="../value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue">ContextValue</a>,
+    ctx: &amp;<a class="struct" href="../compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext">ComputeContext</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.94.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="enum" href="../value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue">ContextValue</a>, <a class="enum" href="../error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;</h4></section></summary><div class="docblock"><p>Computes the value for <code>provides()</code> given the current field state and
+the partially populated context.</p>
+<p>Variables declared in <code>depends_on()</code> are guaranteed to be present in
+<code>ctx</code> when this method is called.</p>
+</div></details></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.name" class="method"><a class="src rightside" href="../../../src/oxiflow/context/calculator.rs.html#89-91">Source</a><h4 class="code-header">fn <a href="#method.name" class="fn">name</a>(&amp;self) -&gt; &amp;<a class="primitive" href="https://doc.rust-lang.org/1.94.1/std/primitive.str.html">str</a></h4></section></summary><div class="docblock"><p>Human-readable name for logging and error messages.</p>
+</div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"></div><script src="../../../trait.impl/oxiflow/context/calculator/trait.ContextCalculator.js" async></script></section></div></main></body></html>

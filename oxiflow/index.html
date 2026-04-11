@@ -8,35 +8,122 @@
         ]
     });">
 </script>
-</head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate oxiflow</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../oxiflow/index.html">oxiflow</a><span class="version">0.0.5</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#oxiflow" title="oxiflow">oxiflow</a><ul><li><a href="#architecture--separation-whathow" title="Architecture — separation WHAT/HOW">Architecture — separation WHAT/HOW</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#invariants-fem-anticipated" title="Invariants FEM anticipated">Invariants FEM anticipated</a></li></ul></li></ul><h3><a href="#modules-1">Crate Items</a></h3><ul class="block"><li><a href="#modules-1" title="Modules">Modules</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>oxiflow</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/oxiflow/lib.rs.html#1-61">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="oxiflow"><a class="doc-anchor" href="#oxiflow">§</a>oxiflow</h2>
-<p>Generic engine for solving partial differential equations of the form:</p>
-<div class="example-wrap"><pre class="language-text"><code>∂u/∂t + ∇·F(u, ∇u) = S(u, x, t)</code></pre></div>
-<p>where <code>u</code> is a physical field (concentration, temperature, velocity…),
-<code>F</code> a flux (advective, diffusive, dispersive) and <code>S</code> a source or reaction term.</p>
-<h3 id="architecture--separation-whathow"><a class="doc-anchor" href="#architecture--separation-whathow">§</a>Architecture — separation WHAT/HOW</h3>
-<p>The engine enforces three strictly separated responsibility levels:</p>
-<div><table><thead><tr><th>Type</th><th>Role</th></tr></thead><tbody>
-<tr><td><code>Scenario</code></td><td>Declares the problem</td></tr>
-<tr><td><code>SolverConfiguration</code></td><td>Configures the solving</td></tr>
-<tr><td><code>Solver</code></td><td>Orchestrates execution</td></tr>
-</tbody></table>
-</div><h3 id="modules"><a class="doc-anchor" href="#modules">§</a>Modules</h3>
+</head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate oxiflow</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../oxiflow/index.html">oxiflow</a><span class="version">0.0.5</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#oxiflow" title="oxiflow">oxiflow</a><ul><li><a href="#the-canonical-form" title="The canonical form">The canonical form</a></li><li><a href="#physical-domains" title="Physical domains">Physical domains</a></li><li><a href="#numerical-structure" title="Numerical structure">Numerical structure</a></li><li><a href="#architecture--what--how-separation" title="Architecture — WHAT / HOW separation">Architecture — WHAT / HOW separation</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#fem-invariants--forward-compatibility" title="FEM invariants — forward compatibility">FEM invariants — forward compatibility</a></li><li><a href="#getting-started-j1" title="Getting started (J1)">Getting started (J1)</a></li></ul></li></ul><h3><a href="#modules-1">Crate Items</a></h3><ul class="block"><li><a href="#modules-1" title="Modules">Modules</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>oxiflow</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/oxiflow/lib.rs.html#1-150">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="oxiflow"><a class="doc-anchor" href="#oxiflow">§</a>oxiflow</h2>
+<p>Generic numerical engine for transport, reaction, and diffusion problems.</p>
+<h3 id="the-canonical-form"><a class="doc-anchor" href="#the-canonical-form">§</a>The canonical form</h3>
+<p>Every problem solved by oxiflow is expressed as a conservation law or field
+equation of the form:</p>
+<p>$$\frac{\partial u}{\partial t} + \nabla \cdot F(u, \nabla u) = S(u, \mathbf{x}, t)$$</p>
+<p>where:</p>
 <ul>
-<li><a href="context/index.html" title="mod oxiflow::context"><code>context</code></a>   — Variables and calculators (DD-003–DD-006)</li>
-<li><a href="mesh/index.html" title="mod oxiflow::mesh"><code>mesh</code></a>      — Mesh abstraction (INV-1, DD-007)</li>
-<li><a href="model/index.html" title="mod oxiflow::model"><code>model</code></a>     — Physical models</li>
-<li><a href="boundary/index.html" title="mod oxiflow::boundary"><code>boundary</code></a>  — Boundary conditions (DD-008)</li>
-<li><a href="solver/index.html" title="mod oxiflow::solver"><code>solver</code></a>    — Numerical orchestration</li>
-<li><a href="operators/index.html" title="mod oxiflow::operators"><code>operators</code></a> — Discrete operators (INV-2, DD-012)</li>
-<li><a href="coupling/index.html" title="mod oxiflow::coupling"><code>coupling</code></a>  — Multi-domain coupling (INV-3, DD-011)</li>
+<li><strong><code>u(x, t)</code></strong> — the primary field: concentration, temperature, velocity,
+pressure, magnetic flux density, or any other quantity that evolves in
+time and space.</li>
+<li><strong><code>F(u, ∇u)</code></strong> — the flux tensor, which may combine:
+<ul>
+<li><em>advective</em> flux <code>v·u</code> (transport by a flow field),</li>
+<li><em>diffusive</em> flux <code>-D·∇u</code> (Fick, Fourier, Darcy),</li>
+<li><em>dispersive</em> flux (higher-order spreading, e.g. in chromatography).</li>
 </ul>
-<h3 id="invariants-fem-anticipated"><a class="doc-anchor" href="#invariants-fem-anticipated">§</a>Invariants FEM anticipated</h3>
-<p>v0.x abstractions do not presuppose a structured grid, ensuring forward compatibility
-with the FEM support planned at v2.0.</p>
-<div><table><thead><tr><th>Invariant</th><th>Description</th><th>Active from</th></tr></thead><tbody>
-<tr><td>INV-1</td><td>Abstract <code>Mesh</code> — zero <code>dx</code>/<code>nx</code> in public API</td><td>v0.1.0</td></tr>
-<tr><td>INV-2</td><td><code>DiscreteOperator&lt;M: Mesh&gt;</code> — integrators decoupled from the scheme</td><td>v0.5.0</td></tr>
-<tr><td>INV-3</td><td><code>CouplingOperator</code> — explicit inter-domain coupling</td><td>v0.3.0</td></tr>
-<tr><td>INV-4</td><td>Plugin-safe API — object-safe traits from external crates</td><td>v2.0.0</td></tr>
+</li>
+<li><strong><code>S(u, x, t)</code></strong> — source or reaction term: chemical reactions, heat
+generation, gravity, electromagnetic forcing, adsorption isotherms.</li>
+</ul>
+<p>Second-order-in-time problems (<code>∂²u/∂t²</code>, structural dynamics, wave
+propagation) are reduced to this form by introducing <code>v = ∂u/∂t</code> as a
+second field component: the state <code>(u, v)</code> evolves as a first-order
+system. Newmark-β and HHT-α integrators are planned for J4+.</p>
+<h3 id="physical-domains"><a class="doc-anchor" href="#physical-domains">§</a>Physical domains</h3>
+<p>oxiflow covers any problem expressible as the canonical form above.</p>
+<div><table><thead><tr><th>Domain</th><th>Primary field <code>u</code></th><th>Milestone</th></tr></thead><tbody>
+<tr><td>Chromatographic transport</td><td>concentration <code>c(z,t)</code></td><td>J1</td></tr>
+<tr><td>Transient heat conduction</td><td>temperature <code>T(x,t)</code></td><td>J2+</td></tr>
+<tr><td>Reaction-diffusion</td><td>species <code>(u,v)</code></td><td>J2+</td></tr>
+<tr><td>Flow in porous media (Darcy)</td><td>water content <code>θ</code></td><td>J2+</td></tr>
+<tr><td>Shallow water (Saint-Venant)</td><td>depth <code>h</code>, momentum <code>hv</code></td><td>J3</td></tr>
+<tr><td>Electrochemical (Nernst-Planck)</td><td>ionic concentrations <code>cᵢ</code></td><td>J3+</td></tr>
+<tr><td>Resistive magnetic diffusion</td><td>flux density <code>B</code></td><td>J7</td></tr>
+<tr><td>Structural dynamics</td><td>displacement <code>u</code>, velocity <code>v</code></td><td>J4+</td></tr>
 </tbody></table>
-</div></div></details><h2 id="modules-1" class="section-header">Modules<a href="#modules-1" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="boundary/index.html" title="mod oxiflow::boundary">boundary</a></dt><dd>Module <code>boundary</code></dd><dt><a class="mod" href="context/index.html" title="mod oxiflow::context">context</a></dt><dd>Module <code>context</code></dd><dt><a class="mod" href="coupling/index.html" title="mod oxiflow::coupling">coupling</a></dt><dd>Module <code>coupling</code></dd><dt><a class="mod" href="mesh/index.html" title="mod oxiflow::mesh">mesh</a></dt><dd>Module <code>mesh</code></dd><dt><a class="mod" href="model/index.html" title="mod oxiflow::model">model</a></dt><dd>Module <code>model</code></dd><dt><a class="mod" href="operators/index.html" title="mod oxiflow::operators">operators</a></dt><dd>Module <code>operators</code></dd><dt><a class="mod" href="solver/index.html" title="mod oxiflow::solver">solver</a></dt><dd>Module <code>solver</code></dd></dl></section></div></main></body></html>
+</div>
+<p>For full equations, physical derivations, and numerical details,
+see the <strong><a href="https://github.com/biface/oxiflow/wiki">project wiki</a></strong>.</p>
+<h3 id="numerical-structure"><a class="doc-anchor" href="#numerical-structure">§</a>Numerical structure</h3>
+<p>In each domain above, <code>u</code> changes physical meaning, but the engine abstraction
+is identical:</p>
+<div><table><thead><tr><th>Physical concept</th><th>Engine abstraction</th></tr></thead><tbody>
+<tr><td>Field <code>u(x,t)</code></td><td><code>ContextValue::ScalarField</code> / <code>VectorField</code></td></tr>
+<tr><td>Spatial domain</td><td><code>Mesh</code> (INV-1) — <code>UniformGrid1D</code> (J1), FEM (J7)</td></tr>
+<tr><td>Flux F, source S</td><td><code>PhysicalModel::compute_physics(u, ctx)</code></td></tr>
+<tr><td>Auxiliary quantities</td><td><code>ComputeContext</code> ← <code>ContextCalculator</code> chain</td></tr>
+<tr><td>Time integration</td><td><code>Solver</code> — Euler, RK4, … (J4)</td></tr>
+<tr><td>Boundary conditions</td><td><code>BoundaryCondition: RequiresContext</code> (J2)</td></tr>
+<tr><td>Multi-domain coupling</td><td><code>CouplingOperator</code> (INV-3, J3)</td></tr>
+<tr><td>Spatial operators</td><td><code>DiscreteOperator&lt;M: Mesh&gt;</code> (INV-2, J4b)</td></tr>
+</tbody></table>
+</div><h3 id="architecture--what--how-separation"><a class="doc-anchor" href="#architecture--what--how-separation">§</a>Architecture — WHAT / HOW separation</h3>
+<p>Three strictly separated responsibilities:</p>
+<div><table><thead><tr><th>Type</th><th>Pole</th><th>Role</th></tr></thead><tbody>
+<tr><td><a href="solver/scenario/struct.Scenario.html" title="struct oxiflow::solver::scenario::Scenario"><code>solver::Scenario</code></a></td><td>WHAT</td><td>Declares the problem: model, mesh, domains, BCs</td></tr>
+<tr><td><a href="solver/config/struct.SolverConfiguration.html" title="struct oxiflow::solver::config::SolverConfiguration"><code>solver::SolverConfiguration</code></a></td><td>HOW</td><td>Configures solving: integrator, step control, calculators</td></tr>
+<tr><td><a href="solver/trait.Solver.html" title="trait oxiflow::solver::Solver"><code>solver::Solver</code></a></td><td>Execution</td><td>Orchestrates the time integration loop</td></tr>
+</tbody></table>
+</div>
+<p>The engine enforces a <strong>contractual execution order</strong> at each time step:</p>
+<ol>
+<li>Context calculators populate <a href="context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext"><code>context::ComputeContext</code></a></li>
+<li>Boundary conditions are applied to the current state (J2)</li>
+<li>[<code>model::PhysicalModel::compute</code>] computes <code>du/dt</code></li>
+<li>The integrator advances the state by <code>dt</code></li>
+</ol>
+<h3 id="modules"><a class="doc-anchor" href="#modules">§</a>Modules</h3>
+<ul>
+<li><a href="context/index.html" title="mod oxiflow::context"><code>context</code></a>   — <a href="context/variable/enum.ContextVariable.html" title="enum oxiflow::context::variable::ContextVariable"><code>context::ContextVariable</code></a>, <a href="context/value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue"><code>context::ContextValue</code></a>,
+<a href="context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError"><code>context::OxiflowError</code></a>, <a href="context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext"><code>context::ComputeContext</code></a>, <a href="context/calculator/trait.ContextCalculator.html" title="trait oxiflow::context::calculator::ContextCalculator"><code>context::ContextCalculator</code></a></li>
+<li><a href="mesh/index.html" title="mod oxiflow::mesh"><code>mesh</code></a>      — <a href="mesh/trait.Mesh.html" title="trait oxiflow::mesh::Mesh"><code>mesh::Mesh</code></a> trait (INV-1) and <a href="mesh/structured/struct.UniformGrid1D.html" title="struct oxiflow::mesh::structured::UniformGrid1D"><code>mesh::UniformGrid1D</code></a> (J1)</li>
+<li><a href="model/index.html" title="mod oxiflow::model"><code>model</code></a>     — <a href="model/traits/trait.RequiresContext.html" title="trait oxiflow::model::traits::RequiresContext"><code>model::RequiresContext</code></a> and [<code>model::PhysicalModel</code>]</li>
+<li><a href="solver/index.html" title="mod oxiflow::solver"><code>solver</code></a>    — <a href="solver/scenario/struct.Scenario.html" title="struct oxiflow::solver::scenario::Scenario"><code>solver::Scenario</code></a>, <a href="solver/config/struct.SolverConfiguration.html" title="struct oxiflow::solver::config::SolverConfiguration"><code>solver::SolverConfiguration</code></a>,
+<a href="solver/trait.Solver.html" title="trait oxiflow::solver::Solver"><code>solver::Solver</code></a>, <a href="solver/struct.SimulationResult.html" title="struct oxiflow::solver::SimulationResult"><code>solver::SimulationResult</code></a></li>
+<li><a href="boundary/index.html" title="mod oxiflow::boundary"><code>boundary</code></a>  — <code>BoundaryCondition</code> trait (J2)</li>
+<li><a href="operators/index.html" title="mod oxiflow::operators"><code>operators</code></a> — <code>DiscreteOperator&lt;M: Mesh&gt;</code> (INV-2, J4b)</li>
+<li><a href="coupling/index.html" title="mod oxiflow::coupling"><code>coupling</code></a>  — <code>CouplingOperator</code> (INV-3, J3)</li>
+</ul>
+<h3 id="fem-invariants--forward-compatibility"><a class="doc-anchor" href="#fem-invariants--forward-compatibility">§</a>FEM invariants — forward compatibility</h3>
+<p>All abstractions from v0.1 are designed to extend naturally to FEM at
+v2.0 without any breaking change on existing code.</p>
+<div><table><thead><tr><th>Invariant</th><th>Guarantee</th><th>Active from</th></tr></thead><tbody>
+<tr><td>INV-1</td><td>No <code>dx</code>/<code>nx</code> in public API — all spatial access via <a href="mesh/trait.Mesh.html" title="trait oxiflow::mesh::Mesh"><code>mesh::Mesh</code></a></td><td>v0.1.0</td></tr>
+<tr><td>INV-2</td><td>Integrators decoupled from spatial scheme via <code>DiscreteOperator&lt;M&gt;</code></td><td>v0.5.0</td></tr>
+<tr><td>INV-3</td><td>Inter-domain coupling only via <code>CouplingOperator</code></td><td>v0.3.0</td></tr>
+<tr><td>INV-4</td><td>All public traits object-safe — external crates can implement them</td><td>v2.0.0</td></tr>
+</tbody></table>
+</div><h3 id="getting-started-j1"><a class="doc-anchor" href="#getting-started-j1">§</a>Getting started (J1)</h3>
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>oxiflow::{
+    context::ContextVariable,
+    mesh::{Mesh, UniformGrid1D},
+    model::{PhysicalModel, RequiresContext},
+    solver::{Scenario, SolverConfiguration, TimeConfiguration,
+             StepControl, IntegratorKind},
+};
+
+<span class="comment">// 1. Declare the physical model
+</span><span class="kw">struct </span>MyModel;
+<span class="kw">impl </span>RequiresContext <span class="kw">for </span>MyModel {
+    <span class="kw">fn </span>required_variables(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;ContextVariable&gt; {
+        <span class="macro">vec!</span>[ContextVariable::Time]
+    }
+}
+<span class="kw">impl </span>PhysicalModel <span class="kw">for </span>MyModel { <span class="comment">/* … */ </span>}
+
+<span class="comment">// 2. Declare the problem (WHAT)
+</span><span class="kw">let </span>mesh = UniformGrid1D::new(<span class="number">100</span>, <span class="number">0.0</span>, <span class="number">1.0</span>).unwrap();
+<span class="kw">let </span>scenario = Scenario::single(Box::new(MyModel), Box::new(mesh));
+
+<span class="comment">// 3. Configure solving (HOW)
+</span><span class="kw">let </span>config = SolverConfiguration::new(
+    TimeConfiguration::new(<span class="number">600.0</span>, StepControl::Fixed { dt: <span class="number">0.1 </span>}),
+    IntegratorKind::Euler,
+);
+
+<span class="comment">// 4. Solve (J4 — integrator implementations land at v0.4.0)
+// let result = EulerSolver.solve(&amp;scenario, &amp;config)?;</span></code></pre></div></div></details><h2 id="modules-1" class="section-header">Modules<a href="#modules-1" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="boundary/index.html" title="mod oxiflow::boundary">boundary</a></dt><dd>Module <code>boundary</code></dd><dt><a class="mod" href="context/index.html" title="mod oxiflow::context">context</a></dt><dd>Module <code>context</code></dd><dt><a class="mod" href="coupling/index.html" title="mod oxiflow::coupling">coupling</a></dt><dd>Module <code>coupling</code></dd><dt><a class="mod" href="mesh/index.html" title="mod oxiflow::mesh">mesh</a></dt><dd>Module <code>mesh</code></dd><dt><a class="mod" href="model/index.html" title="mod oxiflow::model">model</a></dt><dd>Module <code>model</code></dd><dt><a class="mod" href="operators/index.html" title="mod oxiflow::operators">operators</a></dt><dd>Module <code>operators</code></dd><dt><a class="mod" href="solver/index.html" title="mod oxiflow::solver">solver</a></dt><dd>Module <code>solver</code></dd></dl></section></div></main></body></html>
