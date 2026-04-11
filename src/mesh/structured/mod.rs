@@ -14,9 +14,13 @@ use crate::mesh::Mesh;
 
 /// 1D uniform grid — first concrete implementation of [`Mesh`] (INV-1, J1).
 ///
-/// Nodes are evenly spaced at positions `x_i = x_start + i * dx` for
-/// `i = 0..n_points`. The coordinate table is pre-computed at construction
-/// so that `coordinates(i)` returns a zero-allocation slice.
+/// Nodes are evenly spaced at positions:
+///
+/// $$x_i = x_{\text{start}} + i \cdot \Delta x, \quad i = 0, \ldots, n-1$$
+///
+/// where $\Delta x = (x_{\text{end}} - x_{\text{start}}) / (n - 1)$.
+/// The coordinate table is pre-computed at construction so that
+/// `coordinates(i)` returns a zero-allocation slice.
 ///
 /// # Invariant compliance (INV-1)
 ///
@@ -53,7 +57,8 @@ pub struct UniformGrid1D {
 impl UniformGrid1D {
     /// Creates a uniform 1D grid with `n_points` nodes from `x_start` to `x_end`.
     ///
-    /// Node positions: `x_i = x_start + i * dx` where `dx = (x_end - x_start) / (n_points - 1)`.
+    /// Node positions: $x_i = x_{\text{start}} + i \cdot \Delta x$
+    /// where $\Delta x = (x_{\text{end}} - x_{\text{start}}) / (n - 1)$.
     ///
     /// # Errors
     ///
