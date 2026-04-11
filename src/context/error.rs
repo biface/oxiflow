@@ -100,7 +100,10 @@ mod tests {
         let source: Box<dyn std::error::Error + Send + Sync> =
             Box::new(std::io::Error::other("calculator error"));
         let err = OxiflowError::ComputationFailed {
-            variable: ContextVariable::SpatialGradient { dimension: 0 },
+            variable: ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None,
+            },
             source,
         };
         assert!(matches!(err, OxiflowError::ComputationFailed { .. }));
@@ -111,7 +114,10 @@ mod tests {
         let source: Box<dyn std::error::Error + Send + Sync> =
             Box::new(std::io::Error::other("overflow"));
         let err = OxiflowError::ComputationFailed {
-            variable: ContextVariable::SpatialGradient { dimension: 1 },
+            variable: ContextVariable::SpatialGradient {
+                dimension: 1,
+                component: None,
+            },
             source,
         };
         let msg = err.to_string();

@@ -66,6 +66,7 @@ use crate::context::error::OxiflowError;
 /// assert!(!field.as_scalar_field().unwrap().is_empty());
 /// ```
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum ContextValue {
     // ── Pointwise algebraic objects ───────────────────────────────────────────
     /// Rank-0 scalar: time, step size, uniform coefficient.
@@ -79,9 +80,12 @@ pub enum ContextValue {
 
     /// Rank-2 tensor: diffusion tensor D_ij, stress σ_ij, permeability K_ij.
     ///
-    /// Covariant transformation (`D' = J·D·Jᵀ`) is the caller's responsibility
-    /// via `DiscreteOperator` (INV-2, J7). This variant stores components in the
-    /// current reference frame only.
+    /// Covariant transformation is the caller's responsibility
+    /// via `DiscreteOperator` (INV-2, J7):
+    ///
+    /// $$D'_{ij} = J_{ik}\,D_{kl}\,J_{jl}^{\top}$$
+    ///
+    /// This variant stores components in the current reference frame only.
     Matrix(DMatrix<f64>),
 
     // ── Nodal fields ──────────────────────────────────────────────────────────
@@ -114,6 +118,9 @@ impl ContextValue {
             Self::Matrix(_) => "Matrix",
             Self::ScalarField(_) => "ScalarField",
             Self::VectorField(_) => "VectorField",
+            // J7 variants (Tensor4, TensorField) return their name when added
+            #[allow(unreachable_patterns)]
+            _ => "Unknown",
         }
     }
 

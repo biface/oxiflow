@@ -12,6 +12,7 @@
 //! - [`value`]    — Type `ContextValue`: typed value enum (DD-003)
 //! - [`compute`]  — Type `ComputeContext` and trait `RequiresContext` (DD-005, DD-006)
 
+pub mod calculator;
 pub mod compute;
 pub mod error;
 pub mod value;
@@ -19,6 +20,7 @@ pub mod variable;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 
+pub use calculator::ContextCalculator;
 pub use compute::ComputeContext;
 pub use error::OxiflowError;
 pub use value::ContextValue;

@@ -38,7 +38,7 @@ use crate::context::variable::ContextVariable;
 /// use oxiflow::context::value::ContextValue;
 ///
 /// let mut ctx = ComputeContext::new(1.5, 0.01);
-/// ctx.insert(ContextVariable::SpatialGradient { dimension: 0 },
+/// ctx.insert(ContextVariable::SpatialGradient { dimension: 0, component: None },
 ///            ContextValue::ScalarField(nalgebra::DVector::from_vec(vec![0.1, 0.2, 0.3])));
 ///
 /// assert_eq!(ctx.time(), 1.5);
@@ -121,7 +121,7 @@ impl ComputeContext {
     /// Borrows the full nodal gradient field for spatial dimension `dim`.
     ///
     /// Returns the `DVector` of `ContextValue::ScalarField` stored under
-    /// `ContextVariable::SpatialGradient { dimension: dim }`.
+    /// `ContextVariable::SpatialGradient { dimension: dim, component: None }`.
     /// The model indexes the node it needs from the returned slice.
     ///
     /// # Errors
@@ -130,7 +130,10 @@ impl ComputeContext {
     ///   for `dim`.
     /// - `OxiflowError::TypeMismatch` if the value is not a `ScalarField`.
     pub fn gradient(&self, dim: usize) -> Result<&DVector<f64>, OxiflowError> {
-        let var = ContextVariable::SpatialGradient { dimension: dim };
+        let var = ContextVariable::SpatialGradient {
+            dimension: dim,
+            component: None,
+        };
         self.get_value(&var)?.as_scalar_field()
     }
 
@@ -190,7 +193,10 @@ mod tests {
             ContextValue::Matrix(DMatrix::from_element(2, 2, 5.0)),
         );
         ctx.insert(
-            ContextVariable::SpatialGradient { dimension: 0 },
+            ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None,
+            },
             ContextValue::ScalarField(DVector::from_vec(vec![0.1, 0.2, 0.3])),
         );
         ctx.insert(
@@ -333,7 +339,10 @@ mod tests {
         let mut ctx = ComputeContext::new(0.0, 0.01);
         // Stored as Scalar instead of ScalarField — misconfigured calculator
         ctx.insert(
-            ContextVariable::SpatialGradient { dimension: 0 },
+            ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None,
+            },
             ContextValue::Scalar(1.0),
         );
         let err = ctx.gradient(0).unwrap_err();
@@ -381,7 +390,10 @@ mod tests {
     #[test]
     fn try_get_returns_some_when_present() {
         let ctx = ctx_with_all_variants();
-        let val = ctx.try_get(ContextVariable::SpatialGradient { dimension: 0 });
+        let val = ctx.try_get(ContextVariable::SpatialGradient {
+            dimension: 0,
+            component: None,
+        });
         assert!(val.is_some());
         assert!(val.unwrap().is_scalar_field());
     }

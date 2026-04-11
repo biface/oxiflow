@@ -10,7 +10,7 @@
 //!
 //! chrom-rs stored gradients as point-wise scalars keyed by `(dimension, position)`.
 //! oxiflow stores the complete gradient field under a single key
-//! `SpatialGradient { dimension }` → `ContextValue::ScalarField`.
+//! `SpatialGradient { dimension, component }` → `ContextValue::ScalarField`.
 //! Node-level access is the operator's responsibility (INV-2, J5).
 
 /// Typed key identifying a context variable in the compute context.
@@ -26,16 +26,17 @@
 ///
 /// let t   = ContextVariable::Time;
 /// let dt  = ContextVariable::TimeStep;
-/// let gx  = ContextVariable::SpatialGradient { dimension: 0 };
+/// let gx  = ContextVariable::SpatialGradient { dimension: 0, component: None };
 /// let ext = ContextVariable::External { name: "ambient_temperature" };
 ///
 /// assert_ne!(t, dt);
 /// assert_ne!(
-///     ContextVariable::SpatialGradient { dimension: 0 },
-///     ContextVariable::SpatialGradient { dimension: 1 },
+///     ContextVariable::SpatialGradient { dimension: 0, component: None },
+///     ContextVariable::SpatialGradient { dimension: 1, component: None },
 /// );
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum ContextVariable {
     /// Current simulation time `t`.
     Time,
@@ -49,9 +50,17 @@ pub enum ContextVariable {
     /// value per mesh node — not a point-wise scalar.
     ///
     /// `dimension = 0` → ∂u/∂x, `dimension = 1` → ∂u/∂y, etc.
+    ///
+    /// `component = None` — mono-component field (J1/J2 default).
+    /// `component = Some(k)` — gradient of component k (J3+, DD-010).
     SpatialGradient {
         /// Spatial dimension index (0-based).
         dimension: usize,
+        /// Species/component index for multi-component fields (J3+, DD-010).
+        ///
+        /// `None` at J1/J2 (single-component). Adding this field now avoids a
+        /// breaking change when multi-component support lands at J3.
+        component: Option<usize>,
     },
 
     /// External scalar provided by the user (e.g. ambient temperature, feed concentration).
@@ -68,10 +77,22 @@ impl std::fmt::Display for ContextVariable {
         match self {
             Self::Time => write!(f, "Time"),
             Self::TimeStep => write!(f, "TimeStep"),
-            Self::SpatialGradient { dimension } => {
+            Self::SpatialGradient {
+                dimension,
+                component: None,
+            } => {
                 write!(f, "SpatialGradient(dim={})", dimension)
             }
+            Self::SpatialGradient {
+                dimension,
+                component: Some(c),
+            } => {
+                write!(f, "SpatialGradient(dim={},comp={})", dimension, c)
+            }
             Self::External { name } => write!(f, "External({})", name),
+            // J3+ variants handled when added
+            #[allow(unreachable_patterns)]
+            _ => write!(f, "Unknown"),
         }
     }
 }
@@ -97,15 +118,27 @@ mod tests {
 
     #[test]
     fn spatial_gradient_same_dimension_equal() {
-        let a = ContextVariable::SpatialGradient { dimension: 0 };
-        let b = ContextVariable::SpatialGradient { dimension: 0 };
+        let a = ContextVariable::SpatialGradient {
+            dimension: 0,
+            component: None,
+        };
+        let b = ContextVariable::SpatialGradient {
+            dimension: 0,
+            component: None,
+        };
         assert_eq!(a, b);
     }
 
     #[test]
     fn spatial_gradient_different_dimension_not_equal() {
-        let a = ContextVariable::SpatialGradient { dimension: 0 };
-        let b = ContextVariable::SpatialGradient { dimension: 1 };
+        let a = ContextVariable::SpatialGradient {
+            dimension: 0,
+            component: None,
+        };
+        let b = ContextVariable::SpatialGradient {
+            dimension: 1,
+            component: None,
+        };
         assert_ne!(a, b);
     }
 
@@ -136,7 +169,10 @@ mod tests {
         let vars = [
             ContextVariable::Time,
             ContextVariable::TimeStep,
-            ContextVariable::SpatialGradient { dimension: 2 },
+            ContextVariable::SpatialGradient {
+                dimension: 2,
+                component: None,
+            },
             ContextVariable::External { name: "feed" },
         ];
         for v in &vars {
@@ -151,23 +187,59 @@ mod tests {
         let mut map: HashMap<ContextVariable, f64> = HashMap::new();
         map.insert(ContextVariable::Time, 1.5);
         map.insert(ContextVariable::TimeStep, 0.01);
-        map.insert(ContextVariable::SpatialGradient { dimension: 0 }, 0.3);
+        map.insert(
+            ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None,
+            },
+            0.3,
+        );
         map.insert(ContextVariable::External { name: "T_amb" }, 298.15);
 
         assert_eq!(map[&ContextVariable::Time], 1.5);
         assert_eq!(map[&ContextVariable::TimeStep], 0.01);
-        assert_eq!(map[&ContextVariable::SpatialGradient { dimension: 0 }], 0.3);
+        assert_eq!(
+            map[&ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None
+            }],
+            0.3
+        );
         assert_eq!(map[&ContextVariable::External { name: "T_amb" }], 298.15);
     }
 
     #[test]
     fn gradient_dimensions_are_distinct_keys() {
         let mut map: HashMap<ContextVariable, f64> = HashMap::new();
-        map.insert(ContextVariable::SpatialGradient { dimension: 0 }, 1.0);
-        map.insert(ContextVariable::SpatialGradient { dimension: 1 }, 2.0);
+        map.insert(
+            ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None,
+            },
+            1.0,
+        );
+        map.insert(
+            ContextVariable::SpatialGradient {
+                dimension: 1,
+                component: None,
+            },
+            2.0,
+        );
 
-        assert_eq!(map[&ContextVariable::SpatialGradient { dimension: 0 }], 1.0);
-        assert_eq!(map[&ContextVariable::SpatialGradient { dimension: 1 }], 2.0);
+        assert_eq!(
+            map[&ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None
+            }],
+            1.0
+        );
+        assert_eq!(
+            map[&ContextVariable::SpatialGradient {
+                dimension: 1,
+                component: None
+            }],
+            2.0
+        );
     }
 
     // ── Display ───────────────────────────────────────────────────────────────
@@ -184,7 +256,10 @@ mod tests {
 
     #[test]
     fn display_spatial_gradient() {
-        let v = ContextVariable::SpatialGradient { dimension: 1 };
+        let v = ContextVariable::SpatialGradient {
+            dimension: 1,
+            component: None,
+        };
         assert_eq!(format!("{}", v), "SpatialGradient(dim=1)");
     }
 
@@ -198,7 +273,13 @@ mod tests {
 
     #[test]
     fn debug_is_non_empty() {
-        let s = format!("{:?}", ContextVariable::SpatialGradient { dimension: 0 });
+        let s = format!(
+            "{:?}",
+            ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None
+            }
+        );
         assert!(s.contains("SpatialGradient"));
         assert!(s.contains('0'));
     }
