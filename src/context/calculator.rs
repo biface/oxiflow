@@ -50,6 +50,7 @@ use crate::model::traits::RequiresContext;
 /// use oxiflow::context::error::OxiflowError;
 /// use oxiflow::model::traits::RequiresContext;
 ///
+/// #[derive(Debug)]
 /// struct TimeCalculator;
 ///
 /// impl RequiresContext for TimeCalculator {
@@ -67,7 +68,7 @@ use crate::model::traits::RequiresContext;
 ///     fn name(&self) -> &str { "time" }
 /// }
 /// ```
-pub trait ContextCalculator: RequiresContext + Send + Sync {
+pub trait ContextCalculator: RequiresContext + Send + Sync + std::fmt::Debug {
     /// The context variable this calculator produces.
     ///
     /// Must be stable across calls. The solver uses this to match calculators
@@ -100,6 +101,7 @@ mod tests {
     // ── Fixtures ──────────────────────────────────────────────────────────────
 
     /// Returns the current time as a Scalar — priority 0.
+    #[derive(Debug)]
     struct TimeCalculator;
 
     impl RequiresContext for TimeCalculator {
@@ -128,6 +130,7 @@ mod tests {
     }
 
     /// Returns a fixed external scalar — depends on nothing.
+    #[derive(Debug)]
     struct ConstantCalculator {
         var: ContextVariable,
         value: f64,
@@ -153,6 +156,7 @@ mod tests {
     }
 
     /// Depends on Time — must run after TimeCalculator.
+    #[derive(Debug)]
     struct TimeDependentCalculator;
 
     impl RequiresContext for TimeDependentCalculator {
