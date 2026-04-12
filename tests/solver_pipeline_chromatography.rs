@@ -24,23 +24,21 @@
 //! - Peak concentration is reached and then decays
 //! - `context_requirements()` declares `[Time]`, calculator chain is built correctly
 
+use nalgebra::DVector;
 use oxiflow::{
     context::{
-        compute::ComputeContext,
-        error::OxiflowError,
-        value::ContextValue,
+        compute::ComputeContext, error::OxiflowError, value::ContextValue,
         variable::ContextVariable,
     },
     mesh::{Mesh, UniformGrid1D},
     model::traits::{PhysicalModel, RequiresContext},
     solver::{
+        config::{IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration},
         methods::euler::ForwardEulerSolver,
         scenario::Scenario,
-        config::{IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration},
         Solver,
     },
 };
-use nalgebra::DVector;
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
@@ -78,8 +76,7 @@ impl PhysicalModel for GaussianInjection {
         let c = state.as_scalar_field()?;
 
         // Gaussian injection source term
-        let injection = self.c_max
-            * (-(t - self.t_inj).powi(2) / (2.0 * self.sigma.powi(2))).exp();
+        let injection = self.c_max * (-(t - self.t_inj).powi(2) / (2.0 * self.sigma.powi(2))).exp();
 
         // dc/dt = -lambda * c + injection (same at every node — 0D per-node ODE)
         let dc_dt = c.map(|ci| -self.lambda * ci + injection);
@@ -104,13 +101,13 @@ impl PhysicalModel for GaussianInjection {
 // ── Parameters ────────────────────────────────────────────────────────────────
 
 const N_NODES: usize = 50;
-const L_COLUMN: f64 = 0.25;  // [m]
-const T_END: f64 = 60.0;     // [s]
-const DT: f64 = 0.5;         // [s]
-const LAMBDA: f64 = 0.05;    // [1/s]
-const T_INJ: f64 = 10.0;     // [s]
-const SIGMA: f64 = 2.0;      // [s]
-const C_MAX: f64 = 1.0;      // [mol/m³]
+const L_COLUMN: f64 = 0.25; // [m]
+const T_END: f64 = 60.0; // [s]
+const DT: f64 = 0.5; // [s]
+const LAMBDA: f64 = 0.05; // [1/s]
+const T_INJ: f64 = 10.0; // [s]
+const SIGMA: f64 = 2.0; // [s]
+const C_MAX: f64 = 1.0; // [mol/m³]
 
 fn make_scenario() -> Scenario {
     let model = Box::new(GaussianInjection {
@@ -140,7 +137,9 @@ fn core_architecture_solver_runs_to_completion() {
 
 #[test]
 fn core_architecture_result_has_correct_structure() {
-    let result = ForwardEulerSolver.solve(&make_scenario(), &make_config()).unwrap();
+    let result = ForwardEulerSolver
+        .solve(&make_scenario(), &make_config())
+        .unwrap();
 
     // states and times have the same length
     assert_eq!(result.states.len(), result.times.len());
@@ -151,12 +150,19 @@ fn core_architecture_result_has_correct_structure() {
 
     // Final time is close to t_end
     let t_final = result.t_final().unwrap();
-    assert!(t_final > T_END - DT, "t_final={} < t_end-dt={}", t_final, T_END - DT);
+    assert!(
+        t_final > T_END - DT,
+        "t_final={} < t_end-dt={}",
+        t_final,
+        T_END - DT
+    );
 }
 
 #[test]
 fn core_architecture_initial_concentration_is_zero() {
-    let result = ForwardEulerSolver.solve(&make_scenario(), &make_config()).unwrap();
+    let result = ForwardEulerSolver
+        .solve(&make_scenario(), &make_config())
+        .unwrap();
     let initial = result.states[0].as_scalar_field().unwrap();
     assert_eq!(initial.len(), N_NODES);
     for v in initial.iter() {
@@ -166,10 +172,14 @@ fn core_architecture_initial_concentration_is_zero() {
 
 #[test]
 fn core_architecture_concentration_rises_then_falls() {
-    let result = ForwardEulerSolver.solve(&make_scenario(), &make_config()).unwrap();
+    let result = ForwardEulerSolver
+        .solve(&make_scenario(), &make_config())
+        .unwrap();
 
     // Sample node 0 concentration over time
-    let concs: Vec<f64> = result.states.iter()
+    let concs: Vec<f64> = result
+        .states
+        .iter()
         .map(|s| s.as_scalar_field().unwrap()[0])
         .collect();
 
@@ -184,19 +194,26 @@ fn core_architecture_concentration_rises_then_falls() {
     let final_c = *concs.last().unwrap();
     assert!(
         final_c < peak,
-        "final concentration {} >= peak {}", final_c, peak
+        "final concentration {} >= peak {}",
+        final_c,
+        peak
     );
 }
 
 #[test]
 fn core_architecture_all_states_are_finite() {
-    let result = ForwardEulerSolver.solve(&make_scenario(), &make_config()).unwrap();
+    let result = ForwardEulerSolver
+        .solve(&make_scenario(), &make_config())
+        .unwrap();
     for (i, state) in result.states.iter().enumerate() {
         let field = state.as_scalar_field().unwrap();
         for (j, v) in field.iter().enumerate() {
             assert!(
                 v.is_finite(),
-                "non-finite value at step {} node {}: {}", i, j, v
+                "non-finite value at step {} node {}: {}",
+                i,
+                j,
+                v
             );
         }
     }
@@ -204,7 +221,9 @@ fn core_architecture_all_states_are_finite() {
 
 #[test]
 fn core_architecture_n_steps_matches_time_span() {
-    let result = ForwardEulerSolver.solve(&make_scenario(), &make_config()).unwrap();
+    let result = ForwardEulerSolver
+        .solve(&make_scenario(), &make_config())
+        .unwrap();
     let expected_steps = (T_END / DT).ceil() as usize;
     assert_eq!(result.n_steps, expected_steps);
 }
@@ -215,7 +234,8 @@ fn core_architecture_context_requirements_declares_time() {
     let reqs = scenario.context_requirements();
     assert!(
         reqs.contains(&ContextVariable::Time),
-        "Time not in requirements: {:?}", reqs
+        "Time not in requirements: {:?}",
+        reqs
     );
 }
 
@@ -226,6 +246,7 @@ fn core_architecture_no_calculator_needed_for_time() {
     let result = ForwardEulerSolver.solve(&make_scenario(), &config);
     assert!(
         result.is_ok(),
-        "solver failed without Time calculator: {:?}", result.err()
+        "solver failed without Time calculator: {:?}",
+        result.err()
     );
 }
