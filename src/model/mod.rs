@@ -9,4 +9,5 @@
 
 pub mod traits;
 
+pub use traits::PhysicalModel;
 pub use traits::RequiresContext;
