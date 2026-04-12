@@ -54,6 +54,7 @@ use crate::context::error::OxiflowError;
 /// assert_eq!(result.states.len(), result.times.len());
 /// ```
 #[non_exhaustive]
+#[derive(Debug)]
 pub struct SimulationResult {
     /// Saved field states at each recorded time.
     pub states: Vec<crate::context::value::ContextValue>,

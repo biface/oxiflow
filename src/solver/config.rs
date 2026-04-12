@@ -344,6 +344,7 @@ mod tests {
 
     #[test]
     fn with_calculator_adds_to_chain() {
+        #[derive(Debug)]
         struct DummyCalc;
         impl RequiresContext for DummyCalc {
             fn required_variables(&self) -> Vec<ContextVariable> {
