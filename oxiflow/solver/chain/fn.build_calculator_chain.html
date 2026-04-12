@@ -1,0 +1,55 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Validates requirements against provided calculators and returns an execution-ordered chain."><title>build_calculator_chain in oxiflow::solver::chain - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-77263533.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.1 (e408947bf 2026-03-25)" data-channel="1.94.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc fn"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">build_calculator_chain</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.0.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">build_<wbr>calculator_<wbr>chain</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#validation" title="Validation">Validation</a></li><li><a href="#ordering-j1" title="Ordering (J1)">Ordering (J1)</a></li><li><a href="#errors" title="Errors">Errors</a></li><li><a href="#examples" title="Examples">Examples</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="index.html">In oxiflow::<wbr>solver::<wbr>chain</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a>::<wbr><a href="index.html">chain</a></div><h1>Function <span class="fn">build_<wbr>calculator_<wbr>chain</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/chain.rs.html#90-110">Source</a> </span></div><pre class="rust item-decl"><code>pub fn build_calculator_chain&lt;'a&gt;(
+    requirements: &amp;[<a class="enum" href="../../context/variable/enum.ContextVariable.html" title="enum oxiflow::context::variable::ContextVariable">ContextVariable</a>],
+    calculators: &amp;'a [<a class="struct" href="https://doc.rust-lang.org/1.94.1/alloc/boxed/struct.Box.html" title="struct alloc::boxed::Box">Box</a>&lt;dyn <a class="trait" href="../../context/calculator/trait.ContextCalculator.html" title="trait oxiflow::context::calculator::ContextCalculator">ContextCalculator</a>&gt;],
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.94.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="https://doc.rust-lang.org/1.94.1/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;&amp;'a dyn <a class="trait" href="../../context/calculator/trait.ContextCalculator.html" title="trait oxiflow::context::calculator::ContextCalculator">ContextCalculator</a>&gt;, <a class="enum" href="../../context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Validates requirements against provided calculators and returns an
+execution-ordered chain.</p>
+<h2 id="validation"><a class="doc-anchor" href="#validation">§</a>Validation</h2>
+<p>Every variable in <code>requirements</code> must be either:</p>
+<ul>
+<li>a built-in variable (<code>Time</code>, <code>TimeStep</code>), or</li>
+<li>covered by exactly one calculator via <code>provides()</code>.</li>
+</ul>
+<p>A variable covered by multiple calculators is accepted — the last one
+in priority order wins (consistent with <code>ComputeContext::insert</code> overwrite).</p>
+<h2 id="ordering-j1"><a class="doc-anchor" href="#ordering-j1">§</a>Ordering (J1)</h2>
+<p>Calculators are sorted by ascending <code>priority()</code>. Within the same priority,
+original registration order is preserved (stable sort).</p>
+<h2 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h2>
+<p>Returns <code>OxiflowError::MissingCalculator</code> for the first uncovered
+non-builtin required variable.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>oxiflow::solver::chain::build_calculator_chain;
+<span class="kw">use </span>oxiflow::context::variable::ContextVariable;
+<span class="kw">use </span>oxiflow::context::value::ContextValue;
+<span class="kw">use </span>oxiflow::context::compute::ComputeContext;
+<span class="kw">use </span>oxiflow::context::error::OxiflowError;
+<span class="kw">use </span>oxiflow::context::calculator::ContextCalculator;
+<span class="kw">use </span>oxiflow::model::traits::RequiresContext;
+
+<span class="attr">#[derive(Debug)]
+</span><span class="kw">struct </span>TimeCalc;
+<span class="kw">impl </span>RequiresContext <span class="kw">for </span>TimeCalc {
+    <span class="kw">fn </span>required_variables(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;ContextVariable&gt; { <span class="macro">vec!</span>[] }
+    <span class="kw">fn </span>priority(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 { <span class="number">0 </span>}
+}
+<span class="kw">impl </span>ContextCalculator <span class="kw">for </span>TimeCalc {
+    <span class="kw">fn </span>provides(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; ContextVariable { ContextVariable::Time }
+    <span class="kw">fn </span>compute(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ContextValue, ctx: <span class="kw-2">&amp;</span>ComputeContext)
+        -&gt; <span class="prelude-ty">Result</span>&lt;ContextValue, OxiflowError&gt;
+    { <span class="prelude-val">Ok</span>(ContextValue::Scalar(ctx.time())) }
+}
+
+<span class="kw">let </span>requirements = <span class="macro">vec!</span>[ContextVariable::Time];
+<span class="kw">let </span>calculators: Vec&lt;Box&lt;<span class="kw">dyn </span>ContextCalculator&gt;&gt; = <span class="macro">vec!</span>[Box::new(TimeCalc)];
+<span class="kw">let </span>chain = build_calculator_chain(<span class="kw-2">&amp;</span>requirements, <span class="kw-2">&amp;</span>calculators).unwrap();
+<span class="macro">assert_eq!</span>(chain.len(), <span class="number">1</span>);</code></pre></div></div></details></section></div></main></body></html>

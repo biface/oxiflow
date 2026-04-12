@@ -8,18 +8,21 @@
         ]
     });">
 </script>
-</head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module methods</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.0.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module methods</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethods" title="Module `solver::methods`">Module <code>solver::methods</code></a><ul><li><a href="#planned-methods" title="Planned methods">Planned methods</a></li></ul></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a></div><h1>Module <span>methods</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/methods/mod.rs.html#1-18">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethods"><a class="doc-anchor" href="#module-solvermethods">§</a>Module <code>solver::methods</code></h2>
-<p><em>Temporal integration methods — J4a (v0.5).</em></p>
-<h3 id="planned-methods"><a class="doc-anchor" href="#planned-methods">§</a>Planned methods</h3><div><table><thead><tr><th>Méthode</th><th>Type</th><th>Milestone</th></tr></thead><tbody>
-<tr><td>Euler explicite</td><td>Explicit</td><td>J4a</td></tr>
-<tr><td>RK4</td><td>Explicit</td><td>J4a</td></tr>
-<tr><td>DoPri45</td><td>Adaptive</td><td>J4a</td></tr>
-<tr><td>Euler implicite</td><td>Implicit</td><td>J4a</td></tr>
-<tr><td>Crank–Nicolson</td><td>Semi-implicit</td><td>J4a</td></tr>
-<tr><td>BDF2/3</td><td>Implicit multi-step</td><td>J4a</td></tr>
-<tr><td>IMEX (splitting de Strang)</td><td>Hybrid</td><td>J4a</td></tr>
+</head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module methods</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.0.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module methods</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethods" title="Module `solver::methods`">Module <code>solver::methods</code></a><ul><li><a href="#active-at-j1" title="Active at J1">Active at J1</a></li><li><a href="#reserved--j4-v040" title="Reserved — J4 (v0.4.0)">Reserved — J4 (v0.4.0)</a></li></ul></li></ul><h3><a href="#reexports">Module Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a></div><h1>Module <span>methods</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/methods/mod.rs.html#1-28">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethods"><a class="doc-anchor" href="#module-solvermethods">§</a>Module <code>solver::methods</code></h2>
+<p>Temporal integration methods.</p>
+<h3 id="active-at-j1"><a class="doc-anchor" href="#active-at-j1">§</a>Active at J1</h3><div><table><thead><tr><th>Method</th><th>Type</th><th>Issue</th></tr></thead><tbody>
+<tr><td><a href="euler/struct.ForwardEulerSolver.html" title="struct oxiflow::solver::methods::euler::ForwardEulerSolver"><code>euler::ForwardEulerSolver</code></a></td><td>Explicit, 1st order</td><td>#33</td></tr>
+</tbody></table>
+</div><h3 id="reserved--j4-v040"><a class="doc-anchor" href="#reserved--j4-v040">§</a>Reserved — J4 (v0.4.0)</h3><div><table><thead><tr><th>Method</th><th>Type</th><th>Note</th></tr></thead><tbody>
+<tr><td><code>RK4Solver</code></td><td>Explicit, 4th order</td><td>—</td></tr>
+<tr><td><code>DoPri45Solver</code></td><td>Adaptive explicit</td><td><code>StepControl::Adaptive</code></td></tr>
+<tr><td><code>BackwardEulerSolver</code></td><td>Implicit, 1st order</td><td>Linear solve via DD-013</td></tr>
+<tr><td><code>CrankNicolsonSolver</code></td><td>Semi-implicit, 2nd order</td><td>—</td></tr>
+<tr><td><code>BDF2Solver</code></td><td>Implicit multi-step, 2nd order</td><td>—</td></tr>
+<tr><td><code>IMEXSolver</code></td><td>Strang splitting</td><td>Transport-reaction</td></tr>
 </tbody></table>
 </div>
-<p>Integrators are generic over <code>DiscreteOperator&lt;M: Mesh&gt;</code> (INV-2) — no spatial
-scheme is called directly inside an integrator.</p>
-</div></details></section></div></main></body></html>
+<p>All integrators are decoupled from the spatial scheme via
+<code>DiscreteOperator&lt;M: Mesh&gt;</code> (INV-2, J4b) — no FD/FV/FEM
+method is called directly inside an integrator.</p>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.ForwardEulerSolver"><code>pub use euler::<a class="struct" href="euler/struct.ForwardEulerSolver.html" title="struct oxiflow::solver::methods::euler::ForwardEulerSolver">ForwardEulerSolver</a>;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="euler/index.html" title="mod oxiflow::solver::methods::euler">euler</a></dt><dd>Module <code>solver::methods::euler</code></dd></dl></section></div></main></body></html>

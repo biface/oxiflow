@@ -8,8 +8,25 @@
         ]
     });">
 </script>
-</head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module chain</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.0.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module chain</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solverchain" title="Module `solver::chain`">Module <code>solver::chain</code></a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a></div><h1>Module <span>chain</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/chain.rs.html#1-6">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solverchain"><a class="doc-anchor" href="#module-solverchain">§</a>Module <code>solver::chain</code></h2>
-<p>Solver chain — composition and scheduling of solving steps.</p>
-<p>Allows composing multiple solving steps (context computation, temporal
-integration, boundary condition update) into a sequence executable by the <code>Solver</code>.</p>
-</div></details></section></div></main></body></html>
+</head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module chain</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.0.5</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module chain</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solverchain" title="Module `solver::chain`">Module <code>solver::chain</code></a><ul><li><a href="#responsibility" title="Responsibility">Responsibility</a></li><li><a href="#ordering-strategy-j1" title="Ordering strategy (J1)">Ordering strategy (J1)</a></li><li><a href="#built-in-variables" title="Built-in variables">Built-in variables</a></li></ul></li></ul><h3><a href="#functions">Module Items</a></h3><ul class="block"><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a></div><h1>Module <span>chain</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/chain.rs.html#1-262">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solverchain"><a class="doc-anchor" href="#module-solverchain">§</a>Module <code>solver::chain</code></h2>
+<p>Calculator chain — validation and priority-based ordering (issue #33).</p>
+<h3 id="responsibility"><a class="doc-anchor" href="#responsibility">§</a>Responsibility</h3>
+<p><code>build_calculator_chain</code> verifies that every context variable required by the
+scenario has a corresponding calculator in <code>SolverConfiguration</code>, then returns
+the calculators sorted by ascending priority for execution.</p>
+<h3 id="ordering-strategy-j1"><a class="doc-anchor" href="#ordering-strategy-j1">§</a>Ordering strategy (J1)</h3>
+<p>At J1, ordering is by <code>priority()</code> (ascending). Calculators with lower
+priority numbers run first — reserved ranges:</p>
+<ul>
+<li><strong>0–49</strong>: system variables (Time, TimeStep) — injected directly by the solver</li>
+<li><strong>50–99</strong>: external data providers</li>
+<li><strong>100+</strong>: derived quantities (default)</li>
+</ul>
+<p>Full topological ordering via Kahn’s algorithm is reserved for J2 (DD-009),
+when calculators may declare <code>depends_on()</code> dependencies on each other.</p>
+<h3 id="built-in-variables"><a class="doc-anchor" href="#built-in-variables">§</a>Built-in variables</h3>
+<p><code>Time</code> and <code>TimeStep</code> are always available in <code>ComputeContext</code> — the solver
+injects them directly via <code>ComputeContext::new(t, dt)</code> before running the
+chain. No calculator is needed for these variables.</p>
+</div></details><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.build_calculator_chain.html" title="fn oxiflow::solver::chain::build_calculator_chain">build_<wbr>calculator_<wbr>chain</a></dt><dd>Validates requirements against provided calculators and returns an
+execution-ordered chain.</dd></dl></section></div></main></body></html>
