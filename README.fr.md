@@ -139,7 +139,7 @@ assurent la compatibilité des frameworks tiers entre les versions du moteur :
 | Invariant | Description                                                                           | Introduit en |
 |-----------|---------------------------------------------------------------------------------------|--------------|
 | **INV-1** | `Mesh` est abstrait — `PhysicalState` ne présuppose aucune structure de grille        | v0.2         |
-| **INV-2** | `DiscreteOperator` est abstrait — les intégrateurs sont génériques sur le schéma      | v0.6         |
+| **INV-2** | `DiscreteOperator` est abstrait — les intégrateurs sont génériques sur le schéma      | v0.5         |
 | **INV-3** | `CouplingOperator` supporte des domaines distincts avec interfaces mobiles            | v0.4         |
 | **INV-4** | Tous les traits publics sont object-safe — des crates tierces peuvent les implémenter | v2.0         |
 
@@ -147,17 +147,17 @@ assurent la compatibilité des frameworks tiers entre les versions du moteur :
 
 ## État de Développement
 
-| Jalon                  | Version  | Statut       | Thème                                              |
-|------------------------|----------|--------------|----------------------------------------------------|
-| J0 — Fondations        | v0.1     | ✅ Publié     | Placeholder · CI · structure projet                |
-| J1 — Architecture cœur | v0.2     | 🔄 En cours  | ContextValue · OxiflowError · Mesh (INV-1)         |
-| J2 — Contexte complet  | v0.3     | ⏳ Planifié   | BCs requirantes · ordonnancement                   |
-| J3 — Multi-composants  | v0.4     | ⏳ Planifié   | PhysicalQuantity · CouplingOperator (INV-3)        |
-| J4 — Solveurs          | v0.5–0.6 | ⏳ Planifié   | Intégrateurs · DiscreteOperator (INV-2)            |
-| J5 — Performance       | v0.7     | ⏳ Planifié   | Rayon · cache · benchmarks                         |
-| J6 — Écosystème v1.0   | v1.0     | ⏳ Planifié   | 7 exemples · audit FEM · API stable                |
-| J7 — FEM               | v2.0     | 🔭 Horizon   | Maillages non structurés · ALE · INV-4 plugin-safe |
-| J8 — Frameworks        | v3.0     | 🔭 Horizon   | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run`    |
+| Jalon                  | Version  | Statut      | Thème                                              |
+|------------------------|----------|-------------|----------------------------------------------------|
+| J0 — Fondations        | v0.0.5   | ✅ Publié    | Placeholder · CI · structure projet                |
+| J1 — Architecture cœur | v0.1     | ✅ Publié    | ContextValue · OxiflowError · Mesh (INV-1)         |
+| J2 — Contexte complet  | v0.2     | 🔄 En cours | BCs requirantes · ordonnancement                   |
+| J3 — Multi-composants  | v0.3     | ⏳ Planifié  | PhysicalQuantity · CouplingOperator (INV-3)        |
+| J4 — Solveurs          | v0.4–0.5 | ⏳ Planifié  | Intégrateurs · DiscreteOperator (INV-2)            |
+| J5 — Performance       | v0.6     | ⏳ Planifié  | Rayon · cache · benchmarks                         |
+| J6 — Écosystème v1.0   | v1.0     | ⏳ Planifié  | 7 exemples · audit FEM · API stable                |
+| J7 — FEM               | v2.0     | 🔭 Horizon  | Maillages non structurés · ALE · INV-4 plugin-safe |
+| J8 — Frameworks        | v3.0     | 🔭 Horizon  | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run`    |
 
 Voir [DEVELOPPEMENT.md](DEVELOPPEMENT.md) pour la spécification architecturale complète.
 
@@ -168,9 +168,9 @@ Voir [DEVELOPPEMENT.md](DEVELOPPEMENT.md) pour la spécification architecturale 
 | Flag       | Description                                           | Disponible dès |
 |------------|-------------------------------------------------------|----------------|
 | *(défaut)* | Moteur cœur, exécution séquentielle                   | v0.2           |
-| `parallel` | Parallélisme Rayon pour les calculateurs indépendants | v0.7           |
-| `serde`    | Sérialisation des états et scénarios                  | v0.7           |
-| `hdf5`     | Import/export HDF5 pour données tabulées externes     | v0.7           |
+| `parallel` | Parallélisme Rayon pour les calculateurs indépendants | v0.6           |
+| `serde`    | Sérialisation des états et scénarios                  | v0.6           |
+| `hdf5`     | Import/export HDF5 pour données tabulées externes     | v0.6           |
 
 ---
 

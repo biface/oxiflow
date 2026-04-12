@@ -17,7 +17,7 @@ all implementation work from v0.1 to v3.0.
 3. [J1 — Core Architecture (v0.2)](#3-j1--core-architecture-v02)
 4. [J2 — Complete Context (v0.3)](#4-j2--complete-context-v03)
 5. [J3 — Multi-Component (v0.4)](#5-j3--multi-component-v04)
-6. [J4 — Solvers & Discretisation (v0.5–0.6)](#6-j4--solvers--discretisation-v05-06)
+6. [J4 — Solvers & Discretisation (v0.4–0.5)](#6-j4--solvers--discretisation-v04-05)
 7. [J5 — Performance (v0.7)](#7-j5--performance-v07)
 8. [J6 — Ecosystem v1.0](#8-j6--ecosystem-v10)
 9. [FEM Compatibility — v2.0 Trajectory](#9-fem-compatibility--v20-trajectory)
@@ -76,18 +76,18 @@ boilerplate.
 
 ## 2. Milestone Overview
 
-| Milestone | Version | Target | Theme |
-|---|---|---|---|
-| J0 — Foundations | v0.1 | Acquired | crates.io placeholder · CI · project structure |
-| J1 — Core Architecture | v0.2 | M+2 | ContextValue · OxiflowError · Mesh (INV-1) |
-| J2 — Complete Context | v0.3 | M+4 | Requiring BCs · topological ordering |
-| J3 — Multi-Component | v0.4 | M+6 | PhysicalQuantity · CouplingOperator (INV-3) |
-| J4a — Integrators | v0.5 | M+8 | Temporal integrators |
-| J4b — Discretisation | v0.6 | M+10 | DiscreteOperator (INV-2) · FD/FV/WENO |
-| J5 — Performance | v0.7 | M+13 | Rayon · cache · benchmarks |
-| J6 — Ecosystem v1.0 | v1.0 | M+16 | 7 examples · FEM audit · stable API |
-| J7 — FEM | v2.0 | M+24 | Unstructured meshes · ALE · INV-4 plugin-safe |
-| J8 — Frameworks | v3.0 | M+32 | oxiflow-chrom · oxiflow-geo · CLI · third-party |
+| Milestone              | Version | Target   | Theme                                           |
+|------------------------|---------|----------|-------------------------------------------------|
+| J0 — Foundations       | v0.0.5  | Acquired | crates.io placeholder · CI · project structure  |
+| J1 — Core Architecture | v0.1    | Acquired | ContextValue · OxiflowError · Mesh (INV-1)      |
+| J2 — Complete Context  | v0.2    | M+4      | Requiring BCs · topological ordering            |
+| J3 — Multi-Component   | v0.3    | M+6      | PhysicalQuantity · CouplingOperator (INV-3)     |
+| J4a — Integrators      | v0.4    | M+8      | Temporal integrators                            |
+| J4b — Discretisation   | v0.5    | M+10     | DiscreteOperator (INV-2) · FD/FV/WENO           |
+| J5 — Performance       | v0.6    | M+13     | Rayon · cache · benchmarks                      |
+| J6 — Ecosystem v1.0    | v1.0    | M+16     | 7 examples · FEM audit · stable API             |
+| J7 — FEM               | v2.0    | M+24     | Unstructured meshes · ALE · INV-4 plugin-safe   |
+| J8 — Frameworks        | v3.0    | M+32     | oxiflow-chrom · oxiflow-geo · CLI · third-party |
 
 Each milestone is independently deliverable. J1 alone (v0.2) is a usable library for
 chromatography modelling. Third-party framework development can begin as soon as v2.0
@@ -166,11 +166,11 @@ quadrature, external tabulated data, HDF5 file reader).
 
 Chromatography BC mappings:
 
-| Chromatography BC | Mathematical type | Context needed |
-|---|---|---|
-| Simplified BC | Dirichlet | injection concentration profile |
-| Danckwerts inlet | Robin | time + gradient |
-| Danckwerts outlet | Neumann | gradient only |
+| Chromatography BC | Mathematical type | Context needed                  |
+|-------------------|-------------------|---------------------------------|
+| Simplified BC     | Dirichlet         | injection concentration profile |
+| Danckwerts inlet  | Robin             | time + gradient                 |
+| Danckwerts outlet | Neumann           | gradient only                   |
 
 ---
 
@@ -181,7 +181,7 @@ Proto lahar–lake example on regular grids — the regression base for v2.0 FEM
 
 ---
 
-## 6. J4 — Solvers & Discretisation (v0.5–0.6)
+## 6. J4 — Solvers & Discretisation (v0.4–0.5)
 
 Temporal integrators: Forward Euler, RK4, DoPri45, Backward Euler, Crank–Nicolson, BDF2/3,
 IMEX (Strang splitting).
@@ -232,11 +232,11 @@ A rapid gravitational movement (lahar, landslide) entering a body of water and g
 a submersion wave. Requires unstructured meshing for irregular geometry and adaptive
 refinement for the wave front — both impossible with finite differences.
 
-| Component | Model | Challenge |
-|---|---|---|
-| Granular domain | Bingham + extended Saint-Venant | moving boundary · adaptive mesh |
-| Fluid domain | Shallow Water equations | irregular bathymetry |
-| Moving interface | ALE formulation | mass/momentum transfer |
+| Component        | Model                           | Challenge                       |
+|------------------|---------------------------------|---------------------------------|
+| Granular domain  | Bingham + extended Saint-Venant | moving boundary · adaptive mesh |
+| Fluid domain     | Shallow Water equations         | irregular bathymetry            |
+| Moving interface | ALE formulation                 | mass/momentum transfer          |
 
 ### 9.2 INV-4 — Plugin-safe API
 
@@ -338,12 +338,12 @@ oxiflow list models --framework chrom
 
 ### 10.4 Planned first-party frameworks
 
-| Crate | Domain | Key models |
-|---|---|---|
-| `oxiflow-chrom` | Chromatography | Langmuir, SMA, Thomas, gradient elution, Danckwerts BC |
-| `oxiflow-geo` | Surface geophysics | Bingham Saint-Venant, Shallow Water, ALE interface |
-| `oxiflow-thermo` | Heat transfer | Fourier flux, Robin BC, phase change |
-| `oxiflow-em` | Diffusive electromagnetism | magnetic diffusion, eddy currents |
+| Crate            | Domain                     | Key models                                             |
+|------------------|----------------------------|--------------------------------------------------------|
+| `oxiflow-chrom`  | Chromatography             | Langmuir, SMA, Thomas, gradient elution, Danckwerts BC |
+| `oxiflow-geo`    | Surface geophysics         | Bingham Saint-Venant, Shallow Water, ALE interface     |
+| `oxiflow-thermo` | Heat transfer              | Fourier flux, Robin BC, phase change                   |
+| `oxiflow-em`     | Diffusive electromagnetism | magnetic diffusion, eddy currents                      |
 
 ### 10.5 Third-party frameworks
 
@@ -361,12 +361,12 @@ Requirements for a third-party framework:
 
 ## 11. Known Ecosystem Frameworks
 
-| Crate | Domain | Maintainer | Status |
-|---|---|---|---|
-| `oxiflow-chrom` | Chromatography | oxiflow core team | Planned v3.0 |
-| `oxiflow-geo` | Surface geophysics | oxiflow core team | Planned v3.0 |
-| `oxiflow-thermo` | Heat transfer | oxiflow core team | Planned v3.0 |
-| `oxiflow-em` | Diffusive EM | oxiflow core team | Planned v3.0 |
+| Crate            | Domain             | Maintainer        | Status       |
+|------------------|--------------------|-------------------|--------------|
+| `oxiflow-chrom`  | Chromatography     | oxiflow core team | Planned v3.0 |
+| `oxiflow-geo`    | Surface geophysics | oxiflow core team | Planned v3.0 |
+| `oxiflow-thermo` | Heat transfer      | oxiflow core team | Planned v3.0 |
+| `oxiflow-em`     | Diffusive EM       | oxiflow core team | Planned v3.0 |
 
 *To add a framework to this list, open a PR modifying this table.*
 
@@ -374,62 +374,62 @@ Requirements for a third-party framework:
 
 ## 12. Architectural Decision Log
 
-| Decision | Choice | Rejected alternative | Milestone | Invariant |
-|---|---|---|---|---|
-| Calculator return type | `ContextValue` enum | `f64` scalar only | J1 | |
-| Error type | `OxiflowError` enum | `String` | J1 | |
-| Context access API | `ComputeContext` type-safe from v0.2 | Progressive migration | J1 | |
-| Needs declaration | Separate `RequiresContext` trait | Method on `PhysicalModel` | J1 | |
-| Spatial support | Abstract `Mesh` trait | `dx`/`nx` in `PhysicalState` | J1 | INV-1 |
-| BC requirements | `RequiresContext` on `BoundaryCondition` | Manual aggregation | J2 | |
-| Ordering | Hybrid topology + priority | Pure DAG or priority only | J2 | |
-| Multi-component | Indexed `PhysicalQuantity` | Flat enum with breaking changes | J3 | |
-| Multi-domain coupling | `CouplingOperator` with `DomainId` + `Interface` | Ad-hoc method | J3 | INV-3 |
-| Spatial operators | Abstract `DiscreteOperator` parameterised by `Mesh` | FD hardcoded | J4 | INV-2 |
-| Linear solvers | `faer`/`nalgebra` delegation | Custom implementation | J4 | |
-| Parallelism | Rayon, opt-in feature flag | Mandatory or absent | J5 | |
-| Caching | Dirty flag + temporal invalidation | Systematic recomputation | J5 | |
-| API stability | SemVer + `cargo-semver-checks` + FEM audit | Informal convention | J6 | |
-| Plugin architecture | Object-safe traits + `PluginRegistry` | Monolithic crate | J7 | INV-4 |
-| Framework config | TOML + runtime registry | proc-macro DSL | J8 | |
-| License | Apache 2.0 only | MIT or dual MIT/Apache | J0 | |
+| Decision               | Choice                                              | Rejected alternative            | Milestone | Invariant |
+|------------------------|-----------------------------------------------------|---------------------------------|-----------|-----------|
+| Calculator return type | `ContextValue` enum                                 | `f64` scalar only               | J1        |           |
+| Error type             | `OxiflowError` enum                                 | `String`                        | J1        |           |
+| Context access API     | `ComputeContext` type-safe from v0.2                | Progressive migration           | J1        |           |
+| Needs declaration      | Separate `RequiresContext` trait                    | Method on `PhysicalModel`       | J1        |           |
+| Spatial support        | Abstract `Mesh` trait                               | `dx`/`nx` in `PhysicalState`    | J1        | INV-1     |
+| BC requirements        | `RequiresContext` on `BoundaryCondition`            | Manual aggregation              | J2        |           |
+| Ordering               | Hybrid topology + priority                          | Pure DAG or priority only       | J2        |           |
+| Multi-component        | Indexed `PhysicalQuantity`                          | Flat enum with breaking changes | J3        |           |
+| Multi-domain coupling  | `CouplingOperator` with `DomainId` + `Interface`    | Ad-hoc method                   | J3        | INV-3     |
+| Spatial operators      | Abstract `DiscreteOperator` parameterised by `Mesh` | FD hardcoded                    | J4        | INV-2     |
+| Linear solvers         | `faer`/`nalgebra` delegation                        | Custom implementation           | J4        |           |
+| Parallelism            | Rayon, opt-in feature flag                          | Mandatory or absent             | J5        |           |
+| Caching                | Dirty flag + temporal invalidation                  | Systematic recomputation        | J5        |           |
+| API stability          | SemVer + `cargo-semver-checks` + FEM audit          | Informal convention             | J6        |           |
+| Plugin architecture    | Object-safe traits + `PluginRegistry`               | Monolithic crate                | J7        | INV-4     |
+| Framework config       | TOML + runtime registry                             | proc-macro DSL                  | J8        |           |
+| License                | Apache 2.0 only                                     | MIT or dual MIT/Apache          | J0        |           |
 
 ---
 
 ## 13. Risk Register
 
-| ID | Risk | Probability | Mitigation |
-|---|---|---|---|
-| R1 | `ContextValue` generics too complex for users | Medium | Ergonomic helpers (`.as_scalar()?`); user testing at v0.2 |
-| R2 | Silent dependency ordering bugs | Low | Exhaustive cycle detection tests; debug logging |
-| R3 | `PhysicalQuantity` indexing too verbose | Medium | Idiomatic constructors (`::solute(k)`); UX feedback before v1.0 |
-| R4 | Implicit solvers require heavy linear algebra | High | Delegate to `faer`/`nalgebra`; document limits |
-| R5 | Rayon + potential `unsafe` | Low | Opt-in flag; ThreadSanitizer in CI; explicit `unsafe` review |
-| R6 | Scope too ambitious — no milestone delivered | Medium | Each milestone independently deliverable |
-| R7 | Breaking change forced before v1.0 | Low | Accepted pre-1.0 but documented |
-| R8 | INV-1/2/3 silently violated during J1–J6 | Medium | Formal audit at J6; dedicated integration tests |
-| R9 | ALE incompatible with CouplingOperator design | Low | Proto lahar–lake at J3 is the test bench |
-| **R10** | **INV-4 violated — third-party frameworks break on engine update** | **Medium** | **`oxiflow-test-plugin` external crate in CI from v2.0; `cargo-semver-checks` in release pipeline** |
-| **R11** | **Fragmentation — incompatible third-party frameworks** | **Low** | **INV-4 + stable public API is the only compatibility contract; framework authors are responsible for their own SemVer** |
+| ID      | Risk                                                               | Probability | Mitigation                                                                                                               |
+|---------|--------------------------------------------------------------------|-------------|--------------------------------------------------------------------------------------------------------------------------|
+| R1      | `ContextValue` generics too complex for users                      | Medium      | Ergonomic helpers (`.as_scalar()?`); user testing at v0.2                                                                |
+| R2      | Silent dependency ordering bugs                                    | Low         | Exhaustive cycle detection tests; debug logging                                                                          |
+| R3      | `PhysicalQuantity` indexing too verbose                            | Medium      | Idiomatic constructors (`::solute(k)`); UX feedback before v1.0                                                          |
+| R4      | Implicit solvers require heavy linear algebra                      | High        | Delegate to `faer`/`nalgebra`; document limits                                                                           |
+| R5      | Rayon + potential `unsafe`                                         | Low         | Opt-in flag; ThreadSanitizer in CI; explicit `unsafe` review                                                             |
+| R6      | Scope too ambitious — no milestone delivered                       | Medium      | Each milestone independently deliverable                                                                                 |
+| R7      | Breaking change forced before v1.0                                 | Low         | Accepted pre-1.0 but documented                                                                                          |
+| R8      | INV-1/2/3 silently violated during J1–J6                           | Medium      | Formal audit at J6; dedicated integration tests                                                                          |
+| R9      | ALE incompatible with CouplingOperator design                      | Low         | Proto lahar–lake at J3 is the test bench                                                                                 |
+| **R10** | **INV-4 violated — third-party frameworks break on engine update** | **Medium**  | **`oxiflow-test-plugin` external crate in CI from v2.0; `cargo-semver-checks` in release pipeline**                      |
+| **R11** | **Fragmentation — incompatible third-party frameworks**            | **Low**     | **INV-4 + stable public API is the only compatibility contract; framework authors are responsible for their own SemVer** |
 
 ---
 
 ## 14. Timeline
 
-| Month | Milestone | Key objectives |
-|---|---|---|
-| M0 | v0.1 — Foundations | crates.io placeholder · CI · README · NOTICE |
-| M+1–2 | v0.2 — J1 | ContextValue · OxiflowError · Mesh (INV-1) |
-| M+3–4 | v0.3 — J2 | Requiring BCs · topology · built-in calculators |
-| M+5–6 | v0.4 — J3 | PhysicalQuantity · CouplingOperator (INV-3) · proto lahar–lake |
-| M+7–8 | v0.5 — J4a | Temporal integrators |
-| M+9–10 | v0.6 — J4b | DiscreteOperator (INV-2) · FD/FV · WENO |
-| M+11–13 | v0.7 — J5 | Rayon · cache · benchmarks |
-| M+14–15 | v0.9 — RC | 7 examples · API freeze · FEM audit |
-| M+16 | v1.0 | Stable release · official publication |
-| M+17–24 | v2.0 — J7 | Unstructured mesh · FEM assembler · ALE · INV-4 |
-| M+25–32 | v3.0 — J8 | oxiflow-chrom · oxiflow-geo · oxiflow-thermo · CLI |
-| M+32+ | Third-party | Community frameworks on crates.io |
+| Month   | Milestone            | Key objectives                                                 |
+|---------|----------------------|----------------------------------------------------------------|
+| M0      | v0.0.5 — Foundations | crates.io placeholder · CI · README · NOTICE                   |
+| M+1–2   | v0.1 — J1            | ContextValue · OxiflowError · Mesh (INV-1)                     |
+| M+3–4   | v0.2 — J2            | Requiring BCs · topology · built-in calculators                |
+| M+5–6   | v0.3 — J3            | PhysicalQuantity · CouplingOperator (INV-3) · proto lahar–lake |
+| M+7–8   | v0.4 — J4a           | Temporal integrators                                           |
+| M+9–10  | v0.5 — J4b           | DiscreteOperator (INV-2) · FD/FV · WENO                        |
+| M+11–13 | v0.6 — J5            | Rayon · cache · benchmarks                                     |
+| M+14–15 | v0.9 — RC            | 7 examples · API freeze · FEM audit                            |
+| M+16    | v1.0                 | Stable release · official publication                          |
+| M+17–24 | v2.0 — J7            | Unstructured mesh · FEM assembler · ALE · INV-4                |
+| M+25–32 | v3.0 — J8            | oxiflow-chrom · oxiflow-geo · oxiflow-thermo · CLI             |
+| M+32+   | Third-party          | Community frameworks on crates.io                              |
 
 ---
 

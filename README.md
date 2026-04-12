@@ -137,7 +137,7 @@ third-party frameworks remain compatible across engine versions:
 | Invariant | Description                                                               | Introduced |
 |-----------|---------------------------------------------------------------------------|------------|
 | **INV-1** | `Mesh` is abstract — `PhysicalState` carries no grid assumptions          | v0.2       |
-| **INV-2** | `DiscreteOperator` is abstract — integrators are generic over the scheme  | v0.6       |
+| **INV-2** | `DiscreteOperator` is abstract — integrators are generic over the scheme  | v0.5       |
 | **INV-3** | `CouplingOperator` supports distinct domains with moving interfaces       | v0.4       |
 | **INV-4** | All public traits are object-safe — third-party crates can implement them | v2.0       |
 
@@ -147,12 +147,12 @@ third-party frameworks remain compatible across engine versions:
 
 | Milestone              | Version  | Status         | Theme                                           |
 |------------------------|----------|----------------|-------------------------------------------------|
-| J0 — Foundations       | v0.1     | ✅ Published    | Placeholder · CI · project structure            |
-| J1 — Core Architecture | v0.2     | 🔄 In progress | ContextValue · OxiflowError · Mesh (INV-1)      |
-| J2 — Complete Context  | v0.3     | ⏳ Planned      | Requiring BCs · topological ordering            |
-| J3 — Multi-Component   | v0.4     | ⏳ Planned      | PhysicalQuantity · CouplingOperator (INV-3)     |
-| J4 — Solvers           | v0.5–0.6 | ⏳ Planned      | Integrators · DiscreteOperator (INV-2)          |
-| J5 — Performance       | v0.7     | ⏳ Planned      | Rayon · cache · benchmarks                      |
+| J0 — Foundations       | v0.0.5   | ✅ Published    | Placeholder · CI · project structure            |
+| J1 — Core Architecture | v0.1     | 🔄 In progress | ContextValue · OxiflowError · Mesh (INV-1)      |
+| J2 — Complete Context  | v0.2     | ⏳ Planned      | Requiring BCs · topological ordering            |
+| J3 — Multi-Component   | v0.3     | ⏳ Planned      | PhysicalQuantity · CouplingOperator (INV-3)     |
+| J4 — Solvers           | v0.4–0.5 | ⏳ Planned      | Integrators · DiscreteOperator (INV-2)          |
+| J5 — Performance       | v0.6     | ⏳ Planned      | Rayon · cache · benchmarks                      |
 | J6 — Ecosystem v1.0    | v1.0     | ⏳ Planned      | 7 examples · FEM audit · stable API             |
 | J7 — FEM               | v2.0     | 🔭 Horizon     | Unstructured meshes · ALE · INV-4 plugin-safe   |
 | J8 — Frameworks        | v3.0     | 🔭 Horizon     | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run` |
@@ -166,9 +166,9 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for the full architectural specification.
 | Flag        | Description                                    | Available from |
 |-------------|------------------------------------------------|----------------|
 | *(default)* | Engine core, serial execution                  | v0.2           |
-| `parallel`  | Rayon parallelism for independent calculators  | v0.7           |
-| `serde`     | Serialisation of states and scenarios          | v0.7           |
-| `hdf5`      | HDF5 import/export for tabulated external data | v0.7           |
+| `parallel`  | Rayon parallelism for independent calculators  | v0.6           |
+| `serde`     | Serialisation of states and scenarios          | v0.6           |
+| `hdf5`      | HDF5 import/export for tabulated external data | v0.6           |
 
 ---
 
