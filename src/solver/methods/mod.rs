@@ -1,18 +1,28 @@
 //! # Module `solver::methods`
 //!
-//! *Temporal integration methods — J4a (v0.5).*
+//! Temporal integration methods.
 //!
-//! ## Planned methods
+//! ## Active at J1
 //!
-//! | Méthode | Type | Milestone |
+//! | Method | Type | Issue |
 //! |---|---|---|
-//! | Euler explicite | Explicit | J4a |
-//! | RK4 | Explicit | J4a |
-//! | DoPri45 | Adaptive | J4a |
-//! | Euler implicite | Implicit | J4a |
-//! | Crank–Nicolson | Semi-implicit | J4a |
-//! | BDF2/3 | Implicit multi-step | J4a |
-//! | IMEX (splitting de Strang) | Hybrid | J4a |
+//! | [`euler::ForwardEulerSolver`] | Explicit, 1st order | #33 |
 //!
-//! Integrators are generic over `DiscreteOperator<M: Mesh>` (INV-2) — no spatial
-//! scheme is called directly inside an integrator.
+//! ## Reserved — J4 (v0.4.0)
+//!
+//! | Method | Type | Note |
+//! |---|---|---|
+//! | `RK4Solver` | Explicit, 4th order | — |
+//! | `DoPri45Solver` | Adaptive explicit | `StepControl::Adaptive` |
+//! | `BackwardEulerSolver` | Implicit, 1st order | Linear solve via DD-013 |
+//! | `CrankNicolsonSolver` | Semi-implicit, 2nd order | — |
+//! | `BDF2Solver` | Implicit multi-step, 2nd order | — |
+//! | `IMEXSolver` | Strang splitting | Transport-reaction |
+//!
+//! All integrators are decoupled from the spatial scheme via
+//! `DiscreteOperator<M: Mesh>` (INV-2, J4b) — no FD/FV/FEM
+//! method is called directly inside an integrator.
+
+pub mod euler;
+
+pub use euler::ForwardEulerSolver;
