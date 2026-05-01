@@ -161,7 +161,9 @@ mod tests {
         let a = ContextVariable::External {
             name: "temperature".into(),
         };
-        let b = ContextVariable::External { name: "pressure".into() };
+        let b = ContextVariable::External {
+            name: "pressure".into(),
+        };
         assert_ne!(a, b);
     }
 
@@ -176,7 +178,9 @@ mod tests {
                 dimension: 2,
                 component: None,
             },
-            ContextVariable::External { name: "feed".into() },
+            ContextVariable::External {
+                name: "feed".into(),
+            },
         ];
         for v in &vars {
             assert_eq!(v.clone(), *v);
@@ -197,7 +201,12 @@ mod tests {
             },
             0.3,
         );
-        map.insert(ContextVariable::External { name: "T_amb".into() }, 298.15);
+        map.insert(
+            ContextVariable::External {
+                name: "T_amb".into(),
+            },
+            298.15,
+        );
 
         assert_eq!(map[&ContextVariable::Time], 1.5);
         assert_eq!(map[&ContextVariable::TimeStep], 0.01);
@@ -208,7 +217,12 @@ mod tests {
             }],
             0.3
         );
-        assert_eq!(map[&ContextVariable::External { name: "T_amb".into() }], 298.15);
+        assert_eq!(
+            map[&ContextVariable::External {
+                name: "T_amb".into()
+            }],
+            298.15
+        );
     }
 
     #[test]
@@ -268,7 +282,9 @@ mod tests {
 
     #[test]
     fn display_external() {
-        let v = ContextVariable::External { name: "T_amb".into() };
+        let v = ContextVariable::External {
+            name: "T_amb".into(),
+        };
         assert_eq!(format!("{}", v), "External(T_amb)");
     }
 

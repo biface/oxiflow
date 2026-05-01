@@ -135,7 +135,9 @@ mod tests {
 
     #[test]
     fn circular_dependency_matches_variable() {
-        let err = OxiflowError::CircularDependency(ContextVariable::External { name: "flux".into() });
+        let err = OxiflowError::CircularDependency(ContextVariable::External {
+            name: "flux".into(),
+        });
         assert!(matches!(err, OxiflowError::CircularDependency(_)));
     }
 

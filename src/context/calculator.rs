@@ -217,7 +217,9 @@ mod tests {
     #[test]
     fn constant_calculator_returns_fixed_value() {
         let calc = ConstantCalculator {
-            var: ContextVariable::External { name: "D_ax".into() },
+            var: ContextVariable::External {
+                name: "D_ax".into(),
+            },
             value: 1.5e-4,
         };
         let ctx = ComputeContext::new(0.0, 0.01);

@@ -173,15 +173,24 @@ mod tests {
 
     #[test]
     fn satisfied_requirement_succeeds() {
-        let requirements = vec![ContextVariable::External { name: "D_ax".into() }];
-        let calcs = vec![make_calc(ContextVariable::External { name: "D_ax".into() }, 100)];
+        let requirements = vec![ContextVariable::External {
+            name: "D_ax".into(),
+        }];
+        let calcs = vec![make_calc(
+            ContextVariable::External {
+                name: "D_ax".into(),
+            },
+            100,
+        )];
         let chain = build_calculator_chain(&requirements, &calcs).unwrap();
         assert_eq!(chain.len(), 1);
     }
 
     #[test]
     fn missing_calculator_returns_error() {
-        let requirements = vec![ContextVariable::External { name: "missing".into() }];
+        let requirements = vec![ContextVariable::External {
+            name: "missing".into(),
+        }];
         let err = build_calculator_chain(&requirements, &[]).unwrap_err();
         assert!(matches!(err, OxiflowError::MissingCalculator(_)));
     }
@@ -235,17 +244,31 @@ mod tests {
     #[test]
     fn stable_sort_preserves_registration_order_within_same_priority() {
         let calcs = vec![
-            make_calc(ContextVariable::External { name: "first".into() }, 100),
-            make_calc(ContextVariable::External { name: "second".into() }, 100),
+            make_calc(
+                ContextVariable::External {
+                    name: "first".into(),
+                },
+                100,
+            ),
+            make_calc(
+                ContextVariable::External {
+                    name: "second".into(),
+                },
+                100,
+            ),
         ];
         let chain = build_calculator_chain(&[], &calcs).unwrap();
         assert_eq!(
             chain[0].provides(),
-            ContextVariable::External { name: "first".into() }
+            ContextVariable::External {
+                name: "first".into()
+            }
         );
         assert_eq!(
             chain[1].provides(),
-            ContextVariable::External { name: "second".into() }
+            ContextVariable::External {
+                name: "second".into()
+            }
         );
     }
 
@@ -253,9 +276,16 @@ mod tests {
     fn mixed_builtin_and_user_requirements() {
         let requirements = vec![
             ContextVariable::Time,
-            ContextVariable::External { name: "D_ax".into() },
+            ContextVariable::External {
+                name: "D_ax".into(),
+            },
         ];
-        let calcs = vec![make_calc(ContextVariable::External { name: "D_ax".into() }, 100)];
+        let calcs = vec![make_calc(
+            ContextVariable::External {
+                name: "D_ax".into(),
+            },
+            100,
+        )];
         let chain = build_calculator_chain(&requirements, &calcs).unwrap();
         assert_eq!(chain.len(), 1);
     }
