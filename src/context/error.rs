@@ -21,6 +21,14 @@ use crate::context::variable::ContextVariable;
 /// The `source` field in `ComputationFailed` preserves the original error
 /// for error-chain display while keeping the variant matchable.
 ///
+/// # Serialisation
+///
+/// `OxiflowError` does not implement `serde::Serialize` / `serde::Deserialize`.
+/// The `ComputationFailed` variant holds a `Box<dyn std::error::Error + Send + Sync>`
+/// (a trait object), which cannot be serialised directly. Error context for
+/// post-mortem analysis is captured as a `String` in `SimulationSnapshot`
+/// (DD-025 Option B, v0.6.0).
+///
 /// # Examples
 ///
 /// ```rust
@@ -127,7 +135,7 @@ mod tests {
 
     #[test]
     fn circular_dependency_matches_variable() {
-        let err = OxiflowError::CircularDependency(ContextVariable::External { name: "flux" });
+        let err = OxiflowError::CircularDependency(ContextVariable::External { name: "flux".into() });
         assert!(matches!(err, OxiflowError::CircularDependency(_)));
     }
 

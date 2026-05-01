@@ -65,8 +65,9 @@ use crate::context::error::OxiflowError;
 /// assert_eq!(t.as_scalar().unwrap(), 1.5);
 /// assert!(!field.as_scalar_field().unwrap().is_empty());
 /// ```
-#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ContextValue {
     // ── Pointwise algebraic objects ───────────────────────────────────────────
     /// Rank-0 scalar: time, step size, uniform coefficient.

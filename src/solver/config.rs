@@ -26,8 +26,9 @@ use crate::context::calculator::ContextCalculator;
 /// let fixed = StepControl::Fixed { dt: 0.01 };
 /// assert_eq!(fixed.dt_initial(), 0.01);
 /// ```
-#[derive(Debug, Clone)]
 #[non_exhaustive]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum StepControl {
     /// Fixed time step — J1.
     ///
@@ -94,8 +95,9 @@ impl StepControl {
 /// let method = IntegratorKind::Euler;
 /// assert!(method.is_explicit());
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum IntegratorKind {
     /// Forward Euler — explicit, 1st order — J1.
     Euler,
@@ -128,8 +130,9 @@ impl IntegratorKind {
 /// assert_eq!(time.t_end, 600.0);
 /// assert_eq!(time.n_steps_estimate(), 6000);
 /// ```
-#[derive(Debug, Clone)]
 #[non_exhaustive]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TimeConfiguration {
     /// End time of the simulation.
     pub t_end: f64,
@@ -182,6 +185,13 @@ impl TimeConfiguration {
 /// Groups the integration method, temporal parameters, and context calculators.
 /// `DiscreteOperator` (INV-2, J4b) is **not** a configuration field — it is
 /// an implementation detail inside spatial `ContextCalculator`s.
+///
+/// # Serialisation
+///
+/// `SolverConfiguration` does not implement `serde::Serialize` / `serde::Deserialize`.
+/// The `calculators` field holds `Vec<Box<dyn ContextCalculator>>` (trait objects),
+/// which cannot be serialised directly. The serialisable subset of configuration
+/// is captured in `SimulationSnapshot` (DD-025 Option B, v0.6.0).
 ///
 /// # Examples
 ///

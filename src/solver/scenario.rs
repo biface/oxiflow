@@ -34,6 +34,7 @@ use crate::model::traits::PhysicalModel;
 /// assert_eq!(default_id.as_str(), "default");
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DomainId(String);
 
 impl DomainId {
@@ -72,6 +73,12 @@ impl From<&str> for DomainId {
 ///
 /// At J1, `boundary_conditions` is always empty. At J2, BCs are added via
 /// `Scenario::with_bcs()` without touching this struct definition.
+///
+/// # Serialisation
+///
+/// `Domain` does not implement `serde::Serialize` / `serde::Deserialize`.
+/// It holds `Box<dyn PhysicalModel>` and `Box<dyn Mesh>` (trait objects),
+/// which cannot be serialised directly. See `SimulationSnapshot` (DD-025 Option B).
 #[non_exhaustive]
 pub struct Domain {
     /// Unique identifier for this domain.
@@ -109,6 +116,14 @@ impl Domain {
 ///
 /// `Scenario` is declarative — it contains no solving logic. The `Solver`
 /// receives it and validates it via `context_requirements()` before solving.
+///
+/// # Serialisation
+///
+/// `Scenario` does not implement `serde::Serialize` / `serde::Deserialize`.
+/// It contains `Vec<Domain>`, which holds trait objects (`Box<dyn PhysicalModel>`,
+/// `Box<dyn Mesh>`). Restoring a simulation from a snapshot requires user code
+/// to reconstruct `Scenario` from its own configuration and inject the physical
+/// state from `SimulationSnapshot` (DD-025 Option B, v0.6.0).
 ///
 /// # Examples
 ///

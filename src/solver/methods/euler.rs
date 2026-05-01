@@ -381,7 +381,7 @@ mod tests {
         struct NeedsExternal;
         impl RequiresContext for NeedsExternal {
             fn required_variables(&self) -> Vec<ContextVariable> {
-                vec![ContextVariable::External { name: "missing" }]
+                vec![ContextVariable::External { name: "missing".into() }]
             }
         }
         impl PhysicalModel for NeedsExternal {

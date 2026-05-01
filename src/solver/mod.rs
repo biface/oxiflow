@@ -55,6 +55,7 @@ use crate::context::error::OxiflowError;
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SimulationResult {
     /// Saved field states at each recorded time.
     pub states: Vec<crate::context::value::ContextValue>,

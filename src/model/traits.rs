@@ -159,7 +159,7 @@ mod tests {
             ]
         }
         fn optional_variables(&self) -> Vec<ContextVariable> {
-            vec![ContextVariable::External { name: "T_amb" }]
+            vec![ContextVariable::External { name: "T_amb".into() }]
         }
         fn depends_on(&self) -> Vec<ContextVariable> {
             vec![ContextVariable::Time]
