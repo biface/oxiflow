@@ -10,6 +10,7 @@
 //! without verbosity. At J3, additional domains and coupling operators are added
 //! without any API change (DD-020).
 
+use crate::boundary::BoundaryCondition;
 use crate::context::error::OxiflowError;
 use crate::context::variable::ContextVariable;
 use crate::mesh::Mesh;
@@ -71,14 +72,15 @@ impl From<&str> for DomainId {
 
 /// Single physical domain: model + mesh + boundary conditions.
 ///
-/// At J1, `boundary_conditions` is always empty. At J2, BCs are added via
-/// `Scenario::with_bcs()` without touching this struct definition.
+/// `boundary_conditions` is empty at J1. At J2, BCs are added via the
+/// `Domain::with_boundary_conditions` builder.
 ///
 /// # Serialisation
 ///
 /// `Domain` does not implement `serde::Serialize` / `serde::Deserialize`.
-/// It holds `Box<dyn PhysicalModel>` and `Box<dyn Mesh>` (trait objects),
-/// which cannot be serialised directly. See `SimulationSnapshot` (DD-025 Option B).
+/// It holds `Box<dyn PhysicalModel>`, `Box<dyn Mesh>`, and
+/// `Box<dyn BoundaryCondition>` (trait objects), which cannot be serialised
+/// directly. See `SimulationSnapshot` (DD-025 Option B).
 #[non_exhaustive]
 pub struct Domain {
     /// Unique identifier for this domain.
@@ -87,11 +89,15 @@ pub struct Domain {
     pub model: Box<dyn PhysicalModel>,
     /// Spatial mesh — INV-1.
     pub mesh: Box<dyn Mesh>,
-    // boundary_conditions: Vec<Box<dyn BoundaryCondition>>  — RESERVED J2 (DD-008)
+    /// Boundary conditions applied after context calculation, before physics.
+    pub boundary_conditions: Vec<Box<dyn BoundaryCondition>>,
 }
 
 impl Domain {
     /// Creates a new domain with the given id, model, and mesh.
+    ///
+    /// `boundary_conditions` is initialised to an empty list. Use
+    /// `with_boundary_conditions` to attach BCs.
     pub fn new(
         id: impl Into<DomainId>,
         model: Box<dyn PhysicalModel>,
@@ -101,7 +107,23 @@ impl Domain {
             id: id.into(),
             model,
             mesh,
+            boundary_conditions: vec![],
         }
+    }
+
+    /// Attaches boundary conditions to this domain.
+    ///
+    /// Replaces any previously set boundary conditions.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let domain = Domain::new("column", model, mesh)
+    ///     .with_boundary_conditions(vec![Box::new(inlet_bc), Box::new(outlet_bc)]);
+    /// ```
+    pub fn with_boundary_conditions(mut self, bcs: Vec<Box<dyn BoundaryCondition>>) -> Self {
+        self.boundary_conditions = bcs;
+        self
     }
 }
 
@@ -248,11 +270,13 @@ impl Scenario {
             .collect();
 
         // J2: extend with BC requirements
-        // self.domains.iter().for_each(|d| {
-        //     d.boundary_conditions.iter().for_each(|bc| {
-        //         requirements.extend(bc.required_variables());
-        //     });
-        // });
+        self.domains.iter().for_each(|d| {
+            requirements.extend(
+                d.boundary_conditions
+                    .iter()
+                    .flat_map(|bc| bc.required_variables()),
+            );
+        });
 
         // J3: extend with coupling operator requirements
         // self.couplings.iter().for_each(|c| {
@@ -483,5 +507,73 @@ mod tests {
     fn validate_ok_for_valid_scenario() {
         let s = Scenario::single(Box::new(NeedsTime), make_mesh());
         assert!(s.validate().is_ok());
+    }
+
+    // ── BoundaryCondition integration ─────────────────────────────────────────
+
+    use crate::boundary::BoundaryCondition;
+    use crate::context::compute::ComputeContext as Ctx;
+
+    #[derive(Debug)]
+    struct TimeDependentBC;
+
+    impl RequiresContext for TimeDependentBC {
+        fn required_variables(&self) -> Vec<ContextVariable> {
+            vec![ContextVariable::Time]
+        }
+    }
+
+    impl BoundaryCondition for TimeDependentBC {
+        fn apply(
+            &self,
+            _state: &mut DVector<f64>,
+            _ctx: &Ctx,
+            _mesh: &dyn Mesh,
+        ) -> Result<(), OxiflowError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn domain_with_boundary_conditions_stores_bcs() {
+        let bc: Box<dyn BoundaryCondition> = Box::new(TimeDependentBC);
+        let domain =
+            Domain::new("col", Box::new(NeedsTime), make_mesh()).with_boundary_conditions(vec![bc]);
+        assert_eq!(domain.boundary_conditions.len(), 1);
+    }
+
+    #[test]
+    fn domain_new_has_empty_bcs() {
+        let domain = Domain::new("col", Box::new(NeedsTime), make_mesh());
+        assert!(domain.boundary_conditions.is_empty());
+    }
+
+    #[test]
+    fn context_requirements_includes_bc_variables() {
+        let bc: Box<dyn BoundaryCondition> = Box::new(TimeDependentBC);
+        let domain = Domain::new("col", Box::new(NeedsGradient), make_mesh())
+            .with_boundary_conditions(vec![bc]);
+        let scenario = Scenario::multi(vec![domain]).unwrap();
+        let reqs = scenario.context_requirements();
+        // NeedsGradient requires SpatialGradient; TimeDependentBC requires Time.
+        assert!(reqs.contains(&ContextVariable::Time));
+        assert!(reqs.contains(&ContextVariable::SpatialGradient {
+            dimension: 0,
+            component: None
+        }));
+    }
+
+    #[test]
+    fn context_requirements_deduplicates_bc_and_model_variables() {
+        // Both model and BC require Time — must appear only once.
+        let bc: Box<dyn BoundaryCondition> = Box::new(TimeDependentBC);
+        let domain =
+            Domain::new("col", Box::new(NeedsTime), make_mesh()).with_boundary_conditions(vec![bc]);
+        let scenario = Scenario::multi(vec![domain]).unwrap();
+        let reqs = scenario.context_requirements();
+        assert_eq!(
+            reqs.iter().filter(|v| **v == ContextVariable::Time).count(),
+            1
+        );
     }
 }
