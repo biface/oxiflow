@@ -13,6 +13,8 @@
 //! `SpatialGradient { dimension, component }` → `ContextValue::ScalarField`.
 //! Node-level access is the operator's responsibility (INV-2, J5).
 
+use std::borrow::Cow;
+
 /// Typed key identifying a context variable in the compute context.
 ///
 /// All variants implement `Hash + Eq` so that `ContextVariable` can serve as
@@ -27,7 +29,7 @@
 /// let t   = ContextVariable::Time;
 /// let dt  = ContextVariable::TimeStep;
 /// let gx  = ContextVariable::SpatialGradient { dimension: 0, component: None };
-/// let ext = ContextVariable::External { name: "ambient_temperature" };
+/// let ext = ContextVariable::External { name: "ambient_temperature".into() };
 ///
 /// assert_ne!(t, dt);
 /// assert_ne!(
@@ -35,8 +37,9 @@
 ///     ContextVariable::SpatialGradient { dimension: 1, component: None },
 /// );
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ContextVariable {
     /// Current simulation time `t`.
     Time,
@@ -68,7 +71,7 @@ pub enum ContextVariable {
     /// The `name` is a static string and participates in `Hash + Eq`.
     External {
         /// Unique name of the external variable.
-        name: &'static str,
+        name: Cow<'static, str>,
     },
 }
 
@@ -145,10 +148,10 @@ mod tests {
     #[test]
     fn external_same_name_equal() {
         let a = ContextVariable::External {
-            name: "temperature",
+            name: "temperature".into(),
         };
         let b = ContextVariable::External {
-            name: "temperature",
+            name: "temperature".into(),
         };
         assert_eq!(a, b);
     }
@@ -156,9 +159,11 @@ mod tests {
     #[test]
     fn external_different_name_not_equal() {
         let a = ContextVariable::External {
-            name: "temperature",
+            name: "temperature".into(),
         };
-        let b = ContextVariable::External { name: "pressure" };
+        let b = ContextVariable::External {
+            name: "pressure".into(),
+        };
         assert_ne!(a, b);
     }
 
@@ -173,7 +178,9 @@ mod tests {
                 dimension: 2,
                 component: None,
             },
-            ContextVariable::External { name: "feed" },
+            ContextVariable::External {
+                name: "feed".into(),
+            },
         ];
         for v in &vars {
             assert_eq!(v.clone(), *v);
@@ -194,7 +201,12 @@ mod tests {
             },
             0.3,
         );
-        map.insert(ContextVariable::External { name: "T_amb" }, 298.15);
+        map.insert(
+            ContextVariable::External {
+                name: "T_amb".into(),
+            },
+            298.15,
+        );
 
         assert_eq!(map[&ContextVariable::Time], 1.5);
         assert_eq!(map[&ContextVariable::TimeStep], 0.01);
@@ -205,7 +217,12 @@ mod tests {
             }],
             0.3
         );
-        assert_eq!(map[&ContextVariable::External { name: "T_amb" }], 298.15);
+        assert_eq!(
+            map[&ContextVariable::External {
+                name: "T_amb".into()
+            }],
+            298.15
+        );
     }
 
     #[test]
@@ -265,7 +282,9 @@ mod tests {
 
     #[test]
     fn display_external() {
-        let v = ContextVariable::External { name: "T_amb" };
+        let v = ContextVariable::External {
+            name: "T_amb".into(),
+        };
         assert_eq!(format!("{}", v), "External(T_amb)");
     }
 

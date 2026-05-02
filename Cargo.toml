@@ -1,6 +1,6 @@
 [package]
 name        = "oxiflow"
-version     = "0.0.5"
+version     = "0.2.0"
 edition     = "2021"
 rust-version = "1.80"
 
@@ -29,7 +29,7 @@ thiserror = "2"
 rayon = { version = "1", optional = true }
 # feature `serde`    — sérialisation des types publics (J6)
 serde = { version = "1", features = ["derive"], optional = true }
-# feature `hdf5`     — lecture/écriture de données externes (J2)
+# feature `hdf5`     — large experimental dataset I/O (planned J3+)
 hdf5  = { version = "0.8", optional = true }
 
 # ──────────────────────────────────────────────────────────────────────────────

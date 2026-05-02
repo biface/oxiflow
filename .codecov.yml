@@ -46,10 +46,10 @@ flags:
   #   carryforward: false
 
   # J5 (v0.6) — activate when `serde` feature is declared in Cargo.toml
-  # serde:
-  #   paths:
-  #     - src/
-  #   carryforward: false
+  serde:
+    paths:
+      - src/
+    carryforward: false
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Components — per-module coverage visibility

@@ -177,19 +177,25 @@ mod tests {
     fn ctx_with_all_variants() -> ComputeContext {
         let mut ctx = ComputeContext::new(2.0, 0.01);
         ctx.insert(
-            ContextVariable::External { name: "coeff" },
+            ContextVariable::External {
+                name: "coeff".into(),
+            },
             ContextValue::Scalar(42.0),
         );
         ctx.insert(
-            ContextVariable::External { name: "flag" },
+            ContextVariable::External {
+                name: "flag".into(),
+            },
             ContextValue::Boolean(true),
         );
         ctx.insert(
-            ContextVariable::External { name: "vel" },
+            ContextVariable::External { name: "vel".into() },
             ContextValue::Vector(DVector::from_vec(vec![1.0, 2.0, 3.0])),
         );
         ctx.insert(
-            ContextVariable::External { name: "tensor" },
+            ContextVariable::External {
+                name: "tensor".into(),
+            },
             ContextValue::Matrix(DMatrix::from_element(2, 2, 5.0)),
         );
         ctx.insert(
@@ -200,7 +206,9 @@ mod tests {
             ContextValue::ScalarField(DVector::from_vec(vec![0.1, 0.2, 0.3])),
         );
         ctx.insert(
-            ContextVariable::External { name: "vfield" },
+            ContextVariable::External {
+                name: "vfield".into(),
+            },
             ContextValue::VectorField(DMatrix::from_element(3, 2, 1.5)),
         );
         ctx
@@ -226,7 +234,9 @@ mod tests {
     fn scalar_returns_value_for_scalar_variable() {
         let ctx = ctx_with_all_variants();
         let v = ctx
-            .scalar(ContextVariable::External { name: "coeff" })
+            .scalar(ContextVariable::External {
+                name: "coeff".into(),
+            })
             .unwrap();
         assert_eq!(v, 42.0);
     }
@@ -242,7 +252,7 @@ mod tests {
     fn scalar_returns_type_mismatch_for_non_scalar() {
         let ctx = ctx_with_all_variants();
         let err = ctx
-            .scalar(ContextVariable::External { name: "vel" })
+            .scalar(ContextVariable::External { name: "vel".into() })
             .unwrap_err();
         assert!(matches!(
             err,
@@ -259,7 +269,7 @@ mod tests {
     fn vector_returns_reference_for_vector_variable() {
         let ctx = ctx_with_all_variants();
         let v = ctx
-            .vector(ContextVariable::External { name: "vel" })
+            .vector(ContextVariable::External { name: "vel".into() })
             .unwrap();
         assert_eq!(v.len(), 3);
         assert_eq!(v[1], 2.0);
@@ -269,7 +279,9 @@ mod tests {
     fn vector_returns_missing_calculator_when_absent() {
         let ctx = ComputeContext::new(0.0, 0.01);
         let err = ctx
-            .vector(ContextVariable::External { name: "missing" })
+            .vector(ContextVariable::External {
+                name: "missing".into(),
+            })
             .unwrap_err();
         assert!(matches!(err, OxiflowError::MissingCalculator(_)));
     }
@@ -278,7 +290,9 @@ mod tests {
     fn vector_returns_type_mismatch_for_non_vector() {
         let ctx = ctx_with_all_variants();
         let err = ctx
-            .vector(ContextVariable::External { name: "coeff" })
+            .vector(ContextVariable::External {
+                name: "coeff".into(),
+            })
             .unwrap_err();
         assert!(matches!(
             err,
@@ -295,7 +309,9 @@ mod tests {
     fn matrix_returns_reference_for_matrix_variable() {
         let ctx = ctx_with_all_variants();
         let m = ctx
-            .matrix(ContextVariable::External { name: "tensor" })
+            .matrix(ContextVariable::External {
+                name: "tensor".into(),
+            })
             .unwrap();
         assert_eq!(m.shape(), (2, 2));
         assert_eq!(m[(0, 0)], 5.0);
@@ -305,7 +321,9 @@ mod tests {
     fn matrix_returns_type_mismatch_for_non_matrix() {
         let ctx = ctx_with_all_variants();
         let err = ctx
-            .matrix(ContextVariable::External { name: "coeff" })
+            .matrix(ContextVariable::External {
+                name: "coeff".into(),
+            })
             .unwrap_err();
         assert!(matches!(
             err,
@@ -361,7 +379,9 @@ mod tests {
     fn external_returns_raw_context_value() {
         let ctx = ctx_with_all_variants();
         let val = ctx
-            .external(ContextVariable::External { name: "flag" })
+            .external(ContextVariable::External {
+                name: "flag".into(),
+            })
             .unwrap();
         assert!(matches!(val, ContextValue::Boolean(true)));
     }
@@ -370,7 +390,9 @@ mod tests {
     fn external_returns_missing_calculator_when_absent() {
         let ctx = ComputeContext::new(0.0, 0.01);
         let err = ctx
-            .external(ContextVariable::External { name: "absent" })
+            .external(ContextVariable::External {
+                name: "absent".into(),
+            })
             .unwrap_err();
         assert!(matches!(err, OxiflowError::MissingCalculator(_)));
     }
@@ -380,7 +402,9 @@ mod tests {
         let ctx = ctx_with_all_variants();
         // VectorField via external()
         let val = ctx
-            .external(ContextVariable::External { name: "vfield" })
+            .external(ContextVariable::External {
+                name: "vfield".into(),
+            })
             .unwrap();
         assert!(val.is_vector_field());
     }
@@ -409,7 +433,7 @@ mod tests {
     #[test]
     fn insert_overwrites_previous_value() {
         let mut ctx = ComputeContext::new(0.0, 0.01);
-        let var = ContextVariable::External { name: "x" };
+        let var = ContextVariable::External { name: "x".into() };
         ctx.insert(var.clone(), ContextValue::Scalar(1.0));
         ctx.insert(var.clone(), ContextValue::Scalar(2.0));
         assert_eq!(ctx.scalar(var).unwrap(), 2.0);

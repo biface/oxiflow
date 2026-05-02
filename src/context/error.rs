@@ -21,6 +21,14 @@ use crate::context::variable::ContextVariable;
 /// The `source` field in `ComputationFailed` preserves the original error
 /// for error-chain display while keeping the variant matchable.
 ///
+/// # Serialisation
+///
+/// `OxiflowError` does not implement `serde::Serialize` / `serde::Deserialize`.
+/// The `ComputationFailed` variant holds a `Box<dyn std::error::Error + Send + Sync>`
+/// (a trait object), which cannot be serialised directly. Error context for
+/// post-mortem analysis is captured as a `String` in `SimulationSnapshot`
+/// (DD-025 Option B, v0.6.0).
+///
 /// # Examples
 ///
 /// ```rust
@@ -64,6 +72,26 @@ pub enum OxiflowError {
     /// The mesh or domain configuration is invalid.
     #[error("invalid domain: {0}")]
     InvalidDomain(String),
+
+    /// A required physical or numerical precondition was violated.
+    ///
+    /// Used when a computation cannot proceed due to an invalid parameter value
+    /// or an inconsistent input state. Distinct from [`ComputationFailed`] which
+    /// wraps an upstream error: `PreconditionFailed` is raised by the component
+    /// itself upon detecting a violated invariant.
+    ///
+    /// `context` identifies the component that raised the error (e.g.
+    /// `"DanckwertsInlet"`, `"UniformGrid1D"`). `message` describes the
+    /// violated condition and may include dynamic values.
+    ///
+    /// [`ComputationFailed`]: OxiflowError::ComputationFailed
+    #[error("precondition failed in {context}: {message}")]
+    PreconditionFailed {
+        /// Name of the component that detected the violation.
+        context: &'static str,
+        /// Human-readable description of the violated condition.
+        message: String,
+    },
 
     /// An external data source returned an error or is unavailable.
     #[error("external data error: {0}")]
@@ -127,7 +155,9 @@ mod tests {
 
     #[test]
     fn circular_dependency_matches_variable() {
-        let err = OxiflowError::CircularDependency(ContextVariable::External { name: "flux" });
+        let err = OxiflowError::CircularDependency(ContextVariable::External {
+            name: "flux".into(),
+        });
         assert!(matches!(err, OxiflowError::CircularDependency(_)));
     }
 
@@ -196,6 +226,41 @@ mod tests {
     }
 
     #[test]
+    fn precondition_failed_is_matchable() {
+        let err = OxiflowError::PreconditionFailed {
+            context: "DanckwertsInlet",
+            message: "velocity must be non-zero".into(),
+        };
+        assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
+    }
+
+    #[test]
+    fn precondition_failed_display_contains_context_and_message() {
+        let err = OxiflowError::PreconditionFailed {
+            context: "DanckwertsInlet",
+            message: "velocity must be non-zero".into(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("DanckwertsInlet"));
+        assert!(msg.contains("velocity must be non-zero"));
+    }
+
+    #[test]
+    fn precondition_failed_context_is_static_str() {
+        let err = OxiflowError::PreconditionFailed {
+            context: "UniformGrid1D",
+            message: "n_points must be >= 2".into(),
+        };
+        assert!(matches!(
+            err,
+            OxiflowError::PreconditionFailed {
+                context: "UniformGrid1D",
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn all_variants_implement_debug() {
         let variants: Vec<Box<dyn std::fmt::Debug>> = vec![
             Box::new(OxiflowError::MissingCalculator(ContextVariable::Time)),
@@ -205,6 +270,10 @@ mod tests {
                 actual: "Boolean",
             }),
             Box::new(OxiflowError::InvalidDomain("test".into())),
+            Box::new(OxiflowError::PreconditionFailed {
+                context: "test",
+                message: "test condition".into(),
+            }),
             Box::new(OxiflowError::ExternalData("test".into())),
             Box::new(OxiflowError::SolverDivergence {
                 time: 0.0,
