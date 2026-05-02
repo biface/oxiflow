@@ -1,6 +1,14 @@
 //! # Module `boundary`
 //!
-//! Boundary conditions — [`BoundaryCondition`] trait (DD-008, issue #34).
+//! Boundary conditions — [`BoundaryCondition`] trait (DD-008, issue #34)
+//! and built-in implementations (issue #35).
+//!
+//! ## Available implementations
+//!
+//! | Type | Condition | Location |
+//! |---|---|---|
+//! | [`DanckwertsInlet`] | Robin BC at $x = 0$ — convection-diffusion inlet | `boundary::danckwerts` |
+//! | [`DanckwertsOutlet`] | Neumann BC at $x = L$ — zero dispersive flux | `boundary::danckwerts` |
 //!
 //! ## Role
 //!
@@ -39,12 +47,17 @@
 //! [`ComputeContext`]: crate::context::ComputeContext
 //! [`RequiresContext`]: crate::model::RequiresContext
 //! [`Domain`]: crate::solver::scenario::Domain
+//! [`DanckwertsInlet`]: crate::boundary::DanckwertsInlet
+//! [`DanckwertsOutlet`]: crate::boundary::DanckwertsOutlet
 
 use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
 use crate::mesh::Mesh;
 use crate::model::traits::RequiresContext;
 use nalgebra::DVector;
+
+pub mod danckwerts;
+pub use danckwerts::{DanckwertsInlet, DanckwertsOutlet};
 
 /// Constrains the primary field $u$ at the boundary of a spatial domain.
 ///
@@ -63,6 +76,14 @@ use nalgebra::DVector;
 ///
 /// Multiple BCs on the same domain are applied in ascending `priority()` order
 /// (inherited from [`RequiresContext`]). `depends_on()` is reserved for J3+.
+///
+/// # Serialisation
+///
+/// `BoundaryCondition` does not implement `serde::Serialize` / `serde::Deserialize`.
+/// Concrete implementations may hold arbitrary state (closures, mesh references,
+/// physical parameters backed by trait objects) that cannot be serialised generically.
+/// If persistence of boundary condition parameters is required, provide a dedicated
+/// configuration type and reconstruct the BC from it — see `SimulationSnapshot` (DD-025).
 ///
 /// # Examples
 ///
