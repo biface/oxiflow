@@ -73,6 +73,26 @@ pub enum OxiflowError {
     #[error("invalid domain: {0}")]
     InvalidDomain(String),
 
+    /// A required physical or numerical precondition was violated.
+    ///
+    /// Used when a computation cannot proceed due to an invalid parameter value
+    /// or an inconsistent input state. Distinct from [`ComputationFailed`] which
+    /// wraps an upstream error: `PreconditionFailed` is raised by the component
+    /// itself upon detecting a violated invariant.
+    ///
+    /// `context` identifies the component that raised the error (e.g.
+    /// `"DanckwertsInlet"`, `"UniformGrid1D"`). `message` describes the
+    /// violated condition and may include dynamic values.
+    ///
+    /// [`ComputationFailed`]: OxiflowError::ComputationFailed
+    #[error("precondition failed in {context}: {message}")]
+    PreconditionFailed {
+        /// Name of the component that detected the violation.
+        context: &'static str,
+        /// Human-readable description of the violated condition.
+        message: String,
+    },
+
     /// An external data source returned an error or is unavailable.
     #[error("external data error: {0}")]
     ExternalData(String),
@@ -206,6 +226,41 @@ mod tests {
     }
 
     #[test]
+    fn precondition_failed_is_matchable() {
+        let err = OxiflowError::PreconditionFailed {
+            context: "DanckwertsInlet",
+            message: "velocity must be non-zero".into(),
+        };
+        assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
+    }
+
+    #[test]
+    fn precondition_failed_display_contains_context_and_message() {
+        let err = OxiflowError::PreconditionFailed {
+            context: "DanckwertsInlet",
+            message: "velocity must be non-zero".into(),
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("DanckwertsInlet"));
+        assert!(msg.contains("velocity must be non-zero"));
+    }
+
+    #[test]
+    fn precondition_failed_context_is_static_str() {
+        let err = OxiflowError::PreconditionFailed {
+            context: "UniformGrid1D",
+            message: "n_points must be >= 2".into(),
+        };
+        assert!(matches!(
+            err,
+            OxiflowError::PreconditionFailed {
+                context: "UniformGrid1D",
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn all_variants_implement_debug() {
         let variants: Vec<Box<dyn std::fmt::Debug>> = vec![
             Box::new(OxiflowError::MissingCalculator(ContextVariable::Time)),
@@ -215,6 +270,10 @@ mod tests {
                 actual: "Boolean",
             }),
             Box::new(OxiflowError::InvalidDomain("test".into())),
+            Box::new(OxiflowError::PreconditionFailed {
+                context: "test",
+                message: "test condition".into(),
+            }),
             Box::new(OxiflowError::ExternalData("test".into())),
             Box::new(OxiflowError::SolverDivergence {
                 time: 0.0,
