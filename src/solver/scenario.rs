@@ -524,6 +524,9 @@ mod tests {
     }
 
     impl BoundaryCondition for TimeDependentBC {
+        fn boundary_type(&self) -> crate::boundary::BoundaryType {
+            crate::boundary::BoundaryType::Dirichlet
+        }
         fn apply(
             &self,
             _state: &mut DVector<f64>,

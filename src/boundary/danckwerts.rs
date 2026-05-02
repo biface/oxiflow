@@ -152,6 +152,14 @@ impl RequiresContext for DanckwertsInlet {
 }
 
 impl BoundaryCondition for DanckwertsInlet {
+    fn boundary_type(&self) -> crate::boundary::BoundaryType {
+        crate::boundary::BoundaryType::Robin
+    }
+
+    fn location(&self) -> Option<crate::boundary::BoundaryLocation> {
+        Some(crate::boundary::BoundaryLocation::Inlet)
+    }
+
     /// Applies the Danckwerts inlet condition to `state[0]`.
     ///
     /// Reads `∂u/∂x|_{x=0}` from the gradient field at node 0 and
@@ -249,6 +257,14 @@ impl RequiresContext for DanckwertsOutlet {
 }
 
 impl BoundaryCondition for DanckwertsOutlet {
+    fn boundary_type(&self) -> crate::boundary::BoundaryType {
+        crate::boundary::BoundaryType::Neumann
+    }
+
+    fn location(&self) -> Option<crate::boundary::BoundaryLocation> {
+        Some(crate::boundary::BoundaryLocation::Outlet)
+    }
+
     /// Applies the Danckwerts outlet condition.
     ///
     /// Sets `state[n-1] = state[n-2]` — first-order approximation of zero
@@ -314,6 +330,40 @@ mod tests {
         );
         ctx.insert(feed_var(), ContextValue::Scalar(u_feed));
         ctx
+    }
+
+    // ── boundary_type() and location() ───────────────────────────────────────
+
+    #[test]
+    fn inlet_boundary_type_is_robin() {
+        assert_eq!(
+            make_inlet(1e-7, 1e-3).boundary_type(),
+            crate::boundary::BoundaryType::Robin
+        );
+    }
+
+    #[test]
+    fn inlet_location_is_inlet() {
+        assert_eq!(
+            make_inlet(1e-7, 1e-3).location(),
+            Some(crate::boundary::BoundaryLocation::Inlet)
+        );
+    }
+
+    #[test]
+    fn outlet_boundary_type_is_neumann() {
+        assert_eq!(
+            DanckwertsOutlet::new().boundary_type(),
+            crate::boundary::BoundaryType::Neumann
+        );
+    }
+
+    #[test]
+    fn outlet_location_is_outlet() {
+        assert_eq!(
+            DanckwertsOutlet::new().location(),
+            Some(crate::boundary::BoundaryLocation::Outlet)
+        );
     }
 
     // ── RequiresContext — DanckwertsInlet ─────────────────────────────────────
