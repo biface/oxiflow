@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["calculator","compute","error","value","variable"]};
+window.SIDEBAR_ITEMS = {"mod":["calculator","calculators","compute","error","value","variable"]};

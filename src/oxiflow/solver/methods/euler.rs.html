@@ -391,49 +391,51 @@
 <a href=#381 id=381 data-nosnippet>381</a>        </span><span class="kw">struct </span>NeedsExternal;
 <a href=#382 id=382 data-nosnippet>382</a>        <span class="kw">impl </span>RequiresContext <span class="kw">for </span>NeedsExternal {
 <a href=#383 id=383 data-nosnippet>383</a>            <span class="kw">fn </span>required_variables(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;ContextVariable&gt; {
-<a href=#384 id=384 data-nosnippet>384</a>                <span class="macro">vec!</span>[ContextVariable::External { name: <span class="string">"missing" </span>}]
-<a href=#385 id=385 data-nosnippet>385</a>            }
-<a href=#386 id=386 data-nosnippet>386</a>        }
-<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">impl </span>PhysicalModel <span class="kw">for </span>NeedsExternal {
-<a href=#388 id=388 data-nosnippet>388</a>            <span class="kw">fn </span>compute_physics(
-<a href=#389 id=389 data-nosnippet>389</a>                <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#390 id=390 data-nosnippet>390</a>                s: <span class="kw-2">&amp;</span>ContextValue,
-<a href=#391 id=391 data-nosnippet>391</a>                <span class="kw">_</span>: <span class="kw-2">&amp;</span>ComputeContext,
-<a href=#392 id=392 data-nosnippet>392</a>            ) -&gt; <span class="prelude-ty">Result</span>&lt;ContextValue, OxiflowError&gt; {
-<a href=#393 id=393 data-nosnippet>393</a>                <span class="prelude-val">Ok</span>(s.clone())
-<a href=#394 id=394 data-nosnippet>394</a>            }
-<a href=#395 id=395 data-nosnippet>395</a>            <span class="kw">fn </span>initial_state(<span class="kw-2">&amp;</span><span class="self">self</span>, mesh: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Mesh) -&gt; ContextValue {
-<a href=#396 id=396 data-nosnippet>396</a>                ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), <span class="number">0.0</span>))
-<a href=#397 id=397 data-nosnippet>397</a>            }
-<a href=#398 id=398 data-nosnippet>398</a>            <span class="kw">fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
-<a href=#399 id=399 data-nosnippet>399</a>                <span class="string">"needs_external"
-<a href=#400 id=400 data-nosnippet>400</a>            </span>}
-<a href=#401 id=401 data-nosnippet>401</a>        }
-<a href=#402 id=402 data-nosnippet>402</a>
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw">let </span>scenario = Scenario::single(Box::new(NeedsExternal), make_mesh(<span class="number">2</span>));
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">let </span>config = make_config(<span class="number">1.0</span>, <span class="number">0.1</span>);
-<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">let </span>err = ForwardEulerSolver.solve(<span class="kw-2">&amp;</span>scenario, <span class="kw-2">&amp;</span>config).unwrap_err();
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, OxiflowError::MissingCalculator(<span class="kw">_</span>)));
-<a href=#407 id=407 data-nosnippet>407</a>    }
-<a href=#408 id=408 data-nosnippet>408</a>
-<a href=#409 id=409 data-nosnippet>409</a>    <span class="comment">// ── euler_step ────────────────────────────────────────────────────────────
+<a href=#384 id=384 data-nosnippet>384</a>                <span class="macro">vec!</span>[ContextVariable::External {
+<a href=#385 id=385 data-nosnippet>385</a>                    name: <span class="string">"missing"</span>.into(),
+<a href=#386 id=386 data-nosnippet>386</a>                }]
+<a href=#387 id=387 data-nosnippet>387</a>            }
+<a href=#388 id=388 data-nosnippet>388</a>        }
+<a href=#389 id=389 data-nosnippet>389</a>        <span class="kw">impl </span>PhysicalModel <span class="kw">for </span>NeedsExternal {
+<a href=#390 id=390 data-nosnippet>390</a>            <span class="kw">fn </span>compute_physics(
+<a href=#391 id=391 data-nosnippet>391</a>                <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#392 id=392 data-nosnippet>392</a>                s: <span class="kw-2">&amp;</span>ContextValue,
+<a href=#393 id=393 data-nosnippet>393</a>                <span class="kw">_</span>: <span class="kw-2">&amp;</span>ComputeContext,
+<a href=#394 id=394 data-nosnippet>394</a>            ) -&gt; <span class="prelude-ty">Result</span>&lt;ContextValue, OxiflowError&gt; {
+<a href=#395 id=395 data-nosnippet>395</a>                <span class="prelude-val">Ok</span>(s.clone())
+<a href=#396 id=396 data-nosnippet>396</a>            }
+<a href=#397 id=397 data-nosnippet>397</a>            <span class="kw">fn </span>initial_state(<span class="kw-2">&amp;</span><span class="self">self</span>, mesh: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Mesh) -&gt; ContextValue {
+<a href=#398 id=398 data-nosnippet>398</a>                ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), <span class="number">0.0</span>))
+<a href=#399 id=399 data-nosnippet>399</a>            }
+<a href=#400 id=400 data-nosnippet>400</a>            <span class="kw">fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
+<a href=#401 id=401 data-nosnippet>401</a>                <span class="string">"needs_external"
+<a href=#402 id=402 data-nosnippet>402</a>            </span>}
+<a href=#403 id=403 data-nosnippet>403</a>        }
+<a href=#404 id=404 data-nosnippet>404</a>
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">let </span>scenario = Scenario::single(Box::new(NeedsExternal), make_mesh(<span class="number">2</span>));
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">let </span>config = make_config(<span class="number">1.0</span>, <span class="number">0.1</span>);
+<a href=#407 id=407 data-nosnippet>407</a>        <span class="kw">let </span>err = ForwardEulerSolver.solve(<span class="kw-2">&amp;</span>scenario, <span class="kw-2">&amp;</span>config).unwrap_err();
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(err, OxiflowError::MissingCalculator(<span class="kw">_</span>)));
+<a href=#409 id=409 data-nosnippet>409</a>    }
 <a href=#410 id=410 data-nosnippet>410</a>
-<a href=#411 id=411 data-nosnippet>411</a>    </span><span class="attr">#[test]
-<a href=#412 id=412 data-nosnippet>412</a>    </span><span class="kw">fn </span>euler_step_computes_correctly() {
-<a href=#413 id=413 data-nosnippet>413</a>        <span class="kw">let </span>u = ContextValue::ScalarField(DVector::from_vec(<span class="macro">vec!</span>[<span class="number">1.0</span>, <span class="number">2.0</span>, <span class="number">3.0</span>]));
-<a href=#414 id=414 data-nosnippet>414</a>        <span class="kw">let </span>du = ContextValue::ScalarField(DVector::from_vec(<span class="macro">vec!</span>[<span class="number">0.1</span>, <span class="number">0.2</span>, <span class="number">0.3</span>]));
-<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">let </span>result = euler_step(<span class="kw-2">&amp;</span>u, <span class="kw-2">&amp;</span>du, <span class="number">0.5</span>).unwrap();
-<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span>field = result.as_scalar_field().unwrap();
-<a href=#417 id=417 data-nosnippet>417</a>        <span class="macro">assert!</span>((field[<span class="number">0</span>] - <span class="number">1.05</span>).abs() &lt; <span class="number">1e-12</span>);
-<a href=#418 id=418 data-nosnippet>418</a>        <span class="macro">assert!</span>((field[<span class="number">1</span>] - <span class="number">2.10</span>).abs() &lt; <span class="number">1e-12</span>);
-<a href=#419 id=419 data-nosnippet>419</a>        <span class="macro">assert!</span>((field[<span class="number">2</span>] - <span class="number">3.15</span>).abs() &lt; <span class="number">1e-12</span>);
-<a href=#420 id=420 data-nosnippet>420</a>    }
-<a href=#421 id=421 data-nosnippet>421</a>
-<a href=#422 id=422 data-nosnippet>422</a>    <span class="attr">#[test]
-<a href=#423 id=423 data-nosnippet>423</a>    </span><span class="kw">fn </span>euler_step_mismatched_length_returns_error() {
-<a href=#424 id=424 data-nosnippet>424</a>        <span class="kw">let </span>u = ContextValue::ScalarField(DVector::from_element(<span class="number">3</span>, <span class="number">1.0</span>));
-<a href=#425 id=425 data-nosnippet>425</a>        <span class="kw">let </span>du = ContextValue::ScalarField(DVector::from_element(<span class="number">2</span>, <span class="number">0.1</span>));
-<a href=#426 id=426 data-nosnippet>426</a>        <span class="macro">assert!</span>(euler_step(<span class="kw-2">&amp;</span>u, <span class="kw-2">&amp;</span>du, <span class="number">0.1</span>).is_err());
-<a href=#427 id=427 data-nosnippet>427</a>    }
-<a href=#428 id=428 data-nosnippet>428</a>}
+<a href=#411 id=411 data-nosnippet>411</a>    <span class="comment">// ── euler_step ────────────────────────────────────────────────────────────
+<a href=#412 id=412 data-nosnippet>412</a>
+<a href=#413 id=413 data-nosnippet>413</a>    </span><span class="attr">#[test]
+<a href=#414 id=414 data-nosnippet>414</a>    </span><span class="kw">fn </span>euler_step_computes_correctly() {
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">let </span>u = ContextValue::ScalarField(DVector::from_vec(<span class="macro">vec!</span>[<span class="number">1.0</span>, <span class="number">2.0</span>, <span class="number">3.0</span>]));
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span>du = ContextValue::ScalarField(DVector::from_vec(<span class="macro">vec!</span>[<span class="number">0.1</span>, <span class="number">0.2</span>, <span class="number">0.3</span>]));
+<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw">let </span>result = euler_step(<span class="kw-2">&amp;</span>u, <span class="kw-2">&amp;</span>du, <span class="number">0.5</span>).unwrap();
+<a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">let </span>field = result.as_scalar_field().unwrap();
+<a href=#419 id=419 data-nosnippet>419</a>        <span class="macro">assert!</span>((field[<span class="number">0</span>] - <span class="number">1.05</span>).abs() &lt; <span class="number">1e-12</span>);
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="macro">assert!</span>((field[<span class="number">1</span>] - <span class="number">2.10</span>).abs() &lt; <span class="number">1e-12</span>);
+<a href=#421 id=421 data-nosnippet>421</a>        <span class="macro">assert!</span>((field[<span class="number">2</span>] - <span class="number">3.15</span>).abs() &lt; <span class="number">1e-12</span>);
+<a href=#422 id=422 data-nosnippet>422</a>    }
+<a href=#423 id=423 data-nosnippet>423</a>
+<a href=#424 id=424 data-nosnippet>424</a>    <span class="attr">#[test]
+<a href=#425 id=425 data-nosnippet>425</a>    </span><span class="kw">fn </span>euler_step_mismatched_length_returns_error() {
+<a href=#426 id=426 data-nosnippet>426</a>        <span class="kw">let </span>u = ContextValue::ScalarField(DVector::from_element(<span class="number">3</span>, <span class="number">1.0</span>));
+<a href=#427 id=427 data-nosnippet>427</a>        <span class="kw">let </span>du = ContextValue::ScalarField(DVector::from_element(<span class="number">2</span>, <span class="number">0.1</span>));
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="macro">assert!</span>(euler_step(<span class="kw-2">&amp;</span>u, <span class="kw-2">&amp;</span>du, <span class="number">0.1</span>).is_err());
+<a href=#429 id=429 data-nosnippet>429</a>    }
+<a href=#430 id=430 data-nosnippet>430</a>}
 </code></pre></div></section></main></body></html>

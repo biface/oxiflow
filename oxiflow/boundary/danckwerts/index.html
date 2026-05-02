@@ -1,0 +1,43 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `boundary::danckwerts`"><title>oxiflow::boundary::danckwerts - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-77263533.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.94.1 (e408947bf 2026-03-25)" data-channel="1.94.1" data-search-js="search-9e2438ea.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-c38705f0.js" ><script src="../../../static.files/storage-e2aeef58.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-7bab91a1.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-ffcac47a.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module danckwerts</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.2.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module danckwerts</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-boundarydanckwerts" title="Module `boundary::danckwerts`">Module <code>boundary::danckwerts</code></a><ul><li><a href="#physical-context" title="Physical context">Physical context</a></li><li><a href="#inlet--robin-condition" title="Inlet — Robin condition">Inlet — Robin condition</a></li><li><a href="#outlet--neumann-condition" title="Outlet — Neumann condition">Outlet — Neumann condition</a></li><li><a href="#souplesse" title="Souplesse">Souplesse</a></li><li><a href="#serialisation" title="Serialisation">Serialisation</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>boundary</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">boundary</a></div><h1>Module <span>danckwerts</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/boundary/danckwerts.rs.html#1-617">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-boundarydanckwerts"><a class="doc-anchor" href="#module-boundarydanckwerts">§</a>Module <code>boundary::danckwerts</code></h2>
+<p>Danckwerts boundary conditions for convection-diffusion problems (issue #35).</p>
+<h3 id="physical-context"><a class="doc-anchor" href="#physical-context">§</a>Physical context</h3>
+<p>Danckwerts conditions arise from a mass balance at the boundaries of a porous
+medium column (chromatography, fixed-bed reactors, dispersion in soil). They
+account for both convective and dispersive fluxes at the inlet and impose zero
+dispersive flux at the outlet.</p>
+<h3 id="inlet--robin-condition"><a class="doc-anchor" href="#inlet--robin-condition">§</a>Inlet — Robin condition</h3>
+<p>At $x = 0$, the total mass flux is continuous:</p>
+<p>$$v , u(0, t) - D \left.\frac{\partial u}{\partial x}\right|<em>{x=0}
+= v , u</em>{\text{feed}}(t)$$</p>
+<p>Rearranged into an explicit assignment for the inlet node:</p>
+<p>$$u(0, t) = u_{\text{feed}}(t) + \frac{D}{v}
+\left.\frac{\partial u}{\partial x}\right|_{x=0}$$</p>
+<p>The feed concentration $u_{\text{feed}}(t)$ is read from <a href="../../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext"><code>ComputeContext</code></a> via
+a typed <a href="../../context/variable/enum.ContextVariable.html" title="enum oxiflow::context::variable::ContextVariable"><code>ContextVariable</code></a> key — it can be constant, time-dependent, or
+produced by any user-supplied <a href="../../context/calculator/trait.ContextCalculator.html" title="trait oxiflow::context::calculator::ContextCalculator"><code>ContextCalculator</code></a>.</p>
+<h3 id="outlet--neumann-condition"><a class="doc-anchor" href="#outlet--neumann-condition">§</a>Outlet — Neumann condition</h3>
+<p>At $x = L$, the dispersive flux vanishes:</p>
+<p>$$\left.\frac{\partial u}{\partial x}\right|_{x=L} = 0$$</p>
+<p>Applied as a first-order finite-difference approximation: the last node value
+is set equal to its immediate predecessor, enforcing zero gradient.</p>
+<h3 id="souplesse"><a class="doc-anchor" href="#souplesse">§</a>Souplesse</h3>
+<p>The physical parameters $D$ (dispersion) and $v$ (velocity) are struct fields —
+they characterise the medium and do not change during a simulation. The feed
+concentration is deliberately read from context via a <a href="../../context/variable/enum.ContextVariable.html" title="enum oxiflow::context::variable::ContextVariable"><code>ContextVariable</code></a> key,
+allowing any dynamics: constant injection, step injection, gradient elution, or
+a user-computed profile that itself depends on <code>Time</code> or other variables.</p>
+<h3 id="serialisation"><a class="doc-anchor" href="#serialisation">§</a>Serialisation</h3>
+<p>Both types implement <code>serde::Serialize</code> / <code>serde::Deserialize</code> under the <code>serde</code>
+feature flag. All fields are either <code>f64</code> or <a href="../../context/variable/enum.ContextVariable.html" title="enum oxiflow::context::variable::ContextVariable"><code>ContextVariable</code></a> — both
+already serialisable.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.DanckwertsInlet.html" title="struct oxiflow::boundary::danckwerts::DanckwertsInlet">Danckwerts<wbr>Inlet</a></dt><dd>Danckwerts inlet condition — Robin BC at $x = 0$.</dd><dt><a class="struct" href="struct.DanckwertsOutlet.html" title="struct oxiflow::boundary::danckwerts::DanckwertsOutlet">Danckwerts<wbr>Outlet</a></dt><dd>Danckwerts outlet condition — Neumann BC at $x = L$.</dd></dl></section></div></main></body></html>

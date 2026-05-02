@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FDScheme"],"mod":["integral","spatial","tabulated","time"]};
