@@ -74,7 +74,7 @@
 //!
 //! 1. Context calculators populate [`context::ComputeContext`]
 //! 2. Boundary conditions are applied to the current state (J2)
-//! 3. [`model::PhysicalModel::compute`] computes `du/dt`
+//! 3. [`model::PhysicalModel::compute_physics`] computes `du/dt`
 //! 4. The integrator advances the state by `dt`
 //!
 //! ## Modules
