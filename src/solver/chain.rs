@@ -24,7 +24,7 @@
 //! if calculator C declares `depends_on: [X]`, an edge is drawn from every calculator
 //! providing X to C. Within each topological tier, calculators are ordered by
 //! ascending `priority()`. A cycle returns
-//! [`OxiflowError::CircularDependency`](crate::context::error::OxiflowError::CircularDependency).
+//! [`OxiflowError::CircularDependency`].
 //!
 //! ## Built-in variables
 //!
