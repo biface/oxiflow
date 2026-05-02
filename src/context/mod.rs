@@ -13,6 +13,7 @@
 //! - [`compute`]  — Type `ComputeContext` and trait `RequiresContext` (DD-005, DD-006)
 
 pub mod calculator;
+pub mod calculators;
 pub mod compute;
 pub mod error;
 pub mod value;
