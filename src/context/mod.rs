@@ -16,6 +16,8 @@ pub mod calculator;
 pub mod calculators;
 pub mod compute;
 pub mod error;
+pub mod quantity;
+pub mod state;
 pub mod value;
 pub mod variable;
 
@@ -24,5 +26,7 @@ pub mod variable;
 pub use calculator::ContextCalculator;
 pub use compute::ComputeContext;
 pub use error::OxiflowError;
+pub use quantity::PhysicalQuantity;
+pub use state::MultiDomainState;
 pub use value::ContextValue;
 pub use variable::ContextVariable;
