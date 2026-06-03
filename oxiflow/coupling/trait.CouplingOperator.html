@@ -1,0 +1,67 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Exchanges physical state between two domains across an `Interface`."><title>CouplingOperator in oxiflow::coupling - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-b7b9f40b.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.95.0 (59807616e 2026-04-14)" data-channel="1.95.0" data-search-js="search-63369b7b.js" data-stringdex-js="stringdex-b897f86f.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc trait"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">CouplingOperator</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../oxiflow/index.html">oxiflow</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Coupling<wbr>Operator</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#inv-3-contract" title="INV-3 contract">INV-3 contract</a></li><li><a href="#object-safety" title="Object safety">Object safety</a></li><li><a href="#examples" title="Examples">Examples</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.apply" title="apply">apply</a></li><li><a href="#tymethod.interface" title="interface">interface</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In oxiflow::<wbr>coupling</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">oxiflow</a>::<wbr><a href="index.html">coupling</a></div><h1>Trait <span class="trait">Coupling<wbr>Operator</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/oxiflow/coupling/mod.rs.html#158-173">Source</a> </span></div><pre class="rust item-decl"><code>pub trait CouplingOperator:
+    <a class="trait" href="../model/traits/trait.RequiresContext.html" title="trait oxiflow::model::traits::RequiresContext">RequiresContext</a>
+    + <a class="trait" href="https://doc.rust-lang.org/1.95.0/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a>
+    + <a class="trait" href="https://doc.rust-lang.org/1.95.0/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> {
+    // Required methods
+    fn <a href="#tymethod.apply" class="fn">apply</a>(
+        &amp;self,
+        states: &amp;<a class="struct" href="../context/state/struct.MultiDomainState.html" title="struct oxiflow::context::state::MultiDomainState">MultiDomainState</a>,
+        ctx: &amp;<a class="struct" href="../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext">ComputeContext</a>,
+        interface: &amp;<a class="struct" href="struct.Interface.html" title="struct oxiflow::coupling::Interface">Interface</a>,
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.95.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../context/state/struct.MultiDomainState.html" title="struct oxiflow::context::state::MultiDomainState">MultiDomainState</a>, <a class="enum" href="../context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;;
+<span class="item-spacer"></span>    fn <a href="#tymethod.interface" class="fn">interface</a>(&amp;self) -&gt; &amp;<a class="struct" href="struct.Interface.html" title="struct oxiflow::coupling::Interface">Interface</a>;
+}</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Exchanges physical state between two domains across an <a href="struct.Interface.html" title="struct oxiflow::coupling::Interface"><code>Interface</code></a>.</p>
+<p>Implementors read from one or more <code>(DomainId, PhysicalQuantity)</code> entries
+in <code>states</code> and return an updated <a href="../context/state/struct.MultiDomainState.html" title="struct oxiflow::context::state::MultiDomainState"><code>MultiDomainState</code></a> with the coupled
+values written to the target domain. The operator must not modify source
+domain entries.</p>
+<h2 id="inv-3-contract"><a class="doc-anchor" href="#inv-3-contract">§</a>INV-3 contract</h2>
+<p>All inter-domain coupling must go through this trait. No coupling logic
+may be coded directly in <a href="../solver/trait.Solver.html" title="trait oxiflow::solver::Solver"><code>Solver</code></a> implementations.</p>
+<h2 id="object-safety"><a class="doc-anchor" href="#object-safety">§</a>Object safety</h2>
+<p>This trait is object-safe — it can be used as <code>Box&lt;dyn CouplingOperator&gt;</code>.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>oxiflow::coupling::{CouplingOperator, Interface};
+<span class="kw">use </span>oxiflow::context::state::MultiDomainState;
+<span class="kw">use </span>oxiflow::context::compute::ComputeContext;
+<span class="kw">use </span>oxiflow::context::error::OxiflowError;
+<span class="kw">use </span>oxiflow::context::variable::ContextVariable;
+<span class="kw">use </span>oxiflow::model::traits::RequiresContext;
+
+<span class="kw">struct </span>MassTransfer { interface: Interface }
+
+<span class="kw">impl </span>RequiresContext <span class="kw">for </span>MassTransfer {
+    <span class="kw">fn </span>required_variables(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;ContextVariable&gt; { <span class="macro">vec!</span>[] }
+}
+
+<span class="kw">impl </span>CouplingOperator <span class="kw">for </span>MassTransfer {
+    <span class="kw">fn </span>apply(
+        <span class="kw-2">&amp;</span><span class="self">self</span>,
+        states: <span class="kw-2">&amp;</span>MultiDomainState,
+        _ctx: <span class="kw-2">&amp;</span>ComputeContext,
+        _interface: <span class="kw-2">&amp;</span>Interface,
+    ) -&gt; <span class="prelude-ty">Result</span>&lt;MultiDomainState, OxiflowError&gt; {
+        <span class="prelude-val">Ok</span>(states.clone())   <span class="comment">// stub — real impl transfers mass
+    </span>}
+    <span class="kw">fn </span>interface(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Interface { <span class="kw-2">&amp;</span><span class="self">self</span>.interface }
+}</code></pre></div></div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.apply" class="method"><a class="src rightside" href="../../src/oxiflow/coupling/mod.rs.html#164-169">Source</a><h4 class="code-header">fn <a href="#tymethod.apply" class="fn">apply</a>(
+    &amp;self,
+    states: &amp;<a class="struct" href="../context/state/struct.MultiDomainState.html" title="struct oxiflow::context::state::MultiDomainState">MultiDomainState</a>,
+    ctx: &amp;<a class="struct" href="../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext">ComputeContext</a>,
+    interface: &amp;<a class="struct" href="struct.Interface.html" title="struct oxiflow::coupling::Interface">Interface</a>,
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.95.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="struct" href="../context/state/struct.MultiDomainState.html" title="struct oxiflow::context::state::MultiDomainState">MultiDomainState</a>, <a class="enum" href="../context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;</h4></section></summary><div class="docblock"><p>Applies the coupling and returns the updated multi-domain state.</p>
+<p>The returned <code>MultiDomainState</code> contains the target domain entries
+with coupled values. Implementations must not alter source domain
+entries.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.interface" class="method"><a class="src rightside" href="../../src/oxiflow/coupling/mod.rs.html#172">Source</a><h4 class="code-header">fn <a href="#tymethod.interface" class="fn">interface</a>(&amp;self) -&gt; &amp;<a class="struct" href="struct.Interface.html" title="struct oxiflow::coupling::Interface">Interface</a></h4></section></summary><div class="docblock"><p>Returns the interface this operator acts on.</p>
+</div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"></div><script src="../../trait.impl/oxiflow/coupling/trait.CouplingOperator.js" async></script></section></div></main></body></html>
