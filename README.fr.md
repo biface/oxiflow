@@ -56,7 +56,8 @@ object-safe précisément dans ce but.
   limiteurs de flux (MinMod, Van Leer, Superbee)
 - **API plugin-safe** — tous les traits publics sont object-safe, permettant à des crates
   tierces d'implémenter des frameworks de niche (v2.0 — INV-4)
-- **Parallélisme optionnel** — Rayon, activé via le feature flag `parallel`
+- **Optimisation des calculs** — parallélisme Rayon opt-in (feature `parallel`) et
+  accélération GPU via `wgpu` (post-v0.5.0, feature `gpu`)
 
 ---
 
@@ -64,7 +65,7 @@ object-safe précisément dans ce but.
 
 ```toml
 [dependencies]
-oxiflow = "0.2"
+oxiflow = "0.3"
 # oxiflow-chrom = "3.0"    # framework chromatographie (disponible dès v3.0)
 ```
 
@@ -118,7 +119,8 @@ fn main() -> Result<(), OxiflowError> {
 ## Domaines couverts
 
 Le moteur est agnostique au domaine physique. Tout problème de la forme canonique
-`∂u/∂t + ∇·F(u, ∇u) = S(u, x, t)` est un candidat :
+`∂u/∂t + ∇·F(u, ∇u) = S(u, x, t)` est un candidat.
+Consultez le [wiki oxiflow](https://github.com/biface/oxiflow/wiki) pour les notes d'introduction sur chaque domaine.
 
 | Domaine                | Exemple                        | Framework cible  |
 |------------------------|--------------------------------|------------------|
@@ -140,24 +142,29 @@ assurent la compatibilité des frameworks tiers entre les versions du moteur :
 |-----------|---------------------------------------------------------------------------------------|--------------|
 | **INV-1** | `Mesh` est abstrait — `PhysicalState` ne présuppose aucune structure de grille        | v0.2         |
 | **INV-2** | `DiscreteOperator` est abstrait — les intégrateurs sont génériques sur le schéma      | v0.5         |
-| **INV-3** | `CouplingOperator` supporte des domaines distincts avec interfaces mobiles            | v0.4         |
+| **INV-3** | `CouplingOperator` supporte des domaines distincts avec interfaces mobiles            | v0.3         |
 | **INV-4** | Tous les traits publics sont object-safe — des crates tierces peuvent les implémenter | v2.0         |
 
 ---
 
 ## État de Développement
 
-| Jalon                  | Version  | Statut      | Thème                                              |
-|------------------------|----------|-------------|----------------------------------------------------|
-| J0 — Fondations        | v0.0.5   | ✅ Publié    | Placeholder · CI · structure projet                |
-| J1 — Architecture cœur | v0.1     | ✅ Publié    | ContextValue · OxiflowError · Mesh (INV-1)         |
-| J2 — Contexte complet  | v0.2     | 🔄 En cours | BCs requirantes · ordonnancement                   |
-| J3 — Multi-composants  | v0.3     | ⏳ Planifié  | PhysicalQuantity · CouplingOperator (INV-3)        |
-| J4 — Solveurs          | v0.4–0.5 | ⏳ Planifié  | Intégrateurs · DiscreteOperator (INV-2)            |
-| J5 — Performance       | v0.6     | ⏳ Planifié  | Rayon · cache · benchmarks                         |
-| J6 — Écosystème v1.0   | v1.0     | ⏳ Planifié  | 7 exemples · audit FEM · API stable                |
-| J7 — FEM               | v2.0     | 🔭 Horizon  | Maillages non structurés · ALE · INV-4 plugin-safe |
-| J8 — Frameworks        | v3.0     | 🔭 Horizon  | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run`    |
+| Jalon                  | Version  | Statut      | Thème                                                            |
+|------------------------|----------|-------------|------------------------------------------------------------------|
+| J0 — Fondations        | v0.0.5   | ✅ Publié    | Placeholder · CI · structure projet                              |
+| J1 — Architecture cœur | v0.1.0   | ✅ Publié    | ContextValue · OxiflowError · Mesh (INV-1)                       |
+| J2 — Contexte complet  | v0.2.0   | ✅ Publié    | BCs requirantes · ordonnancement topologique · calculateurs      |
+| J3 — Multi-composants  | v0.3.0   | ✅ Publié    | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3)   |
+| J4a — Intégrateurs     | v0.4.0   | ⏳ Planifié  | Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson, BDF2, IMEX |
+| J4b — Discrétisation   | v0.5.0   | ⏳ Planifié  | DiscreteOperator (INV-2) · FD/FV · WENO3/5                       |
+| J5 — Performance       | v0.6.0   | ⏳ Planifié  | Rayon · cache dirty-flag · benchmarks Criterion                  |
+| J6 — Écosystème v1.0   | v1.0.0   | ⏳ Planifié  | 7 exemples · audit FEM · API stable                              |
+| J7 — FEM               | v2.0.0   | 🔭 Horizon  | Maillages non structurés · ALE · INV-4 plugin-safe               |
+| J8 — Frameworks        | v3.0.0   | 🔭 Horizon  | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run`                  |
+
+Les sous-invariants INV-GPU-1 à INV-GPU-5 (DD-026) gouvernent la GPU-readiness des
+structures de données numériques dès v0.3.0 — pas de code GPU pour l'instant, mais tous
+les types sont conçus pour admettre un future feature `gpu` sans breaking change.
 
 Voir [DEVELOPPEMENT.md](DEVELOPPEMENT.md) pour la spécification architecturale complète.
 
@@ -171,6 +178,7 @@ Voir [DEVELOPPEMENT.md](DEVELOPPEMENT.md) pour la spécification architecturale 
 | `parallel` | Parallélisme Rayon pour les calculateurs indépendants | v0.6           |
 | `serde`    | Sérialisation des états et scénarios                  | v0.6           |
 | `hdf5`     | Import/export HDF5 pour données tabulées externes     | v0.6           |
+| `gpu`      | Accélération GPU via `wgpu` (Vulkan/Metal/DX12)       | post-v0.5.0 (planifié) |
 
 ---
 

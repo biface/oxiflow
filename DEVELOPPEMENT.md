@@ -4,9 +4,9 @@ Ce document est la référence architecturale d'oxiflow. Il couvre les principes
 les spécifications de jalons, les invariants de conception, la stratégie d'écosystème et le
 journal de décisions qui guident l'ensemble du travail d'implémentation de v0.1 à v3.0.
 
-> **Version actuelle :** v0.0.1 (réservation du nom sur crates.io)
-> **Développement actif :** v0.1 placeholder en préparation
-> **Version du document :** 2.0 — Mars 2026
+> **Version actuelle :** v0.3.0 — Multi-Component
+> **Développement actif :** v0.3.0 complet — v0.4.0 (Integrators) en préparation
+> **Version du document :** 2.1 — Juin 2026
 
 ---
 
@@ -17,7 +17,7 @@ journal de décisions qui guident l'ensemble du travail d'implémentation de v0.
 3. [J1 — Architecture cœur (v0.2)](#3-j1--architecture-cœur-v02)
 4. [J2 — Contexte complet (v0.3)](#4-j2--contexte-complet-v03)
 5. [J3 — Multi-composants (v0.4)](#5-j3--multi-composants-v04)
-6. [J4 — Solveurs & Discrétisation (v0.4–0.5)](#6-j4--solveurs--discrétisation-v05-06)
+6. [J4 — Solveurs & Discrétisation (v0.5–0.6)](#6-j4--solveurs--discrétisation-v05-06)
 7. [J5 — Performance (v0.7)](#7-j5--performance-v07)
 8. [J6 — Écosystème v1.0](#8-j6--écosystème-v10)
 9. [Compatibilité FEM — Trajectoire v2.0](#9-compatibilité-fem--trajectoire-v20)
@@ -78,18 +78,18 @@ scientifiques spécifiques avec un minimum de code de plomberie.
 
 ## 2. Vue d'ensemble des jalons
 
-| Jalon                  | Version | Échéance | Thème                                              |
-|------------------------|---------|----------|----------------------------------------------------|
-| J0 — Fondations        | v0.0.5  | Acquis   | placeholder crates.io · CI · structure projet      |
-| J1 — Architecture cœur | v0.1    | Acquis   | ContextValue · OxiflowError · Mesh (INV-1)         |
-| J2 — Contexte complet  | v0.2    | M+4      | BCs requirantes · ordonnancement topologique       |
-| J3 — Multi-composants  | v0.3    | M+6      | PhysicalQuantity · CouplingOperator (INV-3)        |
-| J4a — Intégrateurs     | v0.4    | M+8      | Intégrateurs temporels                             |
-| J4b — Discrétisation   | v0.5    | M+10     | DiscreteOperator (INV-2) · FD/FV/WENO              |
-| J5 — Performance       | v0.6    | M+13     | Rayon · cache · benchmarks                         |
-| J6 — Écosystème v1.0   | v1.0    | M+16     | 7 exemples · audit FEM · API stable                |
-| J7 — FEM               | v2.0    | M+24     | Maillages non structurés · ALE · INV-4 plugin-safe |
-| J8 — Frameworks        | v3.0    | M+32     | oxiflow-chrom · oxiflow-geo · CLI · tiers          |
+| Jalon | Version | Échéance | Thème |
+|---|---|---|---|
+| J0 — Fondations | v0.0.1–v0.0.5 | ✅ Acquis | placeholder crates.io · CI · structure projet |
+| J1 — Architecture cœur | v0.1.0 | ✅ Acquis | ContextValue · OxiflowError · Mesh (INV-1) |
+| J2 — Contexte complet | v0.2.0 | ✅ Acquis | BCs requirantes · ordonnancement topologique · calculateurs built-in |
+| J3 — Multi-composants | v0.3.0 | ✅ Acquis | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3) |
+| J4a — Intégrateurs | v0.4.0 | M+3 | Euler, RK4, DoPri45, Euler implicite, Crank-Nicolson, BDF2, IMEX |
+| J4b — Discrétisation | v0.5.0 | M+6 | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
+| J5 — Performance | v0.6.0 | ⏳ Planifié | Rayon · cache dirty-flag · benchmarks Criterion · GPU (`wgpu`) |
+| J6 — Écosystème v1.0 | v1.0.0 | M+12 | 7 exemples · audit FEM INV-1/2/3 · API stable |
+| J7 — FEM | v2.0.0 | M+18 | Maillages non structurés · ALE · INV-4 plugin-safe |
+| J8 — Frameworks | v3.0.0 | M+30 | oxiflow-chrom · oxiflow-geo · CLI · tiers |
 
 Chaque jalon est livrable indépendamment. J1 seul (v0.2) est une bibliothèque utilisable
 pour la modélisation en chromatographie. Le développement de frameworks tiers peut démarrer
@@ -168,11 +168,11 @@ gradient FD, Laplacien, quadrature, interpolation tabulée externe, lecteur HDF5
 
 Correspondances BC chromatographiques :
 
-| BC chromatographique      | Type mathématique | Contexte nécessaire                 |
-|---------------------------|-------------------|-------------------------------------|
-| BC simplifiée             | Dirichlet         | profil de concentration d'injection |
-| BC de Danckwerts (entrée) | Robin             | temps + gradient                    |
-| BC de Danckwerts (sortie) | Neumann           | gradient uniquement                 |
+| BC chromatographique | Type mathématique | Contexte nécessaire |
+|---|---|---|
+| BC simplifiée | Dirichlet | profil de concentration d'injection |
+| BC de Danckwerts (entrée) | Robin | temps + gradient |
+| BC de Danckwerts (sortie) | Neumann | gradient uniquement |
 
 ---
 
@@ -183,7 +183,7 @@ Proto lahar–lac sur grilles régulières — base de régression pour la FEM v
 
 ---
 
-## 6. J4 — Solveurs & Discrétisation (v0.4–0.5)
+## 6. J4 — Solveurs & Discrétisation (v0.5–0.6)
 
 Intégrateurs temporels : Euler explicite, RK4, DoPri45, Euler implicite, Crank–Nicolson,
 BDF2/3, IMEX (splitting de Strang).
@@ -236,11 +236,11 @@ et générant une vague de submersion. Nécessite un maillage non structuré pou
 irrégulière et un raffinement adaptatif pour le front d'onde — impossible avec les
 différences finies.
 
-| Composante         | Modèle                        | Défi numérique                        |
-|--------------------|-------------------------------|---------------------------------------|
+| Composante | Modèle | Défi numérique |
+|---|---|---|
 | Domaine granulaire | Bingham + Saint-Venant étendu | frontière mobile · maillage adaptatif |
-| Domaine fluide     | Équations de Shallow Water    | bathymétrie irrégulière               |
-| Interface mobile   | Formulation ALE               | transfert masse/quantité de mouvement |
+| Domaine fluide | Équations de Shallow Water | bathymétrie irrégulière |
+| Interface mobile | Formulation ALE | transfert masse/quantité de mouvement |
 
 ### 9.2 INV-4 — API plugin-safe
 
@@ -344,12 +344,12 @@ oxiflow list models --framework chrom
 
 ### 10.4 Frameworks first-party prévus
 
-| Crate            | Domaine                    | Modèles clés                                              |
-|------------------|----------------------------|-----------------------------------------------------------|
-| `oxiflow-chrom`  | Chromatographie            | Langmuir, SMA, Thomas, élution gradient, BC de Danckwerts |
-| `oxiflow-geo`    | Géophysique de surface     | Bingham Saint-Venant, Shallow Water, interface ALE        |
-| `oxiflow-thermo` | Transfert thermique        | flux de Fourier, BC de Robin, changement de phase         |
-| `oxiflow-em`     | Électromagnétisme diffusif | diffusion magnétique, courants de Foucault                |
+| Crate | Domaine | Modèles clés |
+|---|---|---|
+| `oxiflow-chrom` | Chromatographie | Langmuir, SMA, Thomas, élution gradient, BC de Danckwerts |
+| `oxiflow-geo` | Géophysique de surface | Bingham Saint-Venant, Shallow Water, interface ALE |
+| `oxiflow-thermo` | Transfert thermique | flux de Fourier, BC de Robin, changement de phase |
+| `oxiflow-em` | Électromagnétisme diffusif | diffusion magnétique, courants de Foucault |
 
 ### 10.5 Frameworks tiers
 
@@ -367,12 +367,12 @@ Conditions pour un framework tiers :
 
 ## 11. Frameworks de l'écosystème connus
 
-| Crate            | Domaine                    | Mainteneur          | Statut        |
-|------------------|----------------------------|---------------------|---------------|
-| `oxiflow-chrom`  | Chromatographie            | équipe core oxiflow | Planifié v3.0 |
-| `oxiflow-geo`    | Géophysique de surface     | équipe core oxiflow | Planifié v3.0 |
-| `oxiflow-thermo` | Transfert thermique        | équipe core oxiflow | Planifié v3.0 |
-| `oxiflow-em`     | Électromagnétisme diffusif | équipe core oxiflow | Planifié v3.0 |
+| Crate | Domaine | Mainteneur | Statut |
+|---|---|---|---|
+| `oxiflow-chrom` | Chromatographie | équipe core oxiflow | Planifié v3.0 |
+| `oxiflow-geo` | Géophysique de surface | équipe core oxiflow | Planifié v3.0 |
+| `oxiflow-thermo` | Transfert thermique | équipe core oxiflow | Planifié v3.0 |
+| `oxiflow-em` | Électromagnétisme diffusif | équipe core oxiflow | Planifié v3.0 |
 
 *Pour ajouter un framework à cette liste, ouvrir une PR modifiant ce tableau.*
 
@@ -380,62 +380,62 @@ Conditions pour un framework tiers :
 
 ## 12. Journal des décisions architecturales
 
-| Décision                   | Choix retenu                                     | Alternative rejetée             | Jalon | Invariant |
-|----------------------------|--------------------------------------------------|---------------------------------|-------|-----------|
-| Type de retour calculateur | `ContextValue` enum                              | `f64` scalaire                  | J1    |           |
-| Type d'erreur              | `OxiflowError` enum                              | `String`                        | J1    |           |
-| API d'accès au contexte    | `ComputeContext` type-safe dès v0.2              | Migration progressive           | J1    |           |
-| Déclaration des besoins    | Trait `RequiresContext` séparé                   | Méthode sur `PhysicalModel`     | J1    |           |
-| Support spatial            | Trait abstrait `Mesh`                            | `dx`/`nx` dans `PhysicalState`  | J1    | INV-1     |
-| BCs requirantes            | `RequiresContext` sur `BoundaryCondition`        | Agrégation manuelle             | J2    |           |
-| Ordonnancement             | Topologie + priorité hybride                     | DAG pur ou priorité seule       | J2    |           |
-| Multi-composants           | `PhysicalQuantity` indexé                        | Enum plat avec breaking changes | J3    |           |
-| Couplage multi-physique    | `CouplingOperator` avec `DomainId` + `Interface` | Méthode ad-hoc                  | J3    | INV-3     |
-| Opérateurs spatiaux        | `DiscreteOperator` abstrait paramétré par `Mesh` | FD codé en dur                  | J4    | INV-2     |
-| Solveurs linéaires         | Délégation `faer`/`nalgebra`                     | Implémentation maison           | J4    |           |
-| Parallélisme               | Rayon, opt-in feature flag                       | Obligatoire ou absent           | J5    |           |
-| Cache                      | Dirty flag + invalidation temporelle             | Recalcul systématique           | J5    |           |
-| Stabilité API              | SemVer + `cargo-semver-checks` + audit FEM       | Convention informelle           | J6    |           |
-| Architecture plugin        | Traits object-safe + `PluginRegistry`            | Crate monolithique              | J7    | INV-4     |
-| Config framework           | TOML + registre runtime                          | DSL proc-macro                  | J8    |           |
-| Licence                    | Apache 2.0 seule                                 | MIT ou double MIT/Apache        | J0    |           |
+| Décision | Choix retenu | Alternative rejetée | Jalon | Invariant |
+|---|---|---|---|---|
+| Type de retour calculateur | `ContextValue` enum | `f64` scalaire | J1 | |
+| Type d'erreur | `OxiflowError` enum | `String` | J1 | |
+| API d'accès au contexte | `ComputeContext` type-safe dès v0.2 | Migration progressive | J1 | |
+| Déclaration des besoins | Trait `RequiresContext` séparé | Méthode sur `PhysicalModel` | J1 | |
+| Support spatial | Trait abstrait `Mesh` | `dx`/`nx` dans `PhysicalState` | J1 | INV-1 |
+| BCs requirantes | `RequiresContext` sur `BoundaryCondition` | Agrégation manuelle | J2 | |
+| Ordonnancement | Topologie + priorité hybride | DAG pur ou priorité seule | J2 | |
+| Multi-composants | `PhysicalQuantity` indexé | Enum plat avec breaking changes | J3 | |
+| Couplage multi-physique | `CouplingOperator` avec `DomainId` + `Interface` | Méthode ad-hoc | J3 | INV-3 |
+| Opérateurs spatiaux | `DiscreteOperator` abstrait paramétré par `Mesh` | FD codé en dur | J4 | INV-2 |
+| Solveurs linéaires | Délégation `faer`/`nalgebra` | Implémentation maison | J4 | |
+| Parallélisme | Rayon, opt-in feature flag | Obligatoire ou absent | J5 | |
+| Cache | Dirty flag + invalidation temporelle | Recalcul systématique | J5 | |
+| Stabilité API | SemVer + `cargo-semver-checks` + audit FEM | Convention informelle | J6 | |
+| Architecture plugin | Traits object-safe + `PluginRegistry` | Crate monolithique | J7 | INV-4 |
+| Config framework | TOML + registre runtime | DSL proc-macro | J8 | |
+| Licence | Apache 2.0 seule | MIT ou double MIT/Apache | J0 | |
 
 ---
 
 ## 13. Registre des risques
 
-| ID      | Risque                                                                     | Probabilité | Mitigation                                                                                                                               |
-|---------|----------------------------------------------------------------------------|-------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| R1      | Généricité `ContextValue` trop complexe                                    | Moyenne     | Helpers ergonomiques ; tests utilisateurs dès v0.2                                                                                       |
-| R2      | Bugs silencieux d'ordonnancement                                           | Faible      | Tests exhaustifs de détection de cycles ; logging debug                                                                                  |
-| R3      | `PhysicalQuantity` indexé trop verbeux                                     | Moyenne     | Constructeurs idiomatiques ; feedback UX avant v1.0                                                                                      |
-| R4      | Solveurs implicites requièrent algèbre linéaire lourde                     | Haute       | Déléguer à `faer`/`nalgebra` ; documenter les limites                                                                                    |
-| R5      | Rayon + `unsafe` potentiel                                                 | Faible      | Feature flag opt-in ; ThreadSanitizer en CI                                                                                              |
-| R6      | Périmètre trop ambitieux                                                   | Moyenne     | Chaque jalon livrable indépendamment                                                                                                     |
-| R7      | Breaking change forcé avant v1.0                                           | Faible      | Accepté pre-1.0 mais documenté                                                                                                           |
-| R8      | INV-1/2/3 silencieusement violés                                           | Moyenne     | Audit formel à J6 ; tests d'intégration dédiés                                                                                           |
-| R9      | ALE incompatible avec CouplingOperator                                     | Faible      | Proto lahar–lac à J3 est le banc d'essai                                                                                                 |
-| **R10** | **INV-4 violé — frameworks tiers cassés lors d'une mise à jour du moteur** | **Moyenne** | **Crate `oxiflow-test-plugin` externe en CI dès v2.0 ; `cargo-semver-checks` dans le pipeline**                                          |
-| **R11** | **Fragmentation — frameworks tiers incompatibles entre eux**               | **Faible**  | **INV-4 + API publique stable est le seul contrat de compatibilité ; les auteurs de frameworks sont responsables de leur propre SemVer** |
+| ID | Risque | Probabilité | Mitigation |
+|---|---|---|---|
+| R1 | Généricité `ContextValue` trop complexe | Moyenne | Helpers ergonomiques ; tests utilisateurs dès v0.2 |
+| R2 | Bugs silencieux d'ordonnancement | Faible | Tests exhaustifs de détection de cycles ; logging debug |
+| R3 | `PhysicalQuantity` indexé trop verbeux | Moyenne | Constructeurs idiomatiques ; feedback UX avant v1.0 |
+| R4 | Solveurs implicites requièrent algèbre linéaire lourde | Haute | Déléguer à `faer`/`nalgebra` ; documenter les limites |
+| R5 | Rayon + `unsafe` potentiel | Faible | Feature flag opt-in ; ThreadSanitizer en CI |
+| R6 | Périmètre trop ambitieux | Moyenne | Chaque jalon livrable indépendamment |
+| R7 | Breaking change forcé avant v1.0 | Faible | Accepté pre-1.0 mais documenté |
+| R8 | INV-1/2/3 silencieusement violés | Moyenne | Audit formel à J6 ; tests d'intégration dédiés |
+| R9 | ALE incompatible avec CouplingOperator | Faible | Proto lahar–lac à J3 est le banc d'essai |
+| **R10** | **INV-4 violé — frameworks tiers cassés lors d'une mise à jour du moteur** | **Moyenne** | **Crate `oxiflow-test-plugin` externe en CI dès v2.0 ; `cargo-semver-checks` dans le pipeline** |
+| **R11** | **Fragmentation — frameworks tiers incompatibles entre eux** | **Faible** | **INV-4 + API publique stable est le seul contrat de compatibilité ; les auteurs de frameworks sont responsables de leur propre SemVer** |
 
 ---
 
 ## 14. Chronologie
 
-| Mois    | Jalon               | Objectifs clés                                                |
-|---------|---------------------|---------------------------------------------------------------|
-| M0      | v0.0.5 — Fondations | placeholder crates.io · CI · README · NOTICE                  |
-| M+1–2   | v0.1 — J1           | ContextValue · OxiflowError · Mesh (INV-1)                    |
-| M+3–4   | v0.2 — J2           | BCs requirantes · topologie · calculateurs built-in           |
-| M+5–6   | v0.3 — J3           | PhysicalQuantity · CouplingOperator (INV-3) · proto lahar–lac |
-| M+7–8   | v0.4 — J4a          | Intégrateurs temporels                                        |
-| M+9–10  | v0.5 — J4b          | DiscreteOperator (INV-2) · FD/FV · WENO                       |
-| M+11–13 | v0.6 — J5           | Rayon · cache · benchmarks Criterion                          |
-| M+14–15 | v0.9 — RC           | 7 exemples · gel API · audit FEM                              |
-| M+16    | v1.0                | Publication stable officielle                                 |
-| M+17–24 | v2.0 — J7           | Maillage non structuré · assembleur FEM · ALE · INV-4         |
-| M+25–32 | v3.0 — J8           | oxiflow-chrom · oxiflow-geo · oxiflow-thermo · CLI            |
-| M+32+   | Tiers               | Frameworks communautaires sur crates.io                       |
+| Mois | Jalon | Objectifs clés |
+|---|---|---|
+| M0 | v0.1 — Fondations | placeholder crates.io · CI · README · NOTICE |
+| M+1–2 | v0.2 — J1 | ContextValue · OxiflowError · Mesh (INV-1) |
+| M+3–4 | v0.3 — J2 | BCs requirantes · topologie · calculateurs built-in |
+| M+5–6 | v0.4 — J3 | PhysicalQuantity · CouplingOperator (INV-3) · proto lahar–lac |
+| M+7–8 | v0.5 — J4a | Intégrateurs temporels |
+| M+9–10 | v0.6 — J4b | DiscreteOperator (INV-2) · FD/FV · WENO |
+| M+11–13 | v0.6 — J5 | Rayon · cache dirty-flag · benchmarks Criterion · accélération GPU (`wgpu`) |
+| M+14–15 | v0.9 — RC | 7 exemples · gel API · audit FEM |
+| M+16 | v1.0 | Publication stable officielle |
+| M+17–24 | v2.0 — J7 | Maillage non structuré · assembleur FEM · ALE · INV-4 |
+| M+25–32 | v3.0 — J8 | oxiflow-chrom · oxiflow-geo · oxiflow-thermo · CLI |
+| M+32+ | Tiers | Frameworks communautaires sur crates.io |
 
 ---
 

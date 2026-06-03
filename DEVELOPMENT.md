@@ -4,9 +4,9 @@ This document is the architectural reference for oxiflow. It covers the design p
 milestone specifications, design invariants, ecosystem strategy, and decision log that guide
 all implementation work from v0.1 to v3.0.
 
-> **Current version:** v0.0.1 (crates.io name reservation)
-> **Active development:** v0.1 placeholder in preparation
-> **Document version:** 2.0 — March 2026
+> **Current version:** v0.3.0 — Multi-Component
+> **Active development:** v0.3.0 complete — v0.4.0 (Integrators) in preparation
+> **Document version:** 2.1 — June 2026
 
 ---
 
@@ -76,18 +76,18 @@ boilerplate.
 
 ## 2. Milestone Overview
 
-| Milestone              | Version | Target   | Theme                                           |
-|------------------------|---------|----------|-------------------------------------------------|
-| J0 — Foundations       | v0.0.5  | Acquired | crates.io placeholder · CI · project structure  |
-| J1 — Core Architecture | v0.1    | Acquired | ContextValue · OxiflowError · Mesh (INV-1)      |
-| J2 — Complete Context  | v0.2    | M+4      | Requiring BCs · topological ordering            |
-| J3 — Multi-Component   | v0.3    | M+6      | PhysicalQuantity · CouplingOperator (INV-3)     |
-| J4a — Integrators      | v0.4    | M+8      | Temporal integrators                            |
-| J4b — Discretisation   | v0.5    | M+10     | DiscreteOperator (INV-2) · FD/FV/WENO           |
-| J5 — Performance       | v0.6    | M+13     | Rayon · cache · benchmarks                      |
-| J6 — Ecosystem v1.0    | v1.0    | M+16     | 7 examples · FEM audit · stable API             |
-| J7 — FEM               | v2.0    | M+24     | Unstructured meshes · ALE · INV-4 plugin-safe   |
-| J8 — Frameworks        | v3.0    | M+32     | oxiflow-chrom · oxiflow-geo · CLI · third-party |
+| Milestone              | Version | Target       | Theme                                                              |
+|------------------------|---------|------------|---------------------------------------------------------------------|
+| J0 — Foundations       | v0.0.5  | ✅ Acquired  | crates.io placeholder · CI · project structure                     |
+| J1 — Core Architecture | v0.1.0  | ✅ Acquired  | ContextValue · OxiflowError · Mesh (INV-1)                         |
+| J2 — Complete Context  | v0.2.0  | ✅ Acquired  | Requiring BCs · topological ordering · built-in calculators        |
+| J3 — Multi-Component   | v0.3.0  | ✅ Acquired  | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3)     |
+| J4a — Integrators      | v0.4.0  | M+3          | Euler, RK4, DoPri45, Backward Euler, Crank–Nicolson, BDF2, IMEX   |
+| J4b — Discretisation   | v0.5.0  | M+6          | DiscreteOperator (INV-2) · FD/FV · WENO3/5                         |
+| J5 — Performance       | v0.6.0  | M+9          | Rayon · dirty-flag cache · Criterion benchmarks · GPU (`wgpu`)     |
+| J6 — Ecosystem v1.0    | v1.0.0  | M+12         | 7 examples · FEM audit · stable API                                |
+| J7 — FEM               | v2.0.0  | M+18         | Unstructured meshes · ALE · INV-4 plugin-safe                      |
+| J8 — Frameworks        | v3.0.0  | M+30         | oxiflow-chrom · oxiflow-geo · CLI · third-party                    |
 
 Each milestone is independently deliverable. J1 alone (v0.2) is a usable library for
 chromatography modelling. Third-party framework development can begin as soon as v2.0
@@ -424,7 +424,7 @@ Requirements for a third-party framework:
 | M+5–6   | v0.3 — J3            | PhysicalQuantity · CouplingOperator (INV-3) · proto lahar–lake |
 | M+7–8   | v0.4 — J4a           | Temporal integrators                                           |
 | M+9–10  | v0.5 — J4b           | DiscreteOperator (INV-2) · FD/FV · WENO                        |
-| M+11–13 | v0.6 — J5            | Rayon · cache · benchmarks                                     |
+| M+11–13 | v0.6 — J5            | Rayon · dirty-flag cache · benchmarks · GPU acceleration (`wgpu`) |
 | M+14–15 | v0.9 — RC            | 7 examples · API freeze · FEM audit                            |
 | M+16    | v1.0                 | Stable release · official publication                          |
 | M+17–24 | v2.0 — J7            | Unstructured mesh · FEM assembler · ALE · INV-4                |
@@ -433,4 +433,4 @@ Requirements for a third-party framework:
 
 ---
 
-*oxiflow Development Program v2.0 · March 2026 · Living document — updated at each milestone*
+*oxiflow Development Program v2.1 · June 2026 · Living document — updated at each milestone*
