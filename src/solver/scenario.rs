@@ -13,6 +13,7 @@
 use crate::boundary::BoundaryCondition;
 use crate::context::error::OxiflowError;
 use crate::context::variable::ContextVariable;
+use crate::coupling::{CouplingOperator, Interface};
 use crate::mesh::Mesh;
 use crate::model::traits::PhysicalModel;
 
@@ -179,8 +180,10 @@ impl Domain {
 pub struct Scenario {
     /// Physical domains — at least one required.
     domains: Vec<Domain>,
-    // couplings: Vec<Box<dyn CouplingOperator>>  — RESERVED J3 (DD-011, INV-3)
-    // interfaces: Vec<Interface>                 — RESERVED J3
+    /// Coupling operators between domains (J3, DD-011, INV-3).
+    couplings: Vec<Box<dyn CouplingOperator>>,
+    /// Interfaces shared between domains (J3, DD-011).
+    interfaces: Vec<Interface>,
     /// Simulation start time.
     pub t_start: f64,
 }
@@ -195,6 +198,8 @@ impl Scenario {
     pub fn single(model: Box<dyn PhysicalModel>, mesh: Box<dyn Mesh>) -> Self {
         Self {
             domains: vec![Domain::new(DomainId::default(), model, mesh)],
+            couplings: vec![],
+            interfaces: vec![],
             t_start: 0.0,
         }
     }
@@ -203,6 +208,8 @@ impl Scenario {
     pub fn single_from(model: Box<dyn PhysicalModel>, mesh: Box<dyn Mesh>, t_start: f64) -> Self {
         Self {
             domains: vec![Domain::new(DomainId::default(), model, mesh)],
+            couplings: vec![],
+            interfaces: vec![],
             t_start,
         }
     }
@@ -218,6 +225,8 @@ impl Scenario {
         }
         Ok(Self {
             domains,
+            couplings: vec![],
+            interfaces: vec![],
             t_start: 0.0,
         })
     }
@@ -228,11 +237,42 @@ impl Scenario {
         self
     }
 
+    /// Adds a coupling operator and its associated interface (J3, INV-3).
+    ///
+    /// The interface is extracted from the operator via `CouplingOperator::interface()`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let scenario = Scenario::multi(domains)?
+    ///     .with_coupling(Box::new(my_coupling_op));
+    /// ```
+    pub fn with_coupling(mut self, coupling: Box<dyn CouplingOperator>) -> Self {
+        self.interfaces.push(coupling.interface().clone());
+        self.couplings.push(coupling);
+        self
+    }
+
     // ── Accessors ─────────────────────────────────────────────────────────────
 
     /// Returns the number of domains.
     pub fn n_domains(&self) -> usize {
         self.domains.len()
+    }
+
+    /// Returns the number of coupling operators.
+    pub fn n_couplings(&self) -> usize {
+        self.couplings.len()
+    }
+
+    /// Returns a reference to all coupling operators.
+    pub fn couplings(&self) -> &[Box<dyn CouplingOperator>] {
+        &self.couplings
+    }
+
+    /// Returns a reference to all interfaces.
+    pub fn interfaces(&self) -> &[Interface] {
+        &self.interfaces
     }
 
     /// Returns a reference to all domains.
@@ -279,9 +319,9 @@ impl Scenario {
         });
 
         // J3: extend with coupling operator requirements
-        // self.couplings.iter().for_each(|c| {
-        //     requirements.extend(c.required_variables());
-        // });
+        self.couplings.iter().for_each(|c| {
+            requirements.extend(c.required_variables());
+        });
 
         requirements.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
         requirements.dedup();
