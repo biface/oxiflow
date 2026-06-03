@@ -57,6 +57,7 @@ hdf5     = ["dep:hdf5"]
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
+serde_json = { version = "1" }
 
 # Benchmarks Criterion — activés à J5 (v0.7) lorsque benches/ sera créé
 # Criterion benchmarks — activated at J5 (v0.7) when benches/ is created
