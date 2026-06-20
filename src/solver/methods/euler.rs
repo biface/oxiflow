@@ -1,6 +1,6 @@
 //! # Module `solver::methods::euler`
 //!
-//! Forward Euler integrator — explicit, 1st order (issue #33).
+//! Forward Euler integrator — explicit, 1st order (issues #33, #41).
 //!
 //! ## Algorithm
 //!
@@ -9,15 +9,21 @@
 //! $$u^{n+1} = u^n + \Delta t \cdot f(u^n, \text{ctx}^n)$$
 //!
 //! where $f = \text{compute\_physics}(u, \text{ctx})$ is the time derivative
-//! returned by the physical model.
+//! returned by the physical model, evaluated on `u` *after* boundary
+//! conditions have been enforced (see [`super::evaluate_derivative`]).
 //!
-//! ## Scope at J1
+//! ## Scope at J4a
 //!
-//! - Single-domain scenarios only (`n_domains() == 1`).
+//! - Single-domain scenarios only (`n_domains() == 1`). Multi-domain
+//!   scenarios with `CouplingOperator` are out of scope for this solver —
+//!   see #40 for the dedicated multi-domain proto.
 //! - No `DiscreteOperator` (INV-2) — spatial schemes arrive at J4b.
 //!   The model computes `du/dt` internally from the field state and context.
-//! - No boundary conditions — `BoundaryCondition` arrives at J2.
-//! - `StepControl::Fixed { dt }` only — adaptive step at J4.
+//! - Boundary conditions ARE applied (since v0.2.0 / DD-008) — fixed in #41;
+//!   the original J1 implementation predated `BoundaryCondition` and never
+//!   called it, silently violating the contractual order documented in
+//!   [`crate::solver`].
+//! - `StepControl::Fixed { dt }` only — adaptive step at J4 (DoPri45).
 //!
 //! ## Stability
 //!
@@ -30,11 +36,11 @@
 
 use std::collections::HashMap;
 
-use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
+use crate::solver::methods::{check_finite, evaluate_derivative};
 use crate::solver::scenario::Scenario;
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -116,26 +122,13 @@ impl Solver for ForwardEulerSolver {
         let mut step = 0usize;
 
         while t + dt <= t_end + dt * 1e-10 {
-            // 1. Build ComputeContext for this step
-            let mut ctx = ComputeContext::new(t, dt);
+            // Contractual order (calculators -> BCs -> compute_physics) is
+            // enforced once, here, for both Euler and RK4 — see
+            // `solver::methods::evaluate_derivative`. `u` is corrected
+            // in-place by boundary conditions before the derivative is taken.
+            let du_dt = evaluate_derivative(domain, &chain, &mut u, t, dt)?;
 
-            // 2. Run calculators in priority order
-            for calc in &chain {
-                let value =
-                    calc.compute(&u, &ctx)
-                        .map_err(|e| OxiflowError::ComputationFailed {
-                            variable: calc.provides(),
-                            source: Box::new(e),
-                        })?;
-                ctx.insert(calc.provides(), value);
-            }
-
-            // 3. BCs — RESERVED J2
-
-            // 4. Compute du/dt
-            let du_dt = domain.model.compute_physics(&u, &ctx)?;
-
-            // 5. Euler step: u_next = u + dt * du_dt
+            // Euler step: u_next = u + dt * du_dt
             u = euler_step(&u, &du_dt, dt)?;
 
             t += dt;
@@ -181,19 +174,6 @@ fn euler_step(
     }
 
     Ok(ContextValue::ScalarField(u_field + du_field * dt))
-}
-
-/// Checks that all nodal values are finite.
-fn check_finite(u: &ContextValue, t: f64) -> Result<(), OxiflowError> {
-    if let Ok(field) = u.as_scalar_field() {
-        if field.iter().any(|v| !v.is_finite()) {
-            return Err(OxiflowError::SolverDivergence {
-                time: t,
-                reason: "non-finite value detected in state vector".into(),
-            });
-        }
-    }
-    Ok(())
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -355,6 +335,96 @@ mod tests {
         let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
         // 10 steps, save every 5 → 2 saves + initial = 3 states
         assert_eq!(result.states.len(), 3);
+    }
+
+    // ── Order verification (acceptance criterion, #41) ───────────────────────
+
+    #[test]
+    fn euler_error_halves_with_step_halving() {
+        // First-order method: halving dt should roughly halve the error.
+        let lambda: f64 = 1.0;
+        let t_end: f64 = 1.0;
+        let analytical = (-(lambda * t_end)).exp();
+
+        let error_at = |dt: f64| -> f64 {
+            let scenario = Scenario::single(Box::new(ExponentialDecay { lambda }), make_mesh(2));
+            let config = make_config(t_end, dt);
+            let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
+            let val = result.states.last().unwrap().as_scalar_field().unwrap()[0];
+            (val - analytical).abs()
+        };
+
+        let error_coarse = error_at(0.01);
+        let error_fine = error_at(0.005);
+        let ratio = error_coarse / error_fine;
+
+        // First-order convergence: ratio should be close to 2. Generous
+        // tolerance since dt is finite, not in the asymptotic limit.
+        assert!(
+            (1.7..2.3).contains(&ratio),
+            "expected ~2x error reduction on dt halving, got {:.3}x (coarse={:.2e}, fine={:.2e})",
+            ratio,
+            error_coarse,
+            error_fine
+        );
+    }
+
+    // ── Boundary conditions (fixed in #41 — see module docs) ─────────────────
+
+    #[test]
+    fn boundary_condition_is_applied_each_step() {
+        use crate::boundary::{BoundaryCondition, BoundaryType};
+        use crate::context::compute::ComputeContext;
+        use crate::mesh::Mesh as MeshTrait;
+        use crate::solver::scenario::Domain;
+
+        /// Pins node 0 to a fixed value on every application — a minimal
+        /// Dirichlet-style fixture, not a physically meaningful BC.
+        #[derive(Debug)]
+        struct PinFirstNode {
+            value: f64,
+        }
+
+        impl RequiresContext for PinFirstNode {
+            fn required_variables(&self) -> Vec<ContextVariable> {
+                vec![]
+            }
+        }
+
+        impl BoundaryCondition for PinFirstNode {
+            fn boundary_type(&self) -> BoundaryType {
+                BoundaryType::Dirichlet
+            }
+
+            fn apply(
+                &self,
+                state: &mut DVector<f64>,
+                _ctx: &ComputeContext,
+                _mesh: &dyn MeshTrait,
+            ) -> Result<(), OxiflowError> {
+                state[0] = self.value;
+                Ok(())
+            }
+        }
+
+        // ZeroDerivative leaves the field unchanged everywhere — any
+        // deviation from its initial value of 2.5 at node 0 can only come
+        // from the boundary condition.
+        let domain = Domain::new("pinned", Box::new(ZeroDerivative), make_mesh(3))
+            .with_boundary_conditions(vec![Box::new(PinFirstNode { value: -7.0 })]);
+        let scenario = Scenario::multi(vec![domain]).unwrap();
+        let config = make_config(0.3, 0.1);
+        let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
+
+        let final_state = result.states.last().unwrap().as_scalar_field().unwrap();
+        assert!(
+            (final_state[0] - (-7.0)).abs() < 1e-12,
+            "boundary condition was not applied: node 0 = {}",
+            final_state[0]
+        );
+        // Interior nodes are untouched by the BC and keep ZeroDerivative's value.
+        assert!((final_state[1] - 2.5).abs() < 1e-12);
+        assert!((final_state[2] - 2.5).abs() < 1e-12);
     }
 
     // ── Validation errors ─────────────────────────────────────────────────────

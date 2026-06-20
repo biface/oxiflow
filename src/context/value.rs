@@ -204,6 +204,24 @@ impl ContextValue {
         }
     }
 
+    /// Mutably borrows the inner `DVector` of a `ScalarField` variant.
+    ///
+    /// Required by [`BoundaryCondition::apply`](crate::boundary::BoundaryCondition::apply),
+    /// which enforces a constraint in-place on the state vector.
+    ///
+    /// # Errors
+    ///
+    /// Returns `OxiflowError::TypeMismatch` if the variant is not `ScalarField`.
+    pub fn as_scalar_field_mut(&mut self) -> Result<&mut DVector<f64>, OxiflowError> {
+        match self {
+            Self::ScalarField(v) => Ok(v),
+            other => Err(OxiflowError::TypeMismatch {
+                expected: "ScalarField",
+                actual: other.variant_name(),
+            }),
+        }
+    }
+
     /// Borrows the inner `DMatrix` of a `VectorField` variant.
     ///
     /// Rows correspond to nodes, columns to spatial dimensions.
