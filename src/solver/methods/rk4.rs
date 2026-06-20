@@ -126,9 +126,17 @@ impl Solver for RK4Solver {
         // ── Initial state ──────────────────────────────────────────────────────
         let mut u = domain.model.initial_state(domain.mesh.as_ref());
 
+        // ── Step count ──────────────────────────────────────────────────────────
+        // Computed once, same rationale as `ForwardEulerSolver` — see its
+        // module docs. Critical here in particular: RK4's O(dt^4) accuracy
+        // is the whole point of the method, and thousands of steps of
+        // accumulated `t += dt` drift would erode exactly the precision the
+        // method is chosen for.
+        let n_steps = ((t_end - t_start) / dt).round() as usize;
+
         // ── Result buffers ─────────────────────────────────────────────────────
         let save_every = config.time.save_every.unwrap_or(1);
-        let capacity = ((t_end - t_start) / dt).ceil() as usize / save_every + 1;
+        let capacity = n_steps / save_every + 1;
         let mut states: Vec<ContextValue> = Vec::with_capacity(capacity);
         let mut times: Vec<f64> = Vec::with_capacity(capacity);
 
@@ -136,11 +144,12 @@ impl Solver for RK4Solver {
         times.push(t_start);
 
         // ── Time loop ──────────────────────────────────────────────────────────
-        let mut t = t_start;
-        let mut step = 0usize;
         let half_dt = dt / 2.0;
 
-        while t + dt <= t_end + dt * 1e-10 {
+        for step in 0..n_steps {
+            let t = t_start + (step as f64) * dt;
+            let t_next = t_start + ((step + 1) as f64) * dt;
+
             // Stage 1: k1 = f(t, u). BCs are applied to `u` itself here —
             // it is the persisted solution state, same contract as Euler.
             let k1 = evaluate_derivative(domain, &chain, &mut u, t, dt)?;
@@ -160,21 +169,18 @@ impl Solver for RK4Solver {
             // Weighted combination: u_next = u + dt/6 * (k1 + 2k2 + 2k3 + k4)
             u = rk4_combine(&u, &k1, &k2, &k3, &k4, dt)?;
 
-            t += dt;
-            step += 1;
+            check_finite(&u, t_next)?;
 
-            check_finite(&u, t)?;
-
-            if step % save_every == 0 {
+            if (step + 1) % save_every == 0 {
                 states.push(u.clone());
-                times.push(t);
+                times.push(t_next);
             }
         }
 
         Ok(SimulationResult {
             states,
             times,
-            n_steps: step,
+            n_steps,
             metadata: HashMap::new(),
         })
     }
@@ -391,6 +397,57 @@ mod tests {
         );
         let result = RK4Solver.solve(&scenario, &config).unwrap();
         assert_eq!(result.states.len(), 3);
+    }
+
+    // ── Floating-point time accumulation (chrom-rs regression) ───────────────
+
+    #[test]
+    fn time_accumulation_drift_is_real_and_exceeds_old_tolerance_at_scale() {
+        // See euler.rs for the full rationale -- identical phenomenon,
+        // independent of which integrator consumes `t`.
+        let dt = 0.1_f64;
+        let n = 10_000;
+
+        let mut accumulated = 0.0_f64;
+        for _ in 0..n {
+            accumulated += dt;
+        }
+        let direct = (n as f64) * dt;
+        let drift = (accumulated - direct).abs();
+
+        assert!(
+            drift > 1e-12,
+            "expected measurable drift at n={n} steps, got {drift:.3e}"
+        );
+
+        let old_tolerance = dt * 1e-10;
+        assert!(
+            drift > old_tolerance,
+            "drift {drift:.3e} should exceed the old boundary tolerance \
+             {old_tolerance:.3e} at n={n} -- this is the scale where the \
+             accumulating `while` loop became unsafe"
+        );
+    }
+
+    #[test]
+    fn step_count_and_final_time_are_exact_over_many_steps() {
+        // Regression guard for the t_start + step*dt fix -- same rationale
+        // and tolerance budget as the Euler counterpart. RK4 runs 4 stage
+        // evaluations per step at this scale (400_000 total), still fast
+        // for a trivial model.
+        let dt = 0.1;
+        let t_end = 10_000.0; // n_steps = 100_000
+        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let config = make_config(t_end, dt);
+        let result = RK4Solver.solve(&scenario, &config).unwrap();
+
+        assert_eq!(result.n_steps, 100_000);
+
+        let final_time = *result.times.last().unwrap();
+        assert!(
+            (final_time - t_end).abs() < 1e-9,
+            "final time {final_time} drifted too far from t_end={t_end}"
+        );
     }
 
     // ── Order verification (acceptance criterion, #41) ───────────────────────
