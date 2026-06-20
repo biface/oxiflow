@@ -14,11 +14,11 @@ journal de décisions qui guident l'ensemble du travail d'implémentation de v0.
 
 1. [Vision & Principes](#1-vision--principes)
 2. [Vue d'ensemble des jalons](#2-vue-densemble-des-jalons)
-3. [J1 — Architecture cœur (v0.2)](#3-j1--architecture-cœur-v02)
-4. [J2 — Contexte complet (v0.3)](#4-j2--contexte-complet-v03)
-5. [J3 — Multi-composants (v0.4)](#5-j3--multi-composants-v04)
-6. [J4 — Solveurs & Discrétisation (v0.5–0.6)](#6-j4--solveurs--discrétisation-v05-06)
-7. [J5 — Performance (v0.7)](#7-j5--performance-v07)
+3. [J1 — Architecture cœur (v0.1)](#3-j1--architecture-cœur-v01)
+4. [J2 — Contexte complet (v0.2)](#4-j2--contexte-complet-v02)
+5. [J3 — Multi-composants (v0.3)](#5-j3--multi-composants-v03)
+6. [J4 — Solveurs & Discrétisation (v0.4–0.5)](#6-j4--solveurs--discrétisation-v04-05)
+7. [J5 — Performance (v0.6)](#7-j5--performance-v06)
 8. [J6 — Écosystème v1.0](#8-j6--écosystème-v10)
 9. [Compatibilité FEM — Trajectoire v2.0](#9-compatibilité-fem--trajectoire-v20)
 10. [J8 — Frameworks de niche — v3.0](#10-j8--frameworks-de-niche--v30)
@@ -91,13 +91,13 @@ scientifiques spécifiques avec un minimum de code de plomberie.
 | J7 — FEM | v2.0.0 | M+18 | Maillages non structurés · ALE · INV-4 plugin-safe |
 | J8 — Frameworks | v3.0.0 | M+30 | oxiflow-chrom · oxiflow-geo · CLI · tiers |
 
-Chaque jalon est livrable indépendamment. J1 seul (v0.2) est une bibliothèque utilisable
+Chaque jalon est livrable indépendamment. J1 seul (v0.1) est une bibliothèque utilisable
 pour la modélisation en chromatographie. Le développement de frameworks tiers peut démarrer
 dès la publication de v2.0 et la mise en place d'INV-4.
 
 ---
 
-## 3. J1 — Architecture cœur (v0.2)
+## 3. J1 — Architecture cœur (v0.1)
 
 ### 3.1 ContextValue
 
@@ -160,7 +160,7 @@ avec `ComputeContext`. `UniformGrid1D` implémente `Mesh`.
 
 ---
 
-## 4. J2 — Contexte complet (v0.3)
+## 4. J2 — Contexte complet (v0.2)
 
 BoundaryConditions requirantes — ferme la lacune de l'architecture d'origine.
 Ordonnancement topologique (algorithme de Kahn). Calculateurs built-in enrichis :
@@ -176,14 +176,14 @@ Correspondances BC chromatographiques :
 
 ---
 
-## 5. J3 — Multi-composants (v0.4)
+## 5. J3 — Multi-composants (v0.3)
 
 `PhysicalQuantity` indexé. `MultiDomainState`. `CouplingOperator` inter-domaines (INV-3).
 Proto lahar–lac sur grilles régulières — base de régression pour la FEM v2.0.
 
 ---
 
-## 6. J4 — Solveurs & Discrétisation (v0.5–0.6)
+## 6. J4 — Solveurs & Discrétisation (v0.4–0.5)
 
 Intégrateurs temporels : Euler explicite, RK4, DoPri45, Euler implicite, Crank–Nicolson,
 BDF2/3, IMEX (splitting de Strang).
@@ -205,10 +205,14 @@ Algèbre linéaire déléguée à `nalgebra` (dense) et `faer` (creux).
 
 ---
 
-## 7. J5 — Performance (v0.7)
+## 7. J5 — Performance (v0.6)
 
 Parallélisme Rayon (feature `parallel` opt-in). Cache dirty-flag. Benchmarks Criterion.
-Feature flags : `parallel`, `serde`, `hdf5`.
+Export des résultats : VTK (`vtkio`) comme pivot interop pour `SimulationResult`, HDF5
+(`hdf5-metno`) pour les données expérimentales volumineuses (DD-027). `SimulationSnapshot`
+généralisé au-delà de la reprise sur crash vers un checkpoint/reprise normal (DD-029,
+étend #71).
+Feature flags : `parallel`, `serde`, `hdf5`, `vtk`.
 
 **Critère de sortie :** benchmark de référence (diffusion 1D, 1000 points, 10 000 pas)
 < 100 ms sur un CPU moderne.
@@ -264,7 +268,8 @@ qu'il soit en place et vérifié.
 
 ### 9.3 Périmètre v2.0
 
-Maillage non structuré (lecteurs Gmsh/Triangle, triangles 2D, tétraèdres 3D, raffinement
+Maillage non structuré (parseur interne minimal pour `.msh` Gmsh — nœuds, connectivité,
+groupes physiques → `BoundaryLocation`, DD-028 ; triangles 2D, tétraèdres 3D, raffinement
 h-adaptatif). Espaces fonctionnels (P1, P2 Lagrange, Raviart–Thomas, DG0). Assembleur FEM
 (matrices de rigidité et de masse, quadratures de Gauss, intégration sur faces). Solveurs
 linéaires creux (`faer-sparse`, préconditionneurs ILU/AMG). Formulation ALE pour

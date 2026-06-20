@@ -14,11 +14,11 @@ all implementation work from v0.1 to v3.0.
 
 1. [Vision & Principles](#1-vision--principles)
 2. [Milestone Overview](#2-milestone-overview)
-3. [J1 — Core Architecture (v0.2)](#3-j1--core-architecture-v02)
-4. [J2 — Complete Context (v0.3)](#4-j2--complete-context-v03)
-5. [J3 — Multi-Component (v0.4)](#5-j3--multi-component-v04)
+3. [J1 — Core Architecture (v0.1)](#3-j1--core-architecture-v01)
+4. [J2 — Complete Context (v0.2)](#4-j2--complete-context-v02)
+5. [J3 — Multi-Component (v0.3)](#5-j3--multi-component-v03)
 6. [J4 — Solvers & Discretisation (v0.4–0.5)](#6-j4--solvers--discretisation-v04-05)
-7. [J5 — Performance (v0.7)](#7-j5--performance-v07)
+7. [J5 — Performance (v0.6)](#7-j5--performance-v06)
 8. [J6 — Ecosystem v1.0](#8-j6--ecosystem-v10)
 9. [FEM Compatibility — v2.0 Trajectory](#9-fem-compatibility--v20-trajectory)
 10. [J8 — Niche Frameworks — v3.0](#10-j8--niche-frameworks--v30)
@@ -89,13 +89,13 @@ boilerplate.
 | J7 — FEM               | v2.0.0  | M+18         | Unstructured meshes · ALE · INV-4 plugin-safe                      |
 | J8 — Frameworks        | v3.0.0  | M+30         | oxiflow-chrom · oxiflow-geo · CLI · third-party                    |
 
-Each milestone is independently deliverable. J1 alone (v0.2) is a usable library for
+Each milestone is independently deliverable. J1 alone (v0.1) is a usable library for
 chromatography modelling. Third-party framework development can begin as soon as v2.0
 is published and INV-4 is in place.
 
 ---
 
-## 3. J1 — Core Architecture (v0.2)
+## 3. J1 — Core Architecture (v0.1)
 
 ### 3.1 ContextValue
 
@@ -158,7 +158,7 @@ pub trait Mesh: Send + Sync {
 
 ---
 
-## 4. J2 — Complete Context (v0.3)
+## 4. J2 — Complete Context (v0.2)
 
 Requiring `BoundaryCondition` — closes the gap from the original architecture.
 Topological ordering via Kahn's algorithm. Enriched built-in calculators (gradient, Laplacian,
@@ -174,7 +174,7 @@ Chromatography BC mappings:
 
 ---
 
-## 5. J3 — Multi-Component (v0.4)
+## 5. J3 — Multi-Component (v0.3)
 
 Indexed `PhysicalQuantity`. `MultiDomainState`. `CouplingOperator` inter-domain (INV-3).
 Proto lahar–lake example on regular grids — the regression base for v2.0 FEM.
@@ -203,10 +203,13 @@ Linear algebra delegated to `nalgebra` (dense) and `faer` (sparse).
 
 ---
 
-## 7. J5 — Performance (v0.7)
+## 7. J5 — Performance (v0.6)
 
 Rayon parallelism (opt-in `parallel` feature). Dirty-flag cache. Criterion benchmarks.
-Feature flags: `parallel`, `serde`, `hdf5`.
+Results export: VTK (`vtkio`) as the interop pivot for `SimulationResult`, HDF5
+(`hdf5-metno`) for bulk experimental datasets (DD-027). `SimulationSnapshot` generalised
+beyond crash recovery to normal checkpoint/resume (DD-029, extends #71).
+Feature flags: `parallel`, `serde`, `hdf5`, `vtk`.
 
 **Exit criterion:** reference benchmark (1D diffusion, 1000 points, 10k steps) < 100 ms.
 
@@ -260,8 +263,9 @@ place and verified.
 
 ### 9.3 v2.0 scope
 
-Unstructured mesh (Gmsh/Triangle readers, triangles 2D, tetrahedra 3D, h-adaptive
-refinement). Function spaces (P1, P2 Lagrange, Raviart–Thomas, DG0). FEM assembler
+Unstructured mesh (minimal internal Gmsh `.msh` parser — nodes, connectivity, physical
+groups → `BoundaryLocation`, DD-028; triangles 2D, tetrahedra 3D, h-adaptive refinement).
+Function spaces (P1, P2 Lagrange, Raviart–Thomas, DG0). FEM assembler
 (stiffness and mass matrices, Gauss quadrature, face integration). Sparse linear solvers
 (`faer-sparse`, ILU/AMG preconditioners). ALE formulation for the lahar–lake example.
 
