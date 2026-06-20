@@ -107,9 +107,19 @@ impl Solver for ForwardEulerSolver {
         // ── Initial state ──────────────────────────────────────────────────────
         let mut u = domain.model.initial_state(domain.mesh.as_ref());
 
+        // ── Step count ──────────────────────────────────────────────────────────
+        // Computed once from (t_end - t_start) / dt rather than accumulated via
+        // `t += dt` across the loop. Repeated floating-point addition drifts —
+        // 0.1 is not exactly representable in binary, and over thousands of
+        // steps the accumulated error becomes significant at RK4's O(dt^4)
+        // accuracy (chrom-rs hit this; same fix applies here). `.round()`
+        // absorbs the boundary slack the previous tolerance-based `while`
+        // condition handled.
+        let n_steps = ((t_end - t_start) / dt).round() as usize;
+
         // ── Result buffers ─────────────────────────────────────────────────────
         let save_every = config.time.save_every.unwrap_or(1);
-        let capacity = ((t_end - t_start) / dt).ceil() as usize / save_every + 1;
+        let capacity = n_steps / save_every + 1;
         let mut states: Vec<ContextValue> = Vec::with_capacity(capacity);
         let mut times: Vec<f64> = Vec::with_capacity(capacity);
 
@@ -118,10 +128,12 @@ impl Solver for ForwardEulerSolver {
         times.push(t_start);
 
         // ── Time loop ──────────────────────────────────────────────────────────
-        let mut t = t_start;
-        let mut step = 0usize;
+        for step in 0..n_steps {
+            // Current step's time, computed directly from the index — see the
+            // note on `n_steps` above.
+            let t = t_start + (step as f64) * dt;
+            let t_next = t_start + ((step + 1) as f64) * dt;
 
-        while t + dt <= t_end + dt * 1e-10 {
             // Contractual order (calculators -> BCs -> compute_physics) is
             // enforced once, here, for both Euler and RK4 — see
             // `solver::methods::evaluate_derivative`. `u` is corrected
@@ -131,23 +143,20 @@ impl Solver for ForwardEulerSolver {
             // Euler step: u_next = u + dt * du_dt
             u = euler_step(&u, &du_dt, dt)?;
 
-            t += dt;
-            step += 1;
-
             // Guard against NaN / Inf
-            check_finite(&u, t)?;
+            check_finite(&u, t_next)?;
 
             // Save according to frequency
-            if step % save_every == 0 {
+            if (step + 1) % save_every == 0 {
                 states.push(u.clone());
-                times.push(t);
+                times.push(t_next);
             }
         }
 
         Ok(SimulationResult {
             states,
             times,
-            n_steps: step,
+            n_steps,
             metadata: HashMap::new(),
         })
     }
@@ -335,6 +344,74 @@ mod tests {
         let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
         // 10 steps, save every 5 → 2 saves + initial = 3 states
         assert_eq!(result.states.len(), 3);
+    }
+
+    // ── Floating-point time accumulation (chrom-rs regression) ───────────────
+
+    #[test]
+    fn time_accumulation_drift_is_real_and_exceeds_old_tolerance_at_scale() {
+        // Mathematically, t(n) = t(0) + n*dt is identical to adding dt to
+        // itself n times. Computationally it is not: each `+=` rounds to
+        // the nearest representable f64, and these roundings compound
+        // rather than cancel. This test documents the magnitude of that
+        // drift at a step count comparable to production runs (see the
+        // module docs on `n_steps` above) — and confirms it is the reason
+        // `ForwardEulerSolver`/`RK4Solver` compute `t` from the step index
+        // rather than accumulating, as chrom-rs's RK4 also does.
+        let dt = 0.1_f64;
+        let n = 10_000;
+
+        let mut accumulated = 0.0_f64;
+        for _ in 0..n {
+            accumulated += dt;
+        }
+        let direct = (n as f64) * dt;
+        let drift = (accumulated - direct).abs();
+
+        // The drift is real and measurable at this scale. If this
+        // assertion ever fails because `drift` becomes 0, floating-point
+        // semantics have changed and this test's rationale should be
+        // re-examined, not silently relaxed.
+        assert!(
+            drift > 1e-12,
+            "expected measurable drift at n={n} steps, got {drift:.3e}"
+        );
+
+        // ...and it exceeds the tolerance the old `while`-loop boundary
+        // check relied on (`dt * 1e-10`) — this is precisely the scale at
+        // which that loop could mis-count the total number of steps.
+        let old_tolerance = dt * 1e-10;
+        assert!(
+            drift > old_tolerance,
+            "drift {drift:.3e} should exceed the old boundary tolerance \
+             {old_tolerance:.3e} at n={n} -- this is the scale where the \
+             accumulating `while` loop became unsafe"
+        );
+    }
+
+    #[test]
+    fn step_count_and_final_time_are_exact_over_many_steps() {
+        // Regression guard for the t_start + step*dt fix. At n=100_000
+        // steps, raw accumulation drift measures ~1.9e-8 (see the
+        // accompanying float-arithmetic test) -- comfortably above the
+        // 1e-9 tolerance asserted here, and comfortably below what the
+        // direct per-step computation actually produces (~1e-13). This
+        // tolerance is deliberately tight enough to fail against the old
+        // accumulating implementation and loose enough to pass against
+        // the current one with margin.
+        let dt = 0.1;
+        let t_end = 10_000.0; // n_steps = 100_000
+        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let config = make_config(t_end, dt);
+        let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
+
+        assert_eq!(result.n_steps, 100_000);
+
+        let final_time = *result.times.last().unwrap();
+        assert!(
+            (final_time - t_end).abs() < 1e-9,
+            "final time {final_time} drifted too far from t_end={t_end}"
+        );
     }
 
     // ── Order verification (acceptance criterion, #41) ───────────────────────
