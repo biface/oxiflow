@@ -30,6 +30,13 @@
 //! [`crate::solver`]: calculators, then boundary conditions, then
 //! `compute_physics`. [`evaluate_derivative`] implements this contract once
 //! so each solver doesn't reimplement it per stage.
+//!
+//! ## Per-step primitive (DD-031)
+//!
+//! [`SteppableSolver`] exposes a single-step primitive on top of `Solver`'s
+//! full-time-range `solve()`. [`crate::solver::orchestrator::MultiDomainOrchestrator`]
+//! calls it once per domain per synchronised step, so each domain in a
+//! coupled scenario can use a different integrator.
 
 pub mod euler;
 pub mod rk4;
@@ -42,6 +49,7 @@ use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::scenario::Domain;
+use crate::solver::Solver;
 
 /// Applies every boundary condition attached to `domain` to `state`, in
 /// declaration order.
@@ -117,4 +125,37 @@ pub(crate) fn check_finite(state: &ContextValue, t: f64) -> Result<(), OxiflowEr
         }
     }
     Ok(())
+}
+
+// ── SteppableSolver ───────────────────────────────────────────────────────────
+
+/// Single-domain solvers that expose a per-step primitive (DD-031).
+///
+/// `Solver::solve()` drives a full time range for one domain; `step()`
+/// advances a single domain by exactly one `dt`, given its current state.
+/// This is what [`crate::solver::orchestrator::MultiDomainOrchestrator`]
+/// calls once per domain per synchronised step, allowing each domain in a
+/// coupled scenario to use a different integrator.
+///
+/// Implementations should extract their existing single-step logic from
+/// `solve()` rather than duplicate it — `solve()` is expected to call
+/// `step()` internally.
+pub trait SteppableSolver: Solver {
+    /// Advances `state` by one step of size `dt`, at time `t`, for `domain`.
+    ///
+    /// `chain` is the calculator chain already built for this run (built
+    /// once by the caller, reused across steps — see
+    /// [`crate::solver::chain::build_calculator_chain`]).
+    ///
+    /// `state` may be mutated in-place by boundary condition application
+    /// (see [`evaluate_derivative`]); the returned value is the state at
+    /// `t + dt`.
+    fn step(
+        &self,
+        domain: &Domain,
+        chain: &[&dyn ContextCalculator],
+        state: &mut ContextValue,
+        t: f64,
+        dt: f64,
+    ) -> Result<ContextValue, OxiflowError>;
 }

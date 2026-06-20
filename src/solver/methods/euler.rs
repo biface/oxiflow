@@ -38,10 +38,11 @@ use std::collections::HashMap;
 
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
+use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
-use crate::solver::methods::{check_finite, evaluate_derivative};
-use crate::solver::scenario::Scenario;
+use crate::solver::methods::{check_finite, evaluate_derivative, SteppableSolver};
+use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
 /// Forward Euler solver — explicit, 1st order.
@@ -134,14 +135,7 @@ impl Solver for ForwardEulerSolver {
             let t = t_start + (step as f64) * dt;
             let t_next = t_start + ((step + 1) as f64) * dt;
 
-            // Contractual order (calculators -> BCs -> compute_physics) is
-            // enforced once, here, for both Euler and RK4 — see
-            // `solver::methods::evaluate_derivative`. `u` is corrected
-            // in-place by boundary conditions before the derivative is taken.
-            let du_dt = evaluate_derivative(domain, &chain, &mut u, t, dt)?;
-
-            // Euler step: u_next = u + dt * du_dt
-            u = euler_step(&u, &du_dt, dt)?;
+            u = self.step(domain, &chain, &mut u, t, dt)?;
 
             // Guard against NaN / Inf
             check_finite(&u, t_next)?;
@@ -159,6 +153,26 @@ impl Solver for ForwardEulerSolver {
             n_steps,
             metadata: HashMap::new(),
         })
+    }
+}
+
+impl SteppableSolver for ForwardEulerSolver {
+    fn step(
+        &self,
+        domain: &Domain,
+        chain: &[&dyn ContextCalculator],
+        state: &mut ContextValue,
+        t: f64,
+        dt: f64,
+    ) -> Result<ContextValue, OxiflowError> {
+        // Contractual order (calculators -> BCs -> compute_physics) is
+        // enforced once, here, for both Euler and RK4 — see
+        // `solver::methods::evaluate_derivative`. `state` is corrected
+        // in-place by boundary conditions before the derivative is taken.
+        let du_dt = evaluate_derivative(domain, chain, state, t, dt)?;
+
+        // Euler step: u_next = u + dt * du_dt
+        euler_step(state, &du_dt, dt)
     }
 }
 
@@ -444,6 +458,40 @@ mod tests {
             error_coarse,
             error_fine
         );
+    }
+
+    // ── SteppableSolver (DD-031) ──────────────────────────────────────────────
+
+    #[test]
+    fn step_matches_one_iteration_of_solve() {
+        // `solve()` now calls `self.step()` internally -- this guards against
+        // the two ever diverging if either is edited independently later.
+        let scenario = Scenario::single(Box::new(ExponentialDecay { lambda: 0.7 }), make_mesh(3));
+        let config = make_config(0.1, 0.1); // exactly one step
+
+        let via_solve = ForwardEulerSolver.solve(&scenario, &config).unwrap();
+        let final_via_solve = via_solve.states.last().unwrap().as_scalar_field().unwrap();
+
+        let domain = scenario.single_domain().unwrap();
+        let requirements = scenario.context_requirements();
+        let chain =
+            crate::solver::chain::build_calculator_chain(&requirements, &config.calculators)
+                .unwrap();
+        let mut u = domain.model.initial_state(domain.mesh.as_ref());
+        let next = ForwardEulerSolver
+            .step(domain, &chain, &mut u, 0.0, 0.1)
+            .unwrap();
+        let final_via_step = next.as_scalar_field().unwrap();
+
+        assert_eq!(final_via_solve.len(), final_via_step.len());
+        for i in 0..final_via_solve.len() {
+            assert!(
+                (final_via_solve[i] - final_via_step[i]).abs() < 1e-15,
+                "solve() and step() diverged at index {i}: {} vs {}",
+                final_via_solve[i],
+                final_via_step[i]
+            );
+        }
     }
 
     // ── Boundary conditions (fixed in #41 — see module docs) ─────────────────

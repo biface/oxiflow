@@ -25,6 +25,7 @@
 pub mod chain;
 pub mod config;
 pub mod methods;
+pub mod orchestrator;
 pub mod scenario;
 
 pub use config::{IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration};
@@ -95,10 +96,17 @@ impl SimulationResult {
 /// Implementations receive a `Scenario` (WHAT) and a `SolverConfiguration`
 /// (HOW) and execute the contractual loop until `t_end`.
 ///
-/// At J1, `Solver` implementations must:
-/// - Verify `scenario.n_domains() == 1` (multi-domain requires J3)
+/// `Solver` implementations must:
+/// - Verify `scenario.n_domains() == 1`
 /// - Build the calculator chain via `chain::build_calculator_chain()`
 /// - Follow the contractual execution order
+///
+/// `Solver` is deliberately kept single-domain (DD-031) — coupled
+/// multi-domain scenarios go through [`orchestrator::MultiDomainOrchestrator`]
+/// instead, which drives one [`methods::SteppableSolver`] per domain and
+/// invokes `CouplingOperator`s between steps. This keeps each domain free
+/// to use a different integrator, and leaves `Solver`/`SimulationResult`
+/// unchanged for the well-tested single-domain path.
 ///
 /// # Object safety
 ///
