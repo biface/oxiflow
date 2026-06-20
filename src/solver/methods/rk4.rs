@@ -59,10 +59,11 @@ use nalgebra::DVector;
 
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
+use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
-use crate::solver::methods::{check_finite, evaluate_derivative};
-use crate::solver::scenario::Scenario;
+use crate::solver::methods::{check_finite, evaluate_derivative, SteppableSolver};
+use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
 /// Classical Runge-Kutta 4 solver — explicit, 4th order.
@@ -144,30 +145,11 @@ impl Solver for RK4Solver {
         times.push(t_start);
 
         // ── Time loop ──────────────────────────────────────────────────────────
-        let half_dt = dt / 2.0;
-
         for step in 0..n_steps {
             let t = t_start + (step as f64) * dt;
             let t_next = t_start + ((step + 1) as f64) * dt;
 
-            // Stage 1: k1 = f(t, u). BCs are applied to `u` itself here —
-            // it is the persisted solution state, same contract as Euler.
-            let k1 = evaluate_derivative(domain, &chain, &mut u, t, dt)?;
-
-            // Stage 2: k2 = f(t + dt/2, u + dt/2 * k1)
-            let mut u2 = combine(&u, &k1, half_dt)?;
-            let k2 = evaluate_derivative(domain, &chain, &mut u2, t + half_dt, dt)?;
-
-            // Stage 3: k3 = f(t + dt/2, u + dt/2 * k2)
-            let mut u3 = combine(&u, &k2, half_dt)?;
-            let k3 = evaluate_derivative(domain, &chain, &mut u3, t + half_dt, dt)?;
-
-            // Stage 4: k4 = f(t + dt, u + dt * k3)
-            let mut u4 = combine(&u, &k3, dt)?;
-            let k4 = evaluate_derivative(domain, &chain, &mut u4, t + dt, dt)?;
-
-            // Weighted combination: u_next = u + dt/6 * (k1 + 2k2 + 2k3 + k4)
-            u = rk4_combine(&u, &k1, &k2, &k3, &k4, dt)?;
+            u = self.step(domain, &chain, &mut u, t, dt)?;
 
             check_finite(&u, t_next)?;
 
@@ -183,6 +165,38 @@ impl Solver for RK4Solver {
             n_steps,
             metadata: HashMap::new(),
         })
+    }
+}
+
+impl SteppableSolver for RK4Solver {
+    fn step(
+        &self,
+        domain: &Domain,
+        chain: &[&dyn ContextCalculator],
+        state: &mut ContextValue,
+        t: f64,
+        dt: f64,
+    ) -> Result<ContextValue, OxiflowError> {
+        let half_dt = dt / 2.0;
+
+        // Stage 1: k1 = f(t, u). BCs are applied to `state` itself here —
+        // it is the persisted solution state, same contract as Euler.
+        let k1 = evaluate_derivative(domain, chain, state, t, dt)?;
+
+        // Stage 2: k2 = f(t + dt/2, u + dt/2 * k1)
+        let mut u2 = combine(state, &k1, half_dt)?;
+        let k2 = evaluate_derivative(domain, chain, &mut u2, t + half_dt, dt)?;
+
+        // Stage 3: k3 = f(t + dt/2, u + dt/2 * k2)
+        let mut u3 = combine(state, &k2, half_dt)?;
+        let k3 = evaluate_derivative(domain, chain, &mut u3, t + half_dt, dt)?;
+
+        // Stage 4: k4 = f(t + dt, u + dt * k3)
+        let mut u4 = combine(state, &k3, dt)?;
+        let k4 = evaluate_derivative(domain, chain, &mut u4, t + dt, dt)?;
+
+        // Weighted combination: u_next = u + dt/6 * (k1 + 2k2 + 2k3 + k4)
+        rk4_combine(state, &k1, &k2, &k3, &k4, dt)
     }
 }
 
@@ -480,6 +494,36 @@ mod tests {
             error_coarse,
             error_fine
         );
+    }
+
+    // ── SteppableSolver (DD-031) ──────────────────────────────────────────────
+
+    #[test]
+    fn step_matches_one_iteration_of_solve() {
+        let scenario = Scenario::single(Box::new(ExponentialDecay { lambda: 0.7 }), make_mesh(3));
+        let config = make_config(0.1, 0.1); // exactly one step
+
+        let via_solve = RK4Solver.solve(&scenario, &config).unwrap();
+        let final_via_solve = via_solve.states.last().unwrap().as_scalar_field().unwrap();
+
+        let domain = scenario.single_domain().unwrap();
+        let requirements = scenario.context_requirements();
+        let chain =
+            crate::solver::chain::build_calculator_chain(&requirements, &config.calculators)
+                .unwrap();
+        let mut u = domain.model.initial_state(domain.mesh.as_ref());
+        let next = RK4Solver.step(domain, &chain, &mut u, 0.0, 0.1).unwrap();
+        let final_via_step = next.as_scalar_field().unwrap();
+
+        assert_eq!(final_via_solve.len(), final_via_step.len());
+        for i in 0..final_via_solve.len() {
+            assert!(
+                (final_via_solve[i] - final_via_step[i]).abs() < 1e-15,
+                "solve() and step() diverged at index {i}: {} vs {}",
+                final_via_solve[i],
+                final_via_step[i]
+            );
+        }
     }
 
     // ── Boundary conditions ───────────────────────────────────────────────────
