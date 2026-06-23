@@ -8,14 +8,14 @@
 //! |---|---|---|
 //! | [`euler::ForwardEulerSolver`] | Explicit, 1st order | #33, #41 |
 //! | [`rk4::RK4Solver`] | Explicit, 4th order | #41 |
+//! | [`backward_euler::BackwardEulerSolver`] | Implicit, 1st order | #43, DD-013, DD-033 |
+//! | [`crank_nicolson::CrankNicolsonSolver`] | Semi-implicit, 2nd order | #43, DD-013, DD-033 |
 //!
 //! ## Reserved — J4 (v0.4.0)
 //!
 //! | Method | Type | Note |
 //! |---|---|---|
 //! | `DoPri45Solver` | Adaptive explicit | `StepControl::Adaptive` |
-//! | `BackwardEulerSolver` | Implicit, 1st order | Linear solve via DD-013 |
-//! | `CrankNicolsonSolver` | Semi-implicit, 2nd order | — |
 //! | `BDF2Solver` | Implicit multi-step, 2nd order | — |
 //! | `IMEXSolver` | Strang splitting | Transport-reaction |
 //!
@@ -31,6 +31,11 @@
 //! `compute_physics`. [`evaluate_derivative`] implements this contract once
 //! so each solver doesn't reimplement it per stage.
 //!
+//! Implicit methods ([`backward_euler`], [`crank_nicolson`]) build on the
+//! same [`evaluate_derivative`] for their explicit-derivative evaluation,
+//! plus the shared machinery in [`implicit`] (frozen-Jacobian Newton
+//! correction, DD-033) for the implicit part.
+//!
 //! ## Per-step primitive (DD-031)
 //!
 //! [`SteppableSolver`] exposes a single-step primitive on top of `Solver`'s
@@ -38,9 +43,14 @@
 //! calls it once per domain per synchronised step, so each domain in a
 //! coupled scenario can use a different integrator.
 
+pub mod backward_euler;
+pub mod crank_nicolson;
 pub mod euler;
+pub mod implicit;
 pub mod rk4;
 
+pub use backward_euler::BackwardEulerSolver;
+pub use crank_nicolson::CrankNicolsonSolver;
 pub use euler::ForwardEulerSolver;
 pub use rk4::RK4Solver;
 
