@@ -84,8 +84,9 @@ impl StepControl {
 
 /// Temporal integration method.
 ///
-/// `Euler` is active since J1; `RK4` since J4a (#41). Other variants are
-/// reserved for J4 (implicit, adaptive, IMEX).
+/// `Euler` is active since J1; `RK4`, `BackwardEuler`, `CrankNicolson`
+/// since J4a (#41, #43). Other variants are reserved for J4 (adaptive,
+/// BDF2, IMEX).
 ///
 /// # Examples
 ///
@@ -103,7 +104,11 @@ pub enum IntegratorKind {
     Euler,
     /// Runge-Kutta 4 — explicit, 4th order — J4a (#41).
     RK4,
-    // Reserved J4 — DoPri45, BackwardEuler, CrankNicolson, BDF2, IMEX
+    /// Backward Euler — implicit, 1st order — J4a (#43, DD-013, DD-033).
+    BackwardEuler,
+    /// Crank-Nicolson — semi-implicit, 2nd order — J4a (#43, DD-013, DD-033).
+    CrankNicolson,
+    // Reserved J4 — DoPri45, BDF2, IMEX
 }
 
 impl IntegratorKind {

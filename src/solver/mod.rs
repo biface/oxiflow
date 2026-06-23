@@ -24,6 +24,7 @@
 
 pub mod chain;
 pub mod config;
+pub mod linear;
 pub mod methods;
 pub mod orchestrator;
 pub mod scenario;
