@@ -462,16 +462,21 @@ mod tests {
         use crate::boundary::{BoundaryCondition, BoundaryType};
         use crate::mesh::Mesh as MeshTrait;
         use crate::solver::scenario::Domain;
-        use std::cell::Cell;
-        use std::rc::Rc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
 
         /// Pins node 0 and counts how many times it was applied — used to
         /// confirm RK4 applies BCs once per stage (4 per step), not once
         /// per outer step.
+        ///
+        /// `Arc<AtomicUsize>`, not `Rc<Cell<usize>>` — `BoundaryCondition`
+        /// requires `Send + Sync` since DD-037 (#45): a `Domain` can now be
+        /// *owned* by `OperatorSplittingSolver`'s `SplitOperator`, which
+        /// must itself be `Send + Sync` (`Solver: Send + Sync`).
         #[derive(Debug)]
         struct PinFirstNode {
             value: f64,
-            calls: Rc<Cell<usize>>,
+            calls: Arc<AtomicUsize>,
         }
 
         impl RequiresContext for PinFirstNode {
@@ -492,12 +497,12 @@ mod tests {
                 _mesh: &dyn MeshTrait,
             ) -> Result<(), OxiflowError> {
                 state[0] = self.value;
-                self.calls.set(self.calls.get() + 1);
+                self.calls.fetch_add(1, Ordering::SeqCst);
                 Ok(())
             }
         }
 
-        let calls = Rc::new(Cell::new(0));
+        let calls = Arc::new(AtomicUsize::new(0));
         let domain = Domain::new("pinned", Box::new(ZeroDerivative), make_mesh(3))
             .with_boundary_conditions(vec![Box::new(PinFirstNode {
                 value: -7.0,
@@ -513,7 +518,7 @@ mod tests {
         assert!((final_state[1] - 2.5).abs() < 1e-12);
 
         // 2 steps * 4 stages = 8 applications.
-        assert_eq!(calls.get(), 8);
+        assert_eq!(calls.load(Ordering::SeqCst), 8);
     }
 
     // ── Validation errors ─────────────────────────────────────────────────────

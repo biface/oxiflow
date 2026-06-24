@@ -239,7 +239,20 @@ pub enum BoundaryLocation {
 ///
 /// [`RequiresContext`]: crate::model::RequiresContext
 /// [`ComputeContext`]: crate::context::ComputeContext
-pub trait BoundaryCondition: RequiresContext + std::fmt::Debug {
+///
+/// # `Send + Sync` (DD-037)
+///
+/// Added alongside DD-037 (#45): [`crate::solver::methods::imex::SplitOperator`]
+/// is the first place in the engine where a `Domain` is *owned* by a type
+/// that must itself be `Send + Sync` (`Solver: Send + Sync`) rather than
+/// only borrowed as `&Domain`. Without this bound, `Box<dyn BoundaryCondition>`
+/// — and therefore `Domain` — would not be `Send + Sync`, and
+/// `OperatorSplittingSolver` could not implement `Solver`. Both concrete
+/// implementations (`DanckwertsInlet`, `DanckwertsOutlet`) already satisfy
+/// this trivially (plain `f64`/`ContextVariable` fields or no fields at
+/// all) — non-breaking in practice, though technically a new bound on the
+/// trait for any future external implementor.
+pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
     /// Returns the mathematical type of this boundary condition.
     ///
     /// Required — every implementation must declare whether it enforces a
