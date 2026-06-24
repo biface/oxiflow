@@ -331,8 +331,8 @@ mod tests {
     use super::*;
     use crate::context::compute::ComputeContext;
     use crate::context::variable::ContextVariable;
-    use crate::mesh::Mesh;
     use crate::mesh::structured::UniformGrid1D;
+    use crate::mesh::Mesh;
     use crate::model::{CompositeModel, PhysicalModel, RequiresContext};
     use crate::solver::config::{IntegratorKind, TimeConfiguration};
     use crate::solver::methods::euler::ForwardEulerSolver;
