@@ -5,7 +5,7 @@ milestone specifications, design invariants, ecosystem strategy, and decision lo
 all implementation work from v0.1 to v3.0.
 
 > **Current version:** v0.3.0 — Multi-Component
-> **Active development:** v0.3.0 complete — v0.4.0 (Integrators) in preparation
+> **Active development:** v0.4.0 (Integrators) — J4a temporal integrators closed (#41, #43, #44, #42); IMEX (#45) and serde annotations (#70) remaining
 > **Document version:** 2.1 — June 2026
 
 ---
@@ -82,7 +82,7 @@ boilerplate.
 | J1 — Core Architecture | v0.1.0  | ✅ Acquired  | ContextValue · OxiflowError · Mesh (INV-1)                         |
 | J2 — Complete Context  | v0.2.0  | ✅ Acquired  | Requiring BCs · topological ordering · built-in calculators        |
 | J3 — Multi-Component   | v0.3.0  | ✅ Acquired  | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3)     |
-| J4a — Integrators      | v0.4.0  | M+3          | Euler, RK4, DoPri45, Backward Euler, Crank–Nicolson, BDF2, IMEX   |
+| J4a — Integrators      | v0.4.0  | 🔄 6/7        | Euler, RK4, DoPri45, Backward Euler, Crank–Nicolson, BDF2, IMEX   |
 | J4b — Discretisation   | v0.5.0  | M+6          | DiscreteOperator (INV-2) · FD/FV · WENO3/5                         |
 | J5 — Performance       | v0.6.0  | M+9          | Rayon · dirty-flag cache · Criterion benchmarks · GPU (`wgpu`)     |
 | J6 — Ecosystem v1.0    | v1.0.0  | M+12         | 7 examples · FEM audit · stable API                                |
@@ -183,8 +183,36 @@ Proto lahar–lake example on regular grids — the regression base for v2.0 FEM
 
 ## 6. J4 — Solvers & Discretisation (v0.4–0.5)
 
-Temporal integrators: Forward Euler, RK4, DoPri45, Backward Euler, Crank–Nicolson, BDF2/3,
-IMEX (Strang splitting).
+### 6.1 J4a — Temporal Integrators (v0.4.0)
+
+| Integrator | Type | Status | Issue / DD |
+|---|---|---|---|
+| Forward Euler | Explicit, 1st order | ✅ Closed | #33, #41 |
+| RK4 | Explicit, 4th order | ✅ Closed | #41 |
+| Backward Euler | Implicit, 1st order | ✅ Closed | #43, DD-013, DD-033 |
+| Crank-Nicolson | Semi-implicit, 2nd order | ✅ Closed | #43, DD-013, DD-033 |
+| BDF2 | Implicit multi-step, 2nd order | ✅ Closed | #44, DD-034 |
+| DoPri45 | Adaptive explicit, order 5 | ✅ Closed | #42, DD-036 |
+| IMEX (Strang splitting) | Transport-reaction | 🔵 Open | #45 |
+
+Remaining for J4a exit: #45 (IMEX), #70 (serde `cfg_attr` annotations on J4 types, continuous).
+
+Architecture established along the way, reusable beyond J4a:
+
+- **`SteppableSolver`** (DD-031, DD-034) — per-step primitive (`step()`), bounded history via
+  `history_depth()` for multi-step methods (BDF2). Default `solve_fixed_step()` body (DD-035)
+  shared by every fixed-step integrator — each `Solver::solve()` above is a single call to it.
+- **`MultiDomainOrchestrator`** (DD-031) — drives several coupled domains, each with its own
+  `SteppableSolver`; `dt` synchronised across domains (multirate explicitly deferred).
+- **`LinearSolver`** (DD-013, `solver::linear`) — backend-agnostic `Ax=b`; `nalgebra` dense now,
+  `faer` sparse planned at v0.5.0 behind the same trait.
+- **`StepSizeController`** (DD-036, `solver::methods::step_control`) — error-source-agnostic
+  adaptive step control (PI controller); DoPri45 is the first consumer, a future adaptive
+  implicit solver (iterated Newton, DD-033) is the anticipated second.
+- DoPri45 implements `Solver` only, not `SteppableSolver` — choosing its own `dt` across calls is
+  in direct tension with the orchestrator's synchronised-`dt` v1 scope, not an orthogonal gap.
+
+### 6.2 J4b — Spatial Discretisation (v0.5.0)
 
 Abstract `DiscreteOperator` (INV-2) — integrators are generic over the scheme:
 
@@ -199,7 +227,8 @@ pub trait DiscreteOperator: Send + Sync {
 Spatial schemes: FD (upwind/centred, 1st/2nd order), WENO3/5, conservative FV,
 Lax–Wendroff, flux limiters (MinMod, Van Leer, Superbee), adaptive Péclet-based selection.
 
-Linear algebra delegated to `nalgebra` (dense) and `faer` (sparse).
+Linear algebra delegated to `nalgebra` (dense) and `faer` (sparse) — `faer` integration extends
+the `LinearSolver` trait already established at J4a (DD-013), not a new abstraction.
 
 ---
 

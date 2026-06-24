@@ -5,7 +5,7 @@ les spécifications de jalons, les invariants de conception, la stratégie d'éc
 journal de décisions qui guident l'ensemble du travail d'implémentation de v0.1 à v3.0.
 
 > **Version actuelle :** v0.3.0 — Multi-Component
-> **Développement actif :** v0.3.0 complet — v0.4.0 (Integrators) en préparation
+> **Développement actif :** v0.4.0 (Integrators) — intégrateurs temporels J4a clos (#41, #43, #44, #42) ; restent IMEX (#45) et les annotations serde (#70)
 > **Version du document :** 2.1 — Juin 2026
 
 ---
@@ -84,7 +84,7 @@ scientifiques spécifiques avec un minimum de code de plomberie.
 | J1 — Architecture cœur | v0.1.0 | ✅ Acquis | ContextValue · OxiflowError · Mesh (INV-1) |
 | J2 — Contexte complet | v0.2.0 | ✅ Acquis | BCs requirantes · ordonnancement topologique · calculateurs built-in |
 | J3 — Multi-composants | v0.3.0 | ✅ Acquis | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3) |
-| J4a — Intégrateurs | v0.4.0 | M+3 | Euler, RK4, DoPri45, Euler implicite, Crank-Nicolson, BDF2, IMEX |
+| J4a — Intégrateurs | v0.4.0 | 🔄 6/7 | Euler, RK4, DoPri45, Euler implicite, Crank-Nicolson, BDF2, IMEX |
 | J4b — Discrétisation | v0.5.0 | M+6 | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
 | J5 — Performance | v0.6.0 | ⏳ Planifié | Rayon · cache dirty-flag · benchmarks Criterion · GPU (`wgpu`) |
 | J6 — Écosystème v1.0 | v1.0.0 | M+12 | 7 exemples · audit FEM INV-1/2/3 · API stable |
@@ -185,8 +185,39 @@ Proto lahar–lac sur grilles régulières — base de régression pour la FEM v
 
 ## 6. J4 — Solveurs & Discrétisation (v0.4–0.5)
 
-Intégrateurs temporels : Euler explicite, RK4, DoPri45, Euler implicite, Crank–Nicolson,
-BDF2/3, IMEX (splitting de Strang).
+### 6.1 J4a — Intégrateurs temporels (v0.4.0)
+
+| Intégrateur | Type | Statut | Issue / DD |
+|---|---|---|---|
+| Forward Euler | Explicite, 1er ordre | ✅ Clos | #33, #41 |
+| RK4 | Explicite, 4e ordre | ✅ Clos | #41 |
+| Backward Euler | Implicite, 1er ordre | ✅ Clos | #43, DD-013, DD-033 |
+| Crank-Nicolson | Semi-implicite, 2e ordre | ✅ Clos | #43, DD-013, DD-033 |
+| BDF2 | Implicite multi-pas, 2e ordre | ✅ Clos | #44, DD-034 |
+| DoPri45 | Explicite adaptatif, ordre 5 | ✅ Clos | #42, DD-036 |
+| IMEX (splitting de Strang) | Transport-réaction | 🔵 Ouvert | #45 |
+
+Restant pour la sortie de J4a : #45 (IMEX), #70 (annotations serde `cfg_attr` sur les types J4,
+en continu).
+
+Architecture posée en chemin, réutilisable au-delà de J4a :
+
+- **`SteppableSolver`** (DD-031, DD-034) — primitive de pas (`step()`), historique borné via
+  `history_depth()` pour les méthodes multi-pas (BDF2). Corps `solve_fixed_step()` par défaut
+  (DD-035) partagé par tous les intégrateurs à pas fixe — chaque `Solver::solve()` ci-dessus est
+  un appel unique à cette méthode.
+- **`MultiDomainOrchestrator`** (DD-031) — pilote plusieurs domaines couplés, chacun avec son
+  propre `SteppableSolver` ; `dt` synchronisé entre domaines (multi-rate explicitement reporté).
+- **`LinearSolver`** (DD-013, `solver::linear`) — `Ax=b` indépendant du backend ; `nalgebra` dense
+  maintenant, `faer` creux prévu à v0.5.0 derrière le même trait.
+- **`StepSizeController`** (DD-036, `solver::methods::step_control`) — contrôle de pas adaptatif
+  indépendant de la source d'erreur (contrôleur PI) ; DoPri45 en est le premier consommateur, un
+  futur solveur implicite adaptatif (Newton itéré, DD-033) en est le second anticipé.
+- DoPri45 implémente `Solver` seul, pas `SteppableSolver` — choisir son propre `dt` d'un appel à
+  l'autre entre directement en tension avec le périmètre v1 à `dt` synchronisé de l'orchestrateur,
+  ce n'est pas un trou orthogonal.
+
+### 6.2 J4b — Discrétisation spatiale (v0.5.0)
 
 `DiscreteOperator` abstrait (INV-2) — les intégrateurs sont génériques sur le schéma :
 
@@ -201,7 +232,8 @@ pub trait DiscreteOperator: Send + Sync {
 Schémas spatiaux : FD décentrées/centrées, WENO3/5, FV conservatifs, Lax–Wendroff,
 limiteurs de flux (MinMod, Van Leer, Superbee), sélection adaptative selon le Péclet local.
 
-Algèbre linéaire déléguée à `nalgebra` (dense) et `faer` (creux).
+Algèbre linéaire déléguée à `nalgebra` (dense) et `faer` (creux) — l'intégration de `faer`
+prolonge le trait `LinearSolver` déjà posé à J4a (DD-013), pas une nouvelle abstraction.
 
 ---
 
