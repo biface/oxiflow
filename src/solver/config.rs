@@ -84,9 +84,9 @@ impl StepControl {
 
 /// Temporal integration method.
 ///
-/// `Euler` is active since J1; `RK4`, `BackwardEuler`, `CrankNicolson`
-/// since J4a (#41, #43). Other variants are reserved for J4 (adaptive,
-/// BDF2, IMEX).
+/// `Euler` is active since J1; `RK4`, `BackwardEuler`, `CrankNicolson`,
+/// `BDF2`, `DoPri45` since J4a (#41, #43, #44, #42). `IMEX` is reserved
+/// for J4.
 ///
 /// # Examples
 ///
@@ -108,13 +108,21 @@ pub enum IntegratorKind {
     BackwardEuler,
     /// Crank-Nicolson — semi-implicit, 2nd order — J4a (#43, DD-013, DD-033).
     CrankNicolson,
-    // Reserved J4 — DoPri45, BDF2, IMEX
+    /// BDF2 — implicit multi-step, 2nd order — J4a (#44, DD-034). Fixed
+    /// `dt` only; see `BDF2Solver` module docs for the deferred
+    /// variable-step formula.
+    BDF2,
+    /// Dormand-Prince DoPri45 — explicit, adaptive step, order 5 — J4a
+    /// (#42, DD-036). `Solver` only, not `SteppableSolver` — see
+    /// `DoPri45Solver` module docs.
+    DoPri45,
+    // Reserved J4 — IMEX
 }
 
 impl IntegratorKind {
     /// Returns `true` if the method is explicit.
     pub fn is_explicit(&self) -> bool {
-        matches!(self, Self::Euler | Self::RK4)
+        matches!(self, Self::Euler | Self::RK4 | Self::DoPri45)
     }
 }
 
@@ -303,6 +311,20 @@ mod tests {
     fn euler_and_rk4_are_explicit() {
         assert!(IntegratorKind::Euler.is_explicit());
         assert!(IntegratorKind::RK4.is_explicit());
+    }
+
+    #[test]
+    fn dopri45_is_explicit() {
+        // Dormand-Prince is an explicit RK pair -- no implicit solve,
+        // unlike BackwardEuler/CrankNicolson/BDF2 below.
+        assert!(IntegratorKind::DoPri45.is_explicit());
+    }
+
+    #[test]
+    fn implicit_methods_are_not_explicit() {
+        assert!(!IntegratorKind::BackwardEuler.is_explicit());
+        assert!(!IntegratorKind::CrankNicolson.is_explicit());
+        assert!(!IntegratorKind::BDF2.is_explicit());
     }
 
     #[test]

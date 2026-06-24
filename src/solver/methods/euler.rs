@@ -34,14 +34,10 @@
 //! The solver does not enforce this automatically — the caller is responsible
 //! for choosing a stable `dt`.
 
-use std::collections::HashMap;
-
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
-use crate::solver::chain::build_calculator_chain;
-use crate::solver::config::StepControl;
-use crate::solver::methods::{check_finite, evaluate_derivative, SteppableSolver};
+use crate::solver::methods::{evaluate_derivative, SteppableSolver};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -73,86 +69,7 @@ impl Solver for ForwardEulerSolver {
         scenario: &Scenario,
         config: &SolverConfiguration,
     ) -> Result<SimulationResult, OxiflowError> {
-        // ── Pre-solve validation ───────────────────────────────────────────────
-        scenario.validate()?;
-
-        let domain = scenario.single_domain()?;
-
-        let dt = match &config.time.step_control {
-            StepControl::Fixed { dt } => *dt,
-            _ => {
-                return Err(OxiflowError::InvalidDomain(
-                    "ForwardEulerSolver only supports StepControl::Fixed at J1".into(),
-                ))
-            }
-        };
-
-        let t_end = config.time.t_end;
-        let t_start = scenario.t_start;
-
-        if dt <= 0.0 {
-            return Err(OxiflowError::InvalidDomain(
-                "dt must be strictly positive".into(),
-            ));
-        }
-        if t_end <= t_start {
-            return Err(OxiflowError::InvalidDomain(
-                "t_end must be greater than t_start".into(),
-            ));
-        }
-
-        // ── Build calculator chain ─────────────────────────────────────────────
-        let requirements = scenario.context_requirements();
-        let chain = build_calculator_chain(&requirements, &config.calculators)?;
-
-        // ── Initial state ──────────────────────────────────────────────────────
-        let mut u = domain.model.initial_state(domain.mesh.as_ref());
-
-        // ── Step count ──────────────────────────────────────────────────────────
-        // Computed once from (t_end - t_start) / dt rather than accumulated via
-        // `t += dt` across the loop. Repeated floating-point addition drifts —
-        // 0.1 is not exactly representable in binary, and over thousands of
-        // steps the accumulated error becomes significant at RK4's O(dt^4)
-        // accuracy (chrom-rs hit this; same fix applies here). `.round()`
-        // absorbs the boundary slack the previous tolerance-based `while`
-        // condition handled.
-        let n_steps = ((t_end - t_start) / dt).round() as usize;
-
-        // ── Result buffers ─────────────────────────────────────────────────────
-        let save_every = config.time.save_every.unwrap_or(1);
-        let capacity = n_steps / save_every + 1;
-        let mut states: Vec<ContextValue> = Vec::with_capacity(capacity);
-        let mut times: Vec<f64> = Vec::with_capacity(capacity);
-
-        // Save initial state
-        states.push(u.clone());
-        times.push(t_start);
-
-        // ── Time loop ──────────────────────────────────────────────────────────
-        for step in 0..n_steps {
-            // Current step's time, computed directly from the index — see the
-            // note on `n_steps` above.
-            let t = t_start + (step as f64) * dt;
-            let t_next = t_start + ((step + 1) as f64) * dt;
-
-            u = self.step(domain, &chain, &mut u, t, dt)?;
-
-            // Guard against NaN / Inf
-            check_finite(&u, t_next)?;
-
-            // Save according to frequency
-            if (step + 1) % save_every == 0 {
-                states.push(u.clone());
-                times.push(t_next);
-            }
-        }
-
-        Ok(SimulationResult {
-            states,
-            times,
-            n_steps,
-            metadata: HashMap::new(),
-        })
+        self.solve_fixed_step(scenario, config)
     }
 }
 
@@ -162,9 +79,12 @@ impl SteppableSolver for ForwardEulerSolver {
         domain: &Domain,
         chain: &[&dyn ContextCalculator],
         state: &mut ContextValue,
+        _history: &[ContextValue],
         t: f64,
         dt: f64,
     ) -> Result<ContextValue, OxiflowError> {
+        // history_depth() defaults to 0 -- Euler is a one-step method,
+        // `_history` is always empty here and intentionally unused.
         // Contractual order (calculators -> BCs -> compute_physics) is
         // enforced once, here, for both Euler and RK4 — see
         // `solver::methods::evaluate_derivative`. `state` is corrected
@@ -479,7 +399,7 @@ mod tests {
                 .unwrap();
         let mut u = domain.model.initial_state(domain.mesh.as_ref());
         let next = ForwardEulerSolver
-            .step(domain, &chain, &mut u, 0.0, 0.1)
+            .step(domain, &chain, &mut u, &[], 0.0, 0.1)
             .unwrap();
         let final_via_step = next.as_scalar_field().unwrap();
 

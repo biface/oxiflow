@@ -29,15 +29,11 @@
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
-use crate::solver::chain::build_calculator_chain;
-use crate::solver::config::StepControl;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 use crate::solver::methods::implicit::theta_method_step;
-use crate::solver::methods::{check_finite, SteppableSolver};
+use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
-
-use std::collections::HashMap;
 
 /// Backward Euler solver — implicit, 1st order.
 ///
@@ -81,66 +77,7 @@ impl Solver for BackwardEulerSolver {
         scenario: &Scenario,
         config: &SolverConfiguration,
     ) -> Result<SimulationResult, OxiflowError> {
-        scenario.validate()?;
-        let domain = scenario.single_domain()?;
-
-        let dt = match &config.time.step_control {
-            StepControl::Fixed { dt } => *dt,
-            _ => {
-                return Err(OxiflowError::InvalidDomain(
-                    "BackwardEulerSolver only supports StepControl::Fixed at J4a".into(),
-                ))
-            }
-        };
-
-        let t_end = config.time.t_end;
-        let t_start = scenario.t_start;
-
-        if dt <= 0.0 {
-            return Err(OxiflowError::InvalidDomain(
-                "dt must be strictly positive".into(),
-            ));
-        }
-        if t_end <= t_start {
-            return Err(OxiflowError::InvalidDomain(
-                "t_end must be greater than t_start".into(),
-            ));
-        }
-
-        let requirements = scenario.context_requirements();
-        let chain = build_calculator_chain(&requirements, &config.calculators)?;
-
-        let mut u = domain.model.initial_state(domain.mesh.as_ref());
-
-        let n_steps = ((t_end - t_start) / dt).round() as usize;
-        let save_every = config.time.save_every.unwrap_or(1);
-        let capacity = n_steps / save_every + 1;
-        let mut states: Vec<ContextValue> = Vec::with_capacity(capacity);
-        let mut times: Vec<f64> = Vec::with_capacity(capacity);
-
-        states.push(u.clone());
-        times.push(t_start);
-
-        for step in 0..n_steps {
-            let t = t_start + (step as f64) * dt;
-            let t_next = t_start + ((step + 1) as f64) * dt;
-
-            u = self.step(domain, &chain, &mut u, t, dt)?;
-
-            check_finite(&u, t_next)?;
-
-            if (step + 1) % save_every == 0 {
-                states.push(u.clone());
-                times.push(t_next);
-            }
-        }
-
-        Ok(SimulationResult {
-            states,
-            times,
-            n_steps,
-            metadata: HashMap::new(),
-        })
+        self.solve_fixed_step(scenario, config)
     }
 }
 
@@ -150,9 +87,12 @@ impl SteppableSolver for BackwardEulerSolver {
         domain: &Domain,
         chain: &[&dyn ContextCalculator],
         state: &mut ContextValue,
+        _history: &[ContextValue],
         t: f64,
         dt: f64,
     ) -> Result<ContextValue, OxiflowError> {
+        // history_depth() defaults to 0 -- Backward Euler is a one-step
+        // method, `_history` is always empty here and intentionally unused.
         theta_method_step(
             domain,
             chain,
@@ -174,7 +114,9 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::mesh::{Mesh, UniformGrid1D};
     use crate::model::traits::{PhysicalModel, RequiresContext};
-    use crate::solver::config::{IntegratorKind, SolverConfiguration, TimeConfiguration};
+    use crate::solver::config::{
+        IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration,
+    };
     use nalgebra::{DMatrix, DVector};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -344,7 +286,7 @@ mod tests {
             crate::solver::chain::build_calculator_chain(&requirements, &config.calculators)
                 .unwrap();
         let mut u = domain.model.initial_state(domain.mesh.as_ref());
-        let next = solver.step(domain, &chain, &mut u, 0.0, 0.1).unwrap();
+        let next = solver.step(domain, &chain, &mut u, &[], 0.0, 0.1).unwrap();
         let final_via_step = next.as_scalar_field().unwrap();
 
         assert_eq!(final_via_solve.len(), final_via_step.len());

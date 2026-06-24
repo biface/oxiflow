@@ -45,7 +45,7 @@ use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
 use crate::context::quantity::PhysicalQuantity;
 use crate::context::state::MultiDomainState;
-use crate::context::ContextCalculator;
+use crate::context::{ContextCalculator, ContextValue};
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::{StepControl, TimeConfiguration};
 use crate::solver::methods::{check_finite, SteppableSolver};
@@ -245,6 +245,15 @@ impl MultiDomainOrchestrator {
             multi_state.set(domain.id.clone(), quantity, initial);
         }
 
+        // Per-domain history buffers, sized to each domain's own solver
+        // (DD-034) — empty for one-step methods (history_depth() == 0,
+        // the default), populated for multi-step ones (BDF2: depth 1).
+        let mut histories: HashMap<DomainId, Vec<ContextValue>> = scenario
+            .domains()
+            .iter()
+            .map(|d| (d.id.clone(), Vec::new()))
+            .collect();
+
         let mut states: Vec<MultiDomainState> = Vec::with_capacity(capacity);
         let mut times: Vec<f64> = Vec::with_capacity(capacity);
         states.push(multi_state.clone());
@@ -270,7 +279,22 @@ impl MultiDomainOrchestrator {
                     })?
                     .clone();
 
-                let next_state = solver.step(domain, &chain, &mut state, t, dt)?;
+                let next_state = {
+                    let history = &histories[&domain.id];
+                    solver.step(domain, &chain, &mut state, history, t, dt)?
+                };
+
+                // `state` was mutated in-place by BC application inside
+                // `step()` above -- push *that* corrected u^n into history
+                // (depth-capped per the solver's own declared need), not
+                // the pre-correction value.
+                let depth = solver.history_depth();
+                if depth > 0 {
+                    let hist = histories.get_mut(&domain.id).unwrap();
+                    hist.insert(0, state);
+                    hist.truncate(depth);
+                }
+
                 multi_state.set(domain.id.clone(), quantity, next_state);
             }
 
