@@ -7,7 +7,9 @@
 //! the solving nor orchestrate the time loop — those are the responsibilities of
 //! `SolverConfiguration` and `Solver`.
 
+pub mod composite;
 pub mod traits;
 
+pub use composite::CompositeModel;
 pub use traits::PhysicalModel;
 pub use traits::RequiresContext;
