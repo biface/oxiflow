@@ -85,8 +85,7 @@ impl StepControl {
 /// Temporal integration method.
 ///
 /// `Euler` is active since J1; `RK4`, `BackwardEuler`, `CrankNicolson`,
-/// `BDF2`, `DoPri45` since J4a (#41, #43, #44, #42). `IMEX` is reserved
-/// for J4.
+/// `BDF2`, `DoPri45`, `Imex` since J4a (#41, #43, #44, #42, #45).
 ///
 /// # Examples
 ///
@@ -116,7 +115,12 @@ pub enum IntegratorKind {
     /// (#42, DD-036). `Solver` only, not `SteppableSolver` — see
     /// `DoPri45Solver` module docs.
     DoPri45,
-    // Reserved J4 — IMEX
+    /// Operator splitting (Strang) — n ≥ 2 sub-models, each with its own
+    /// integrator — J4a (#45, DD-037). `Solver` only, not
+    /// `SteppableSolver` — see `OperatorSplittingSolver` module docs.
+    /// Neither purely explicit nor purely implicit — excluded from
+    /// `is_explicit()`.
+    Imex,
 }
 
 impl IntegratorKind {
