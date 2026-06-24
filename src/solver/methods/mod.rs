@@ -12,12 +12,7 @@
 //! | [`crank_nicolson::CrankNicolsonSolver`] | Semi-implicit, 2nd order | #43, DD-013, DD-033 |
 //! | [`bdf2::BDF2Solver`] | Implicit multi-step, 2nd order | #44, DD-034 |
 //! | [`dopri45::DoPri45Solver`] | Adaptive explicit, order 5 | #42, DD-036 |
-//!
-//! ## Reserved — J4 (v0.4.0)
-//!
-//! | Method | Type | Note |
-//! |---|---|---|
-//! | `IMEXSolver` | Strang splitting | Transport-reaction |
+//! | [`imex::OperatorSplittingSolver`] | Operator splitting (Strang), n ≥ 2 | #45, DD-037 |
 //!
 //! All integrators are decoupled from the spatial scheme via
 //! `DiscreteOperator<M: Mesh>` (INV-2, J4b) — no FD/FV/FEM
@@ -56,12 +51,20 @@
 //! [`step_control`] (DD-036) for the shared piece adaptive methods *do*
 //! get: the step-size controller itself, decoupled from any specific
 //! integrator's error source.
+//!
+//! [`imex::OperatorSplittingSolver`] (DD-037, #45) also implements `Solver`
+//! directly rather than `SteppableSolver` — same posture as DoPri45: each
+//! of its sub-operators already carries its own `Domain`, so fitting it
+//! into the single-`Domain`-per-step shape of `SteppableSolver::step`
+//! would reopen the multi-domain orchestration question for a need #45
+//! never asked for.
 
 pub mod backward_euler;
 pub mod bdf2;
 pub mod crank_nicolson;
 pub mod dopri45;
 pub mod euler;
+pub mod imex;
 pub mod implicit;
 pub mod rk4;
 pub mod step_control;
@@ -71,6 +74,7 @@ pub use bdf2::BDF2Solver;
 pub use crank_nicolson::CrankNicolsonSolver;
 pub use dopri45::DoPri45Solver;
 pub use euler::ForwardEulerSolver;
+pub use imex::{OperatorSplittingSolver, SplitOperator, SplittingScheme};
 pub use rk4::RK4Solver;
 pub use step_control::StepSizeController;
 
