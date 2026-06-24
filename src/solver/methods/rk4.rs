@@ -53,16 +53,12 @@
 //! $\text{CFL} = v\,\Delta t / \Delta x \leq 1$ still bounds the usable
 //! step size. The solver does not enforce this automatically.
 
-use std::collections::HashMap;
-
 use nalgebra::DVector;
 
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
-use crate::solver::chain::build_calculator_chain;
-use crate::solver::config::StepControl;
-use crate::solver::methods::{check_finite, evaluate_derivative, SteppableSolver};
+use crate::solver::methods::{evaluate_derivative, SteppableSolver};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -92,79 +88,7 @@ impl Solver for RK4Solver {
         scenario: &Scenario,
         config: &SolverConfiguration,
     ) -> Result<SimulationResult, OxiflowError> {
-        // ── Pre-solve validation ───────────────────────────────────────────────
-        scenario.validate()?;
-
-        let domain = scenario.single_domain()?;
-
-        let dt = match &config.time.step_control {
-            StepControl::Fixed { dt } => *dt,
-            _ => {
-                return Err(OxiflowError::InvalidDomain(
-                    "RK4Solver only supports StepControl::Fixed at J4a".into(),
-                ))
-            }
-        };
-
-        let t_end = config.time.t_end;
-        let t_start = scenario.t_start;
-
-        if dt <= 0.0 {
-            return Err(OxiflowError::InvalidDomain(
-                "dt must be strictly positive".into(),
-            ));
-        }
-        if t_end <= t_start {
-            return Err(OxiflowError::InvalidDomain(
-                "t_end must be greater than t_start".into(),
-            ));
-        }
-
-        // ── Build calculator chain ─────────────────────────────────────────────
-        let requirements = scenario.context_requirements();
-        let chain = build_calculator_chain(&requirements, &config.calculators)?;
-
-        // ── Initial state ──────────────────────────────────────────────────────
-        let mut u = domain.model.initial_state(domain.mesh.as_ref());
-
-        // ── Step count ──────────────────────────────────────────────────────────
-        // Computed once, same rationale as `ForwardEulerSolver` — see its
-        // module docs. Critical here in particular: RK4's O(dt^4) accuracy
-        // is the whole point of the method, and thousands of steps of
-        // accumulated `t += dt` drift would erode exactly the precision the
-        // method is chosen for.
-        let n_steps = ((t_end - t_start) / dt).round() as usize;
-
-        // ── Result buffers ─────────────────────────────────────────────────────
-        let save_every = config.time.save_every.unwrap_or(1);
-        let capacity = n_steps / save_every + 1;
-        let mut states: Vec<ContextValue> = Vec::with_capacity(capacity);
-        let mut times: Vec<f64> = Vec::with_capacity(capacity);
-
-        states.push(u.clone());
-        times.push(t_start);
-
-        // ── Time loop ──────────────────────────────────────────────────────────
-        for step in 0..n_steps {
-            let t = t_start + (step as f64) * dt;
-            let t_next = t_start + ((step + 1) as f64) * dt;
-
-            u = self.step(domain, &chain, &mut u, t, dt)?;
-
-            check_finite(&u, t_next)?;
-
-            if (step + 1) % save_every == 0 {
-                states.push(u.clone());
-                times.push(t_next);
-            }
-        }
-
-        Ok(SimulationResult {
-            states,
-            times,
-            n_steps,
-            metadata: HashMap::new(),
-        })
+        self.solve_fixed_step(scenario, config)
     }
 }
 
@@ -174,9 +98,12 @@ impl SteppableSolver for RK4Solver {
         domain: &Domain,
         chain: &[&dyn ContextCalculator],
         state: &mut ContextValue,
+        _history: &[ContextValue],
         t: f64,
         dt: f64,
     ) -> Result<ContextValue, OxiflowError> {
+        // history_depth() defaults to 0 -- RK4 is a one-step method,
+        // `_history` is always empty here and intentionally unused.
         let half_dt = dt / 2.0;
 
         // Stage 1: k1 = f(t, u). BCs are applied to `state` itself here —
@@ -512,7 +439,9 @@ mod tests {
             crate::solver::chain::build_calculator_chain(&requirements, &config.calculators)
                 .unwrap();
         let mut u = domain.model.initial_state(domain.mesh.as_ref());
-        let next = RK4Solver.step(domain, &chain, &mut u, 0.0, 0.1).unwrap();
+        let next = RK4Solver
+            .step(domain, &chain, &mut u, &[], 0.0, 0.1)
+            .unwrap();
         let final_via_step = next.as_scalar_field().unwrap();
 
         assert_eq!(final_via_solve.len(), final_via_step.len());
