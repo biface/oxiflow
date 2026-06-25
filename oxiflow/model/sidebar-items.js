@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["traits"]};
+window.SIDEBAR_ITEMS = {"mod":["composite","traits"]};

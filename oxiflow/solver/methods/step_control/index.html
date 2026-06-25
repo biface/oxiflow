@@ -1,0 +1,36 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::methods::step_control`"><title>oxiflow::solver::methods::step_control - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.96.0 (ac68faa20 2026-05-25)" data-channel="1.96.0" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module step_control</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module step_<wbr>control</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodsstep_control" title="Module `solver::methods::step_control`">Module <code>solver::methods::step_control</code></a><ul><li><a href="#why-this-is-separate-from-dopri45rs" title="Why this is separate from `dopri45.rs`">Why this is separate from <code>dopri45.rs</code></a></li><li><a href="#error-norm-convention" title="Error norm convention">Error norm convention</a></li><li><a href="#controller" title="Controller">Controller</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>step_<wbr>control</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/step_control.rs.html#1-254">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodsstep_control"><a class="doc-anchor" href="#module-solvermethodsstep_control">§</a>Module <code>solver::methods::step_control</code></h2>
+<p>Adaptive step-size control — shared machinery for variable-step
+integrators (DD-036).</p>
+<h3 id="why-this-is-separate-from-dopri45rs"><a class="doc-anchor" href="#why-this-is-separate-from-dopri45rs">§</a>Why this is separate from <code>dopri45.rs</code></h3>
+<p><a href="struct.StepSizeController.html" title="struct oxiflow::solver::methods::step_control::StepSizeController"><code>StepSizeController</code></a> knows nothing about Runge-Kutta, Butcher
+tableaux, or any specific integrator — it takes a single abstract
+error norm in and produces an accept/reject decision and a new <code>dt</code>
+out. <a href="../dopri45/struct.DoPri45Solver.html" title="struct oxiflow::solver::methods::dopri45::DoPri45Solver"><code>DoPri45Solver</code></a> is the first
+consumer (the error norm comes from the embedded RK4/5 difference),
+but a future adaptive implicit solver (deferred, see DD-033’s note on
+iterated Newton) would plug in the same controller with a different
+error source: the usual truncation-error norm when Newton converges,
+or a forced rejection when it doesn’t — a guard applied <em>before</em>
+calling the controller, not a change to the controller itself.</p>
+<h3 id="error-norm-convention"><a class="doc-anchor" href="#error-norm-convention">§</a>Error norm convention</h3>
+<p>Per-component error is scaled against <code>atol + rtol * |u|</code> and combined
+as an RMS norm — the standard convention (Hairer, Nørsett &amp; Wanner,
+<em>Solving Ordinary Differential Equations I</em>, §II.4). A norm <code>&lt;= 1.0</code>
+means the step satisfies the requested tolerance.</p>
+<h3 id="controller"><a class="doc-anchor" href="#controller">§</a>Controller</h3>
+<p>A PI (proportional-integral) controller (Gustafsson): the new <code>dt</code>
+depends on both the current error and the previous one, which damps
+oscillation in <code>dt</code> better than plain proportional control. Falls back
+to proportional-only on the very first call (no previous error yet).</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.StepSizeController.html" title="struct oxiflow::solver::methods::step_control::StepSizeController">Step<wbr>Size<wbr>Controller</a></dt><dd>Adaptive step-size controller — error-source-agnostic (see <a href="index.html" title="mod oxiflow::solver::methods::step_control">module
+docs</a>).</dd></dl></section></div></main></body></html>

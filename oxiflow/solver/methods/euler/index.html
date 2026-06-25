@@ -8,20 +8,26 @@
         ]
     });">
 </script>
-</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module euler</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module euler</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodseuler" title="Module `solver::methods::euler`">Module <code>solver::methods::euler</code></a><ul><li><a href="#algorithm" title="Algorithm">Algorithm</a></li><li><a href="#scope-at-j1" title="Scope at J1">Scope at J1</a></li><li><a href="#stability" title="Stability">Stability</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>euler</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/euler.rs.html#1-430">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodseuler"><a class="doc-anchor" href="#module-solvermethodseuler">§</a>Module <code>solver::methods::euler</code></h2>
-<p>Forward Euler integrator — explicit, 1st order (issue #33).</p>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module euler</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module euler</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodseuler" title="Module `solver::methods::euler`">Module <code>solver::methods::euler</code></a><ul><li><a href="#algorithm" title="Algorithm">Algorithm</a></li><li><a href="#scope-at-j4a" title="Scope at J4a">Scope at J4a</a></li><li><a href="#stability" title="Stability">Stability</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>euler</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/euler.rs.html#1-545">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodseuler"><a class="doc-anchor" href="#module-solvermethodseuler">§</a>Module <code>solver::methods::euler</code></h2>
+<p>Forward Euler integrator — explicit, 1st order (issues #33, #41).</p>
 <h3 id="algorithm"><a class="doc-anchor" href="#algorithm">§</a>Algorithm</h3>
 <p>At each time step:</p>
 <p>$$u^{n+1} = u^n + \Delta t \cdot f(u^n, \text{ctx}^n)$$</p>
 <p>where $f = \text{compute_physics}(u, \text{ctx})$ is the time derivative
-returned by the physical model.</p>
-<h3 id="scope-at-j1"><a class="doc-anchor" href="#scope-at-j1">§</a>Scope at J1</h3>
+returned by the physical model, evaluated on <code>u</code> <em>after</em> boundary
+conditions have been enforced (see [<code>super::evaluate_derivative</code>]).</p>
+<h3 id="scope-at-j4a"><a class="doc-anchor" href="#scope-at-j4a">§</a>Scope at J4a</h3>
 <ul>
-<li>Single-domain scenarios only (<code>n_domains() == 1</code>).</li>
+<li>Single-domain scenarios only (<code>n_domains() == 1</code>). Multi-domain
+scenarios with <code>CouplingOperator</code> are out of scope for this solver —
+see #40 for the dedicated multi-domain proto.</li>
 <li>No <code>DiscreteOperator</code> (INV-2) — spatial schemes arrive at J4b.
 The model computes <code>du/dt</code> internally from the field state and context.</li>
-<li>No boundary conditions — <code>BoundaryCondition</code> arrives at J2.</li>
-<li><code>StepControl::Fixed { dt }</code> only — adaptive step at J4.</li>
+<li>Boundary conditions ARE applied (since v0.2.0 / DD-008) — fixed in #41;
+the original J1 implementation predated <code>BoundaryCondition</code> and never
+called it, silently violating the contractual order documented in
+<a href="../../index.html" title="mod oxiflow::solver"><code>crate::solver</code></a>.</li>
+<li><code>StepControl::Fixed { dt }</code> only — adaptive step at J4 (DoPri45).</li>
 </ul>
 <h3 id="stability"><a class="doc-anchor" href="#stability">§</a>Stability</h3>
 <p>For explicit methods, stability requires the CFL condition:</p>

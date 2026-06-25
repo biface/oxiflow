@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["euler"]};
+window.SIDEBAR_ITEMS = {"mod":["backward_euler","bdf2","crank_nicolson","dopri45","euler","imex","implicit","rk4","step_control"],"trait":["SteppableSolver"]};

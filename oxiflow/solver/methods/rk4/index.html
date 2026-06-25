@@ -1,0 +1,53 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::methods::rk4`"><title>oxiflow::solver::methods::rk4 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.96.0 (ac68faa20 2026-05-25)" data-channel="1.96.0" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module rk4</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module rk4</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodsrk4" title="Module `solver::methods::rk4`">Module <code>solver::methods::rk4</code></a><ul><li><a href="#algorithm" title="Algorithm">Algorithm</a></li><li><a href="#boundary-conditions-across-stages" title="Boundary conditions across stages">Boundary conditions across stages</a></li><li><a href="#scope-at-j4a" title="Scope at J4a">Scope at J4a</a></li><li><a href="#stability" title="Stability">Stability</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>rk4</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/rk4.rs.html#1-618">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodsrk4"><a class="doc-anchor" href="#module-solvermethodsrk4">§</a>Module <code>solver::methods::rk4</code></h2>
+<p>Classical Runge-Kutta 4 integrator — explicit, 4th order (issue #41).</p>
+<h3 id="algorithm"><a class="doc-anchor" href="#algorithm">§</a>Algorithm</h3>
+<p>At each time step, four stage derivatives are evaluated:</p>
+<p>$$
+\begin{aligned}
+k_1 &amp;= f(t,\ u) \
+k_2 &amp;= f(t + \tfrac{\Delta t}{2},\ u + \tfrac{\Delta t}{2} k_1) \
+k_3 &amp;= f(t + \tfrac{\Delta t}{2},\ u + \tfrac{\Delta t}{2} k_2) \
+k_4 &amp;= f(t + \Delta t,\ u + \Delta t, k_3)
+\end{aligned}
+$$</p>
+<p>combined into the step:</p>
+<p>$$u^{n+1} = u^n + \frac{\Delta t}{6}\left(k_1 + 2k_2 + 2k_3 + k_4\right)$$</p>
+<p>where $f = \text{compute_physics}(u, \text{ctx})$, evaluated on a state
+that has had boundary conditions enforced for <em>that</em> stage — see
+[<code>super::evaluate_derivative</code>].</p>
+<h3 id="boundary-conditions-across-stages"><a class="doc-anchor" href="#boundary-conditions-across-stages">§</a>Boundary conditions across stages</h3>
+<p>Each of the four stages is a separate derivative evaluation, so each one
+gets its own boundary-condition application via
+[<code>super::apply_boundary_conditions</code>] — on <code>u</code> itself for stage 1, and on
+the transient intermediate states (<code>u + scale * k_i</code>) for stages 2-4. A
+Dirichlet value enforced only once per outer step would otherwise drift
+across the intermediate evaluations.</p>
+<p><code>t</code> passed to <a href="../../../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext"><code>crate::context::compute::ComputeContext</code></a> varies per
+stage (<code>t</code>, <code>t + dt/2</code>, <code>t + dt/2</code>, <code>t + dt</code>); <code>dt</code> itself is the
+<em>outer</em> step size for all four stages — it identifies the configured
+step, not a per-stage time delta.</p>
+<h3 id="scope-at-j4a"><a class="doc-anchor" href="#scope-at-j4a">§</a>Scope at J4a</h3>
+<ul>
+<li>Single-domain scenarios only (<code>n_domains() == 1</code>) — same restriction
+as <code>ForwardEulerSolver</code>. Multi-domain <code>CouplingOperator</code> scenarios are
+out of scope; see #40 for the dedicated multi-domain proto.</li>
+<li>No <code>DiscreteOperator</code> (INV-2) — spatial schemes arrive at J4b.</li>
+<li><code>StepControl::Fixed { dt }</code> only — adaptive step control is DoPri45’s
+job (reserved, J4).</li>
+</ul>
+<h3 id="stability"><a class="doc-anchor" href="#stability">§</a>Stability</h3>
+<p>Classical RK4 has a larger stability region than forward Euler along the
+imaginary axis, but is still explicit: the CFL condition
+$\text{CFL} = v,\Delta t / \Delta x \leq 1$ still bounds the usable
+step size. The solver does not enforce this automatically.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.RK4Solver.html" title="struct oxiflow::solver::methods::rk4::RK4Solver">RK4Solver</a></dt><dd>Classical Runge-Kutta 4 solver — explicit, 4th order.</dd></dl></section></div></main></body></html>

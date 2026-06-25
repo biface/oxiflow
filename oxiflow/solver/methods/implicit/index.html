@@ -1,0 +1,43 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::methods::implicit`"><title>oxiflow::solver::methods::implicit - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.96.0 (ac68faa20 2026-05-25)" data-channel="1.96.0" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module implicit</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module implicit</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodsimplicit" title="Module `solver::methods::implicit`">Module <code>solver::methods::implicit</code></a><ul><li><a href="#why-a-single-shared-function-for-two-methods" title="Why a single shared function for two methods">Why a single shared function for two methods</a></li><li><a href="#v1-scope--frozen-jacobian-single-correction-dd-033" title="v1 scope — frozen Jacobian, single correction (DD-033)">v1 scope — frozen Jacobian, single correction (DD-033)</a></li><li><a href="#known-untested-limitation--boundary-conditions" title="Known untested limitation — boundary conditions">Known untested limitation — boundary conditions</a></li></ul></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>implicit</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/implicit.rs.html#1-305">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodsimplicit"><a class="doc-anchor" href="#module-solvermethodsimplicit">§</a>Module <code>solver::methods::implicit</code></h2>
+<p>Shared machinery for implicit (theta-method) integrators — DD-033.</p>
+<p><a href="../backward_euler/struct.BackwardEulerSolver.html" title="struct oxiflow::solver::methods::backward_euler::BackwardEulerSolver"><code>BackwardEulerSolver</code></a> (θ=1)
+and <a href="../crank_nicolson/struct.CrankNicolsonSolver.html" title="struct oxiflow::solver::methods::crank_nicolson::CrankNicolsonSolver"><code>CrankNicolsonSolver</code></a>
+(θ=0.5) are thin wrappers around [<code>theta_method_step</code>], which itself
+relies on [<code>finite_difference_jacobian</code>].</p>
+<h3 id="why-a-single-shared-function-for-two-methods"><a class="doc-anchor" href="#why-a-single-shared-function-for-two-methods">§</a>Why a single shared function for two methods</h3>
+<p>The generalised theta method is:</p>
+<p>$$u^{n+1} = u^n + \Delta t\left[(1-\theta) f(u^n) + \theta f(u^{n+1})\right]$$</p>
+<p>Linearising the residual $g(u) = u - u^n - \Delta t[(1-\theta)f(u^n) +
+\theta f(u)]$ at $u = u^n$ gives $g(u^n) = -\Delta t \cdot f(u^n)$ for
+<strong>any</strong> $\theta$ — the right-hand side of the linear correction doesn’t
+depend on θ at all. Only the system matrix does
+($I - \theta \Delta t J_f$). One function, one parameter.</p>
+<h3 id="v1-scope--frozen-jacobian-single-correction-dd-033"><a class="doc-anchor" href="#v1-scope--frozen-jacobian-single-correction-dd-033">§</a>v1 scope — frozen Jacobian, single correction (DD-033)</h3>
+<p>[<code>theta_method_step</code>] performs exactly <strong>one</strong> Newton-style correction,
+with the Jacobian frozen at $u^n$. This is exact when <code>compute_physics</code>
+is affine in <code>u</code> — the stiff <em>linear</em> test problems these methods
+target (<code>λΔt ≫ 1</code>) — and a first-order approximation otherwise.</p>
+<p>A future nonlinear solver (Newton iterated to convergence, v0.6.0–v1.0.0,
+DD-033) would call this same function repeatedly, re-evaluating
+[<code>finite_difference_jacobian</code>] at each updated guess if the frozen
+approximation is dropped — neither function needs rewriting, only the
+calling loop changes.</p>
+<h3 id="known-untested-limitation--boundary-conditions"><a class="doc-anchor" href="#known-untested-limitation--boundary-conditions">§</a>Known untested limitation — boundary conditions</h3>
+<p>[<code>finite_difference_jacobian</code>] perturbs each component of the state and
+re-evaluates [<code>evaluate_derivative</code>], which re-applies boundary
+conditions on every call. A Dirichlet-constrained node will have its
+perturbation overwritten before <code>compute_physics</code> sees it — physically
+correct (a BC-constrained node isn’t a free unknown), but <strong>no test
+case exercises this yet</strong>. Validate explicitly before using an implicit
+solver on a domain with boundary conditions.</p>
+</div></details></section></div></main></body></html>

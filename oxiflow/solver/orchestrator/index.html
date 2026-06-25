@@ -1,0 +1,45 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::orchestrator`"><title>oxiflow::solver::orchestrator - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.96.0 (ac68faa20 2026-05-25)" data-channel="1.96.0" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module orchestrator</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.3.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module orchestrator</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solverorchestrator" title="Module `solver::orchestrator`">Module <code>solver::orchestrator</code></a><ul><li><a href="#why-this-exists" title="Why this exists">Why this exists</a></li><li><a href="#scope-v1" title="Scope (v1)">Scope (v1)</a></li><li><a href="#per-step-order" title="Per-step order">Per-step order</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a></div><h1>Module <span>orchestrator</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/orchestrator.rs.html#1-642">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solverorchestrator"><a class="doc-anchor" href="#module-solverorchestrator">§</a>Module <code>solver::orchestrator</code></h2>
+<p>Multi-domain orchestration — DD-031.</p>
+<h3 id="why-this-exists"><a class="doc-anchor" href="#why-this-exists">§</a>Why this exists</h3>
+<p><a href="../trait.Solver.html" title="trait oxiflow::solver::Solver"><code>Solver</code></a> is deliberately single-domain — it
+drives one <a href="../scenario/struct.Domain.html" title="struct oxiflow::solver::scenario::Domain"><code>Domain</code></a> through a full
+time range. Coupled scenarios
+(lahar–lake, #40) need several domains advancing together, each
+exchanging state with the others via
+<a href="../../coupling/trait.CouplingOperator.html" title="trait oxiflow::coupling::CouplingOperator"><code>CouplingOperator</code></a> (INV-3,
+DD-011) between steps.</p>
+<p>Rather than generalising <code>Solver</code>/<code>SimulationResult</code> for this — which
+would force every coupled domain through the same integrator —
+<a href="struct.MultiDomainOrchestrator.html" title="struct oxiflow::solver::orchestrator::MultiDomainOrchestrator"><code>MultiDomainOrchestrator</code></a> drives one <a href="../methods/trait.SteppableSolver.html" title="trait oxiflow::solver::methods::SteppableSolver"><code>SteppableSolver</code></a> <em>per domain</em>,
+so the lahar domain can run <code>ForwardEulerSolver</code> while the lake domain
+runs <code>RK4Solver</code>, or any other combination.</p>
+<h3 id="scope-v1"><a class="doc-anchor" href="#scope-v1">§</a>Scope (v1)</h3>
+<p><code>dt</code> is synchronised across all domains: every domain advances by the
+same step before couplings are applied. Per-domain <code>dt</code> (multirate /
+sub-cycling) is a substantially harder problem — interface time
+interpolation, coupling stability — deliberately deferred until a
+concrete case requires it (see DD-031).</p>
+<h3 id="per-step-order"><a class="doc-anchor" href="#per-step-order">§</a>Per-step order</h3>
+<p>At each synchronised step:</p>
+<ol>
+<li><strong>Advance every domain</strong> by one step, each via its own registered
+<code>SteppableSolver</code> (which itself follows the contractual
+calculators → boundary conditions → <code>compute_physics</code> order, see
+<a href="../index.html" title="mod oxiflow::solver"><code>crate::solver</code></a>).</li>
+<li><strong>Apply every registered <code>CouplingOperator</code></strong>, in declaration order,
+each reading the just-updated <a href="../../context/state/struct.MultiDomainState.html" title="struct oxiflow::context::state::MultiDomainState"><code>MultiDomainState</code></a> and returning an
+updated one.</li>
+<li><strong>Guard against divergence</strong> across all domains.</li>
+</ol>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.MultiDomainOrchestrator.html" title="struct oxiflow::solver::orchestrator::MultiDomainOrchestrator">Multi<wbr>Domain<wbr>Orchestrator</a></dt><dd>Drives multiple coupled <a href="../scenario/struct.Domain.html" title="struct oxiflow::solver::scenario::Domain"><code>Domain</code></a>s,
+each with its own <a href="../methods/trait.SteppableSolver.html" title="trait oxiflow::solver::methods::SteppableSolver"><code>SteppableSolver</code></a>.</dd><dt><a class="struct" href="struct.MultiDomainSimulationResult.html" title="struct oxiflow::solver::orchestrator::MultiDomainSimulationResult">Multi<wbr>Domain<wbr>Simulation<wbr>Result</a></dt><dd>Result of a completed multi-domain orchestrated run.</dd><dt><a class="struct" href="struct.OrchestratorConfig.html" title="struct oxiflow::solver::orchestrator::OrchestratorConfig">Orchestrator<wbr>Config</a></dt><dd>Configuration shared by every domain in an orchestrated run.</dd></dl></section></div></main></body></html>
