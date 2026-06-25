@@ -65,6 +65,7 @@ pub struct SplitOperator {
 
 /// Schéma de composition des opérateurs sur un pas `dt`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum SplittingScheme {
     /// Pas complet de chaque opérateur, en séquence — ordre 1.
@@ -444,5 +445,19 @@ mod tests {
         for &v in final_state.iter() {
             assert!((v - expected).abs() < 1e-2, "expected ≈{expected}, got {v}");
         }
+    }
+
+    // ── Serde round-trip (#70) ──────────────────────────────────────────────
+    //
+    // SplitOperator/OperatorSplittingSolver hold trait objects (Domain,
+    // Box<dyn SteppableSolver>) -- not serializable, same exclusion as
+    // SolverConfiguration's calculators. SplittingScheme is plain data.
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn splitting_scheme_serde_roundtrip() {
+        let json = serde_json::to_string(&SplittingScheme::Strang).unwrap();
+        let restored: SplittingScheme = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored, SplittingScheme::Strang);
     }
 }

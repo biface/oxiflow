@@ -35,6 +35,7 @@ use nalgebra::DVector;
 /// Adaptive step-size controller — error-source-agnostic (see [module
 /// docs](self)).
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StepSizeController {
     rtol: f64,
     atol: f64,
@@ -232,5 +233,22 @@ mod tests {
         // P-only fallback, second uses the full PI formula).
         assert!(controller.prev_error_norm.is_some());
         let _ = dt2; // exercised for the side effect on prev_error_norm
+    }
+
+    // ── Serde round-trip (#70) ──────────────────────────────────────────────
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serde_roundtrip_preserves_parameters() {
+        let mut controller = make_controller();
+        // Exercise prev_error_norm: Some(_), not just the just-constructed
+        // None state -- the round-trip must preserve it either way.
+        let _ = controller.next_dt(0.1, 0.5);
+
+        let json = serde_json::to_string(&controller).unwrap();
+        let restored: StepSizeController = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.dt_min(), controller.dt_min());
+        assert_eq!(restored.prev_error_norm, controller.prev_error_norm);
     }
 }
