@@ -1,34 +1,33 @@
 //! # Module `model::composite`
 //!
-//! `CompositeModel` — somme de plusieurs [`PhysicalModel`] sur un même état
+//! `CompositeModel` — sum of multiple [`PhysicalModel`] on the same state
 //! (DD-037, #45).
 //!
-//! ## Pourquoi
+//! ## Why
 //!
-//! La forme canonique d'oxiflow nomme déjà deux termes séparés :
+//! oxiflow's canonical form already names two separate terms:
 //!
 //! $$\frac{\partial u}{\partial t} + \nabla \cdot F(u, \nabla u) = S(u, \mathbf{x}, t)$$
 //!
-//! `CompositeModel` représente la physique **complète** — la somme de toutes
-//! les contributions — comme un `PhysicalModel` ordinaire. Il sert deux
-//! usages :
+//! `CompositeModel` represents the **complete** physics — the sum of all
+//! contributions — as an ordinary `PhysicalModel`. It serves two purposes:
 //!
-//! 1. **Bookkeeping** pour [`crate::solver::methods::imex::OperatorSplittingSolver`] :
-//!    le `Domain` extérieur exigé par [`crate::solver::Solver::solve`]
-//!    (DD-037) porte un `CompositeModel` dont `required_variables()`/
-//!    `initial_state()` couvrent correctement l'union des sous-modèles —
-//!    sans quoi `build_calculator_chain` raterait une variable requise par
-//!    un seul opérateur.
-//! 2. **Référence monolithique** : exécuté par n'importe quel solveur
-//!    ordinaire (`ForwardEulerSolver`, `RK4Solver`, …), il calcule la *même*
-//!    équation complète que la version splittée — exactement ce dont le
-//!    critère d'acceptation 1 de #45 a besoin pour comparer la solution
-//!    splittée à une solution combinée de référence.
+//! 1. **Bookkeeping** for [`crate::solver::methods::imex::OperatorSplittingSolver`]:
+//!    the outer `Domain` required by [`crate::solver::Solver::solve`]
+//!    (DD-037) carries a `CompositeModel` whose `required_variables()`/
+//!    `initial_state()` correctly cover the union of the sub-models —
+//!    otherwise `build_calculator_chain` would miss a variable required by
+//!    a single operator.
+//! 2. **Monolithic reference**: run through any ordinary solver
+//!    (`ForwardEulerSolver`, `RK4Solver`, …), it computes the *same*
+//!    complete equation as the split version — exactly what acceptance
+//!    criterion 1 of #45 needs to compare the split solution against a
+//!    combined reference solution.
 //!
-//! `CompositeModel` ne sait rien de Strang splitting, de demi-pas, ni
-//! d'aucun découpage temporel — il calcule juste une somme. C'est
-//! `OperatorSplittingSolver` (`solver::methods::imex`) qui sait comment
-//! intégrer chaque contribution séparément.
+//! `CompositeModel` knows nothing about Strang splitting, half-steps, or
+//! any temporal decomposition — it just computes a sum.
+//! `OperatorSplittingSolver` (`solver::methods::imex`) is the one that knows
+//! how to integrate each contribution separately.
 
 use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
@@ -37,21 +36,21 @@ use crate::context::variable::ContextVariable;
 use crate::mesh::Mesh;
 use crate::model::traits::{PhysicalModel, RequiresContext};
 
-/// Somme de plusieurs [`PhysicalModel`] évalués sur le même état.
+/// Sum of multiple [`PhysicalModel`] evaluated on the same state.
 ///
-/// Voir la documentation du module pour le contexte (DD-037).
+/// See the module documentation for context (DD-037).
 pub struct CompositeModel {
     operators: Vec<Box<dyn PhysicalModel>>,
     name: String,
 }
 
 impl CompositeModel {
-    /// Construit un `CompositeModel` à partir d'au moins un opérateur.
+    /// Builds a `CompositeModel` from at least one operator.
     ///
     /// # Errors
     ///
-    /// `OxiflowError::PreconditionFailed` si `operators` est vide — un
-    /// `CompositeModel` sans contribution n'a pas de sens.
+    /// `OxiflowError::PreconditionFailed` if `operators` is empty — a
+    /// `CompositeModel` with no contribution makes no sense.
     pub fn new(
         operators: Vec<Box<dyn PhysicalModel>>,
         name: impl Into<String>,
@@ -68,23 +67,23 @@ impl CompositeModel {
         })
     }
 
-    /// Nombre de contributions sommées.
+    /// Number of summed contributions.
     pub fn len(&self) -> usize {
         self.operators.len()
     }
 
-    /// Toujours `false` en pratique — `new` refuse une liste vide — mais
-    /// requis par convention (`clippy::len_without_is_empty`) dès qu'un
-    /// type public expose `len()`.
+    /// Always `false` in practice — `new` rejects an empty list — but
+    /// required by convention (`clippy::len_without_is_empty`) whenever a
+    /// public type exposes `len()`.
     pub fn is_empty(&self) -> bool {
         self.operators.is_empty()
     }
 }
 
-/// Additionne deux [`ContextValue`] terme à terme.
+/// Adds two [`ContextValue`] element-wise.
 ///
-/// Les deux valeurs doivent être de la même variante (`ScalarField` +
-/// `ScalarField`, etc.) — `Boolean` ne supporte pas l'addition.
+/// Both values must be the same variant (`ScalarField` + `ScalarField`,
+/// etc.) — `Boolean` does not support addition.
 fn add_context_values(a: ContextValue, b: ContextValue) -> Result<ContextValue, OxiflowError> {
     use ContextValue::*;
     match (a, b) {
@@ -100,9 +99,10 @@ fn add_context_values(a: ContextValue, b: ContextValue) -> Result<ContextValue, 
     }
 }
 
-/// Étend `dest` avec les éléments de `extra` qui n'y sont pas déjà —
-/// même méthode de dédoublonnage que [`crate::solver::scenario::Scenario::context_requirements`]
-/// (`ContextVariable` n'implémente pas `Ord`).
+/// Extends `dest` with the elements of `extra` not already present —
+/// same deduplication approach as
+/// [`crate::solver::scenario::Scenario::context_requirements`]
+/// (`ContextVariable` does not implement `Ord`).
 fn merge_variables(dest: &mut Vec<ContextVariable>, extra: Vec<ContextVariable>) {
     dest.extend(extra);
     dest.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
@@ -170,8 +170,8 @@ impl PhysicalModel for CompositeModel {
     }
 
     fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        // Tous les opérateurs partagent le même état physique de départ ;
-        // le premier suffit. Voir la doc de module pour l'hypothèse.
+        // All operators share the same starting physical state; the first
+        // one suffices. See the module docs for this assumption.
         self.operators[0].initial_state(mesh)
     }
 

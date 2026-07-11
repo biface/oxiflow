@@ -1,44 +1,43 @@
 //! # Module `solver::methods::imex`
 //!
-//! Opérateur splitting temporel — `OperatorSplittingSolver` (DD-037, #45).
+//! Temporal operator splitting — `OperatorSplittingSolver` (DD-037, #45).
 //!
-//! ## Couplage temporel, pas spatial
+//! ## Temporal coupling, not spatial
 //!
-//! Ce module compose **n ≥ 2** [`PhysicalModel`](crate::model::PhysicalModel)
-//! évalués en séquence sur le **même état**, le **même maillage** — par
-//! opposition au couplage spatial d'INV-3 (`CouplingOperator`, cross-domain,
-//! asymétrique source → cible à une `Interface`). Voir DD-037 pour la
-//! distinction complète entre les deux familles.
+//! This module composes **n ≥ 2** [`PhysicalModel`](crate::model::PhysicalModel)
+//! evaluated in sequence on the **same state**, the **same mesh** — as
+//! opposed to INV-3's spatial coupling (`CouplingOperator`, cross-domain,
+//! asymmetric source → target at an `Interface`). See DD-037 for the full
+//! distinction between the two families.
 //!
-//! La forme canonique d'oxiflow nomme déjà deux termes séparés :
+//! oxiflow's canonical form already names two separate terms:
 //!
 //! $$\frac{\partial u}{\partial t} + \nabla \cdot F(u, \nabla u) = S(u, \mathbf{x}, t)$$
 //!
-//! Chaque [`SplitOperator`] porte **son propre [`Domain`]** (même maillage,
-//! mêmes BC le cas échéant, modèle différent) plutôt qu'un simple modèle :
-//! [`SteppableSolver::step`] lit toujours `domain.model`, donc faire porter
-//! chaque contribution par son propre `Domain` suffit à l'isoler
-//! correctement, sans toucher à `SteppableSolver` ni à aucun solveur
-//! existant.
+//! Each [`SplitOperator`] carries **its own [`Domain`]** (same mesh, same
+//! BCs where applicable, different model) rather than a plain model:
+//! [`SteppableSolver::step`] always reads `domain.model`, so having each
+//! contribution carry its own `Domain` is enough to isolate it correctly,
+//! without touching `SteppableSolver` or any existing solver.
 //!
-//! ## Portée v1 (#45)
+//! ## v1 scope (#45)
 //!
-//! Seuls des sous-solveurs **à un pas** (`history_depth() == 0`) sont
-//! supportés — validé au constructeur. [`SplittingScheme::Strang`] est la
-//! seule variante implémentée et testée ; [`SplittingScheme::LieTrotter`]
-//! est réservée (DD-037) et refusée au constructeur tant qu'aucun cas
-//! concret ne l'exige.
+//! Only **one-step** sub-solvers (`history_depth() == 0`) are supported —
+//! validated at construction. [`SplittingScheme::Strang`] is the only
+//! implemented and tested variant; [`SplittingScheme::LieTrotter`] is
+//! reserved (DD-037) and rejected at construction until a concrete case
+//! requires it.
 //!
-//! ## Le `Scenario`/`Domain` extérieur
+//! ## The outer `Scenario`/`Domain`
 //!
-//! [`Solver::solve`] impose un `Scenario` — donc un `Domain` extérieur —
-//! même si `OperatorSplittingSolver` n'en a pas besoin pour calculer (il a
-//! tout dans ses propres opérateurs). DD-037 tranche pour
-//! [`crate::model::CompositeModel`] : le `Domain` extérieur porte la somme
-//! des contributions, ce qui rend `scenario.context_requirements()` et
-//! `domain.model.initial_state()` corrects sans logique dédiée ici — et
-//! sert aussi de référence monolithique testable par un solveur ordinaire
-//! (critère d'acceptation 1 de #45).
+//! [`Solver::solve`] requires a `Scenario` — hence an outer `Domain` — even
+//! though `OperatorSplittingSolver` doesn't need one to compute (it has
+//! everything in its own operators). DD-037 settles this for
+//! [`crate::model::CompositeModel`]: the outer `Domain` carries the sum of
+//! the contributions, which makes `scenario.context_requirements()` and
+//! `domain.model.initial_state()` correct without dedicated logic here —
+//! and also serves as a testable monolithic reference run through an
+//! ordinary solver (acceptance criterion 1 of #45).
 
 use std::collections::HashMap;
 
@@ -51,38 +50,38 @@ use crate::solver::methods::{check_finite, SteppableSolver};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
-/// Une contribution nommée à `∂u/∂t`, intégrée par son propre sous-solveur.
+/// A named contribution to `∂u/∂t`, integrated by its own sub-solver.
 ///
-/// Porte un [`Domain`] complet (pas seulement un modèle) — voir la doc de
-/// module pour pourquoi.
+/// Carries a full [`Domain`] (not just a model) — see the module docs for
+/// why.
 pub struct SplitOperator {
-    /// Maillage, BC, et modèle propres à cette contribution.
+    /// Mesh, BCs, and model specific to this contribution.
     pub domain: Domain,
-    /// Sous-solveur intégrant cette contribution. Doit avoir
-    /// `history_depth() == 0` (portée v1, DD-037).
+    /// Sub-solver integrating this contribution. Must have
+    /// `history_depth() == 0` (v1 scope, DD-037).
     pub solver: Box<dyn SteppableSolver>,
 }
 
-/// Schéma de composition des opérateurs sur un pas `dt`.
+/// Composition scheme for the operators over a step `dt`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum SplittingScheme {
-    /// Pas complet de chaque opérateur, en séquence — ordre 1.
+    /// Full step of each operator, in sequence — order 1.
     ///
-    /// Réservée (DD-037) : même structure que `Strang`, mais non implémentée
-    /// ni testée ici — `OperatorSplittingSolver::new` la refuse tant
-    /// qu'aucun cas concret ne l'exige.
+    /// Reserved (DD-037): same structure as `Strang`, but not implemented
+    /// or tested here — `OperatorSplittingSolver::new` rejects it until a
+    /// concrete case requires it.
     LieTrotter,
-    /// Demi-pas sur chaque opérateur sauf le dernier (pas complet), puis
-    /// repasse en ordre inverse — composition symétrique/palindromique,
-    /// ordre 2. Pour n=2, c'est exactement le schéma de #45 : demi-pas
-    /// explicite → pas implicite complet → demi-pas explicite.
+    /// Half-step on every operator but the last (full step), then passes
+    /// back in reverse order — symmetric/palindromic composition, order 2.
+    /// For n=2, this is exactly the scheme from #45: explicit half-step →
+    /// full implicit step → explicit half-step.
     Strang,
 }
 
-/// Composite générique : n ≥ 2 opérateurs partageant le même état,
-/// composés selon un [`SplittingScheme`] (DD-037, #45).
+/// Generic composite: n ≥ 2 operators sharing the same state, composed
+/// according to a [`SplittingScheme`] (DD-037, #45).
 pub struct OperatorSplittingSolver {
     operators: Vec<SplitOperator>,
     scheme: SplittingScheme,
@@ -110,15 +109,15 @@ impl std::fmt::Debug for OperatorSplittingSolver {
 }
 
 impl OperatorSplittingSolver {
-    /// Construit un composite à partir d'au moins deux opérateurs.
+    /// Builds a composite from at least two operators.
     ///
     /// # Errors
     ///
-    /// `OxiflowError::PreconditionFailed` si :
-    /// - moins de deux opérateurs sont fournis ;
-    /// - un sous-solveur a `history_depth() != 0` (portée v1, DD-037) ;
-    /// - `scheme` est `SplittingScheme::LieTrotter` (réservée, non
-    ///   implémentée — DD-037).
+    /// `OxiflowError::PreconditionFailed` if:
+    /// - fewer than two operators are provided;
+    /// - a sub-solver has `history_depth() != 0` (v1 scope, DD-037);
+    /// - `scheme` is `SplittingScheme::LieTrotter` (reserved, not
+    ///   implemented — DD-037).
     pub fn new(
         operators: Vec<SplitOperator>,
         scheme: SplittingScheme,
@@ -160,8 +159,8 @@ impl OperatorSplittingSolver {
         Ok(Self { operators, scheme })
     }
 
-    /// Constructeur ergonomique pour le cas n=2 demandé par #45 : demi-pas
-    /// explicite → pas implicite complet → demi-pas explicite.
+    /// Ergonomic constructor for the n=2 case requested by #45: explicit
+    /// half-step → full implicit step → explicit half-step.
     pub fn strang(
         domain_explicit: Domain,
         explicit_solver: Box<dyn SteppableSolver>,
@@ -183,7 +182,7 @@ impl OperatorSplittingSolver {
         )
     }
 
-    /// Avance `state` d'un pas extérieur `dt`, selon `self.scheme`.
+    /// Advances `state` by one outer step `dt`, according to `self.scheme`.
     fn apply_step(
         &self,
         chain: &[&dyn ContextCalculator],
@@ -192,8 +191,8 @@ impl OperatorSplittingSolver {
         dt: f64,
     ) -> Result<ContextValue, OxiflowError> {
         match self.scheme {
-            // Non atteignable : refusée par `new` — gardé pour exhaustivité
-            // si `SplittingScheme` gagne des variantes plus tard (DD-037).
+            // Unreachable: rejected by `new` — kept for exhaustiveness in
+            // case `SplittingScheme` gains more variants later (DD-037).
             SplittingScheme::LieTrotter => unreachable!(
                 "SplittingScheme::LieTrotter is rejected by OperatorSplittingSolver::new"
             ),
@@ -201,12 +200,12 @@ impl OperatorSplittingSolver {
         }
     }
 
-    /// Composition symétrique/palindromique, généralisée à n ≥ 2 (DD-037).
+    /// Symmetric/palindromic composition, generalised to n ≥ 2 (DD-037).
     ///
     /// Φ₁(dt/2) ∘ Φ₂(dt/2) ∘ … ∘ Φₙ₋₁(dt/2) ∘ Φₙ(dt) ∘ Φₙ₋₁(dt/2) ∘ … ∘ Φ₁(dt/2)
     ///
-    /// Pour n=2 : Φ₁ demi-pas (explicite) → Φ₂ pas complet (implicite) →
-    /// Φ₁ demi-pas — exactement le schéma de #45.
+    /// For n=2: Φ₁ half-step (explicit) → Φ₂ full step (implicit) → Φ₁
+    /// half-step — exactly the scheme from #45.
     fn apply_strang(
         &self,
         chain: &[&dyn ContextCalculator],
@@ -220,7 +219,7 @@ impl OperatorSplittingSolver {
         let mut current = state.clone();
         let mut t_local = t;
 
-        // Passe avant : demi-pas sur operators[0..n-1].
+        // Forward pass: half-step on operators[0..n-1].
         for op in &self.operators[..n - 1] {
             current = op
                 .solver
@@ -228,14 +227,14 @@ impl OperatorSplittingSolver {
             t_local += half;
         }
 
-        // Pas complet sur le dernier opérateur.
+        // Full step on the last operator.
         let last = &self.operators[n - 1];
         current = last
             .solver
             .step(&last.domain, chain, &mut current, &[], t_local, dt)?;
         t_local += dt;
 
-        // Passe retour : demi-pas sur operators[0..n-1], ordre inverse.
+        // Return pass: half-step on operators[0..n-1], reverse order.
         for op in self.operators[..n - 1].iter().rev() {
             current = op
                 .solver
@@ -248,13 +247,12 @@ impl OperatorSplittingSolver {
 }
 
 impl Solver for OperatorSplittingSolver {
-    /// Boucle à pas fixe — ne réutilise pas
-    /// [`SteppableSolver::solve_fixed_step`] (DD-035) : ce composite n'est
-    /// pas un `SteppableSolver` (même posture que DD-036 pour DoPri45 —
-    /// éviter de rouvrir l'orchestration multi-domaine pour un besoin non
-    /// posé par #45). La boucle ci-dessous reprend volontairement la même
-    /// forme que `solve_fixed_step` pour rester cohérente avec les autres
-    /// solveurs à pas fixe.
+    /// Fixed-step loop — does not reuse
+    /// [`SteppableSolver::solve_fixed_step`] (DD-035): this composite is not
+    /// a `SteppableSolver` (same posture as DD-036 for DoPri45 — avoiding
+    /// reopening multi-domain orchestration for a need #45 doesn't raise).
+    /// The loop below deliberately mirrors `solve_fixed_step`'s shape to
+    /// stay consistent with the other fixed-step solvers.
     fn solve(
         &self,
         scenario: &Scenario,
@@ -339,7 +337,7 @@ mod tests {
     use crate::solver::methods::euler::ForwardEulerSolver;
     use nalgebra::DVector;
 
-    /// `du/dt = -rate * u` — décroissance pure, pas de dépendance au temps.
+    /// `du/dt = -rate * u` — pure decay, no time dependence.
     struct Decay {
         rate: f64,
     }
@@ -417,9 +415,9 @@ mod tests {
 
     #[test]
     fn solve_reproduces_combined_decay_rate() {
-        // Deux décroissances séparées (rate 1.0 + rate 2.0) splittées doivent
-        // approcher la décroissance combinée (rate 3.0) — critère
-        // d'acceptation 1 de #45.
+        // Two separate decays (rate 1.0 + rate 2.0) split should
+        // approximate the combined decay (rate 3.0) — acceptance
+        // criterion 1 of #45.
         let solver = make_solver();
 
         let composite = CompositeModel::new(
@@ -440,7 +438,7 @@ mod tests {
         let result = solver.solve(&scenario, &config).unwrap();
         let final_state = result.states.last().unwrap().as_scalar_field().unwrap();
 
-        // Solution analytique de référence : u(t) = exp(-3.0 * t).
+        // Reference analytical solution: u(t) = exp(-3.0 * t).
         let expected = (-3.0_f64 * 0.1).exp();
         for &v in final_state.iter() {
             assert!((v - expected).abs() < 1e-2, "expected ≈{expected}, got {v}");
