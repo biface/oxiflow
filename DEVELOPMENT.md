@@ -6,7 +6,7 @@ all implementation work from v0.1 to v3.0.
 
 > **Current version:** v0.4.0 — Integrators (closed)
 > **Active development:** v0.5.0 — Discretisation (J5) — DiscreteOperator (DD-012/#46), FD (#47),
-> FV (#48), WENO/limiters (#49), source term & DiscretizedModel (DD-038)
+> FV (#48), WENO/limiters (#49), FluxDivergenceOperator & DiscretizedModel (DD-039/DD-038)
 > **Document version:** 2.2 — July 2026
 
 ---
@@ -226,35 +226,54 @@ Architecture established along the way, reusable beyond J4a:
 
 ## 7. J5 — Discretisation (v0.5)
 
-**Active development.** Abstract `DiscreteOperator` (INV-2, DD-012) — associated type, not a
-generic parameter:
+**Active development.** Two sibling traits, each carrying only what its family actually
+needs (DD-012, DD-039):
 
 ```rust
+/// Raw differential quantity — never needs context (dx comes from the mesh).
 pub trait DiscreteOperator: Send + Sync {
     type MeshType: Mesh;
     fn apply(&self, field: &ContextValue, mesh: &Self::MeshType)
         -> Result<ContextValue, OxiflowError>;
 }
+
+/// COMPLETE -∇·F(u, ∇u) contribution — needs ComputeContext for F's physics
+/// (velocity, diffusion, potentially variable). Does NOT extend DiscreteOperator:
+/// the apply() signatures diverge (ctx present vs absent).
+pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
+    type MeshType: Mesh;
+    fn apply(&self, field: &ContextValue, mesh: &Self::MeshType, ctx: &ComputeContext)
+        -> Result<ContextValue, OxiflowError>;
+}
 ```
 
-Spatial schemes: upwind/centred FD (#47), conservative FV (#48), WENO3/5 with flux limiters
-(MinMod, Van Leer, Superbee) and adaptive Péclet-based selection (#49).
+Spatial schemes: upwind/centred FD (#47, `DiscreteOperator`), conservative FV (#48),
+WENO3/5 with flux limiters (MinMod, Van Leer, Superbee) and adaptive Péclet-based selection
+(#49, both `FluxDivergenceOperator`).
 
-Two distinct insertion points (DD-012 amended, DD-038):
+Two distinct insertion points, each consistent with its family's trait:
 - **FD** — consumed via the existing `ContextCalculator` pipeline; `FDGradientCalculator`/
-  `FDLaplacianCalculator` delegate their stencil to `operators::fd` with no change to the public
-  API (dedicated refactor issue, depends on #47).
-- **FV/WENO** — consumed directly in `compute_physics()` via the new `DiscretizedModel<Op>`
-  composite (DD-038, Option C), which binds the spatial scheme (F term) to a new `SourceTerm`
-  trait (S term, anticipated since DD-005). The internal calculator (`FluxDivergenceCalculator`)
-  stays private this sprint — reserved `instance_id` field for a future publication in
-  `ComputeContext` when VTK/HDF5 export lands (J6, DD-027).
+  `FDLaplacianCalculator` delegate their stencil to `operators::fd` with no change to the
+  public API (dedicated refactor issue, depends on #47).
+- **FV/WENO** — consumed directly in `compute_physics()` via the new
+  `DiscretizedModel<Op: FluxDivergenceOperator>` composite (DD-038 amended, DD-039), which
+  wraps the spatial scheme as an ordinary `PhysicalModel` returning only `-∇·F`. The type
+  bound guarantees at compile time that an FD operator cannot be wired in by mistake. The
+  source term S, when it exists, is composed via `CompositeModel` (DD-037, already
+  delivered) — no new `SourceTerm` trait is introduced this sprint. F's physical parameters
+  (velocity, diffusion) are either constant construction fields (simple case,
+  `required_variables() -> vec![]`) or referenced by `ContextVariable` and supplied by an
+  ordinary `ContextCalculator` already scheduled by `chain.rs` (DD-009) — no new machinery.
+  The internal calculator (`FluxDivergenceCalculator`) stays private this sprint — reserved
+  `instance_id` field for a future publication in `ComputeContext` when VTK/HDF5 export
+  lands (J6, DD-027).
 
 Linear algebra delegated to `nalgebra` (dense, delivered J4a) and `faer` (sparse, planned J6) —
 `faer` integration extends the `LinearSolver` trait already established at J4a (DD-013), not a
 new abstraction.
 
-**Exit criterion:** #46–#49 closed, DD-012 and DD-038 closed, FD delegation refactor delivered.
+**Exit criterion:** #46–#49 closed, DD-012, DD-038, and DD-039 closed, FD delegation refactor
+delivered.
 
 ---
 
@@ -492,7 +511,8 @@ Requirements for a third-party framework:
 | Linear solvers (dense) | `nalgebra` delegation | Custom implementation | J4a | |
 | Temporal composition | `SplitOperator`/`OperatorSplittingSolver` (Strang) | Fixed explicit/implicit pair | J4a | |
 | Spatial operators | Abstract `DiscreteOperator` (associated type `MeshType`) | FD hardcoded | J5 | INV-2 |
-| Spatial F/S composition | `DiscretizedModel<Op>` + `SourceTerm` trait | Flux exposed via `ContextVariable` | J5 | INV-2 |
+| Spatial F/S composition | `DiscretizedModel<Op>` (F) + existing `CompositeModel` (F+S) | New `SourceTerm` trait; flux exposed via `ContextVariable` | J5 | INV-2 |
+| Operator context access | `FluxDivergenceOperator`: sibling trait to `DiscreteOperator`, carries `ctx`/`RequiresContext` | Adding `ctx` directly to `DiscreteOperator`; subtrait of `DiscreteOperator` | J5 | INV-2 |
 | Linear solvers (sparse) | `faer-sparse` delegation | Custom implementation | J6 | |
 | Results export | VTK interop pivot + HDF5 for bulk data | Custom format | J6 | |
 | Nonlinear integration | Iterated Newton, DD-033 extension point | Rewrite of J4a solvers | J7 | |
