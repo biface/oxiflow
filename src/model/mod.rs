@@ -8,8 +8,10 @@
 //! `SolverConfiguration` and `Solver`.
 
 pub mod composite;
+pub mod discretized;
 pub mod traits;
 
 pub use composite::CompositeModel;
+pub use discretized::DiscretizedModel;
 pub use traits::PhysicalModel;
 pub use traits::RequiresContext;
