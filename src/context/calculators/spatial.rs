@@ -2,13 +2,12 @@
 //!
 //! Finite-difference spatial calculators: gradient and Laplacian.
 //!
-//! Both calculators hold an `Arc<dyn Mesh>` internally (INV-1, DD-007).
-//! At v0.5.0, this will be replaced by a concrete `DiscreteOperator`
-//! (INV-2, DD-012) with no change to the `ContextCalculator` trait.
+//! Both calculators hold an `Arc<dyn Mesh>` internally (INV-1, DD-007) and
+//! delegate their stencil math to `operators::fd`'s `compute_from_dx`
+//! functions (#47, FD delegation refactor) — see that module's documentation
+//! for why the delegation bypasses `DiscreteOperator::apply()` itself.
 
 use std::sync::Arc;
-
-use nalgebra::DVector;
 
 use crate::context::calculator::ContextCalculator;
 use crate::context::calculators::FDScheme;
@@ -18,6 +17,27 @@ use crate::context::value::ContextValue;
 use crate::context::variable::ContextVariable;
 use crate::mesh::Mesh;
 use crate::model::traits::RequiresContext;
+use crate::operators::fd::{CenteredGradient, CenteredLaplacian, Direction, UpwindGradient};
+
+/// Translates `operators::fd`'s `InvalidDomain` (#47) into this calculator's
+/// `PreconditionFailed`, preserved from before the delegation refactor.
+///
+/// `operators::fd` is new code with no external consumer yet, so it is free
+/// to use `InvalidDomain` as `#47` specifies. `FDGradientCalculator`/
+/// `FDLaplacianCalculator` are a compatibility boundary already shipped in
+/// v0.2.0's public API — 21 existing tests assert `PreconditionFailed` for
+/// exactly this "field too short for the stencil" condition, so changing the
+/// variant here would be a breaking change unrelated to `#47`'s scope. Any
+/// other error variant (e.g. `TypeMismatch` from `as_scalar_field()`) passes
+/// through unchanged.
+fn translate_domain_error(err: OxiflowError, context: &'static str) -> OxiflowError {
+    match err {
+        OxiflowError::InvalidDomain(message) => {
+            OxiflowError::PreconditionFailed { context, message }
+        }
+        other => other,
+    }
+}
 
 // ── FDGradientCalculator ──────────────────────────────────────────────────────
 
@@ -26,8 +46,8 @@ use crate::model::traits::RequiresContext;
 /// Provides `ContextVariable::SpatialGradient { dimension, component }` as a
 /// `ContextValue::ScalarField` — one gradient value per mesh node.
 ///
-/// The mesh is held as `Arc<dyn Mesh>` internally (INV-1). At J5 (v0.5.0),
-/// this implementation detail will be replaced by a `DiscreteOperator` (INV-2).
+/// The mesh is held as `Arc<dyn Mesh>` internally (INV-1). Stencil math is
+/// delegated to `operators::fd::{UpwindGradient, CenteredGradient}` (#47).
 ///
 /// # Boundary treatment
 ///
@@ -128,58 +148,27 @@ impl ContextCalculator for FDGradientCalculator {
         _ctx: &ComputeContext,
     ) -> Result<ContextValue, OxiflowError> {
         let u = state.as_scalar_field()?;
-        let n = u.len();
-
-        if n < 2 {
-            return Err(OxiflowError::PreconditionFailed {
-                context: "FDGradientCalculator",
-                message: format!("field must have at least 2 nodes, got {n}"),
-            });
-        }
-
         let dx = self.mesh.characteristic_length();
-        let mut grad = DVector::zeros(n);
 
-        for i in 0..n {
-            grad[i] = match self.scheme {
-                FDScheme::Forward => {
-                    if i < n - 1 {
-                        (u[i + 1] - u[i]) / dx
-                    } else {
-                        // Right boundary fallback: backward
-                        (u[n - 1] - u[n - 2]) / dx
-                    }
-                }
-                FDScheme::Backward => {
-                    if i > 0 {
-                        (u[i] - u[i - 1]) / dx
-                    } else {
-                        // Left boundary fallback: forward
-                        (u[1] - u[0]) / dx
-                    }
-                }
-                FDScheme::Central => {
-                    if i == 0 {
-                        // Left boundary: 1st-order forward
-                        (u[1] - u[0]) / dx
-                    } else if i == n - 1 {
-                        // Right boundary: 1st-order backward
-                        (u[n - 1] - u[n - 2]) / dx
-                    } else {
-                        // Interior: 2nd-order central
-                        (u[i + 1] - u[i - 1]) / (2.0 * dx)
-                    }
-                }
-                // J5+: higher-order stencils will be added here.
-                #[allow(unreachable_patterns)]
-                _ => {
-                    return Err(OxiflowError::PreconditionFailed {
-                        context: "FDGradientCalculator",
-                        message: "unsupported FDScheme variant".to_string(),
-                    })
-                }
-            };
+        // Delegates stencil math to `operators::fd` (#47, FD delegation
+        // refactor) — `Arc<dyn Mesh>` here cannot produce the concrete
+        // `&UniformGrid1D` that `DiscreteOperator::apply()` requires, so the
+        // mesh-free `compute_from_dx` entry point is used directly instead
+        // (see `operators::fd`'s module documentation for why).
+        let grad = match self.scheme {
+            FDScheme::Forward => UpwindGradient::compute_from_dx(u, dx, Direction::Forward),
+            FDScheme::Backward => UpwindGradient::compute_from_dx(u, dx, Direction::Backward),
+            FDScheme::Central => CenteredGradient::compute_from_dx(u, dx),
+            // J5+: higher-order stencils will be added here.
+            #[allow(unreachable_patterns)]
+            _ => {
+                return Err(OxiflowError::PreconditionFailed {
+                    context: "FDGradientCalculator",
+                    message: "unsupported FDScheme variant".to_string(),
+                })
+            }
         }
+        .map_err(|e| translate_domain_error(e, "FDGradientCalculator"))?;
 
         Ok(ContextValue::ScalarField(grad))
     }
@@ -279,29 +268,13 @@ impl ContextCalculator for FDLaplacianCalculator {
         _ctx: &ComputeContext,
     ) -> Result<ContextValue, OxiflowError> {
         let u = state.as_scalar_field()?;
-        let n = u.len();
-
-        if n < 3 {
-            return Err(OxiflowError::PreconditionFailed {
-                context: "FDLaplacianCalculator",
-                message: format!("field must have at least 3 nodes, got {n}"),
-            });
-        }
-
         let dx = self.mesh.characteristic_length();
-        let dx2 = dx * dx;
-        let mut lap = DVector::zeros(n);
 
-        // Left boundary: one-sided stencil using nodes [0, 1, 2].
-        lap[0] = (u[0] - 2.0 * u[1] + u[2]) / dx2;
-
-        // Interior: standard 3-point central difference.
-        for i in 1..n - 1 {
-            lap[i] = (u[i - 1] - 2.0 * u[i] + u[i + 1]) / dx2;
-        }
-
-        // Right boundary: one-sided stencil using nodes [n-3, n-2, n-1].
-        lap[n - 1] = (u[n - 3] - 2.0 * u[n - 2] + u[n - 1]) / dx2;
+        // Delegates stencil math to `operators::fd` (#47, FD delegation
+        // refactor) — see `FDGradientCalculator::compute()` above for why
+        // `compute_from_dx` is used directly rather than `apply()`.
+        let lap = CenteredLaplacian::compute_from_dx(u, dx)
+            .map_err(|e| translate_domain_error(e, "FDLaplacianCalculator"))?;
 
         Ok(ContextValue::ScalarField(lap))
     }
@@ -316,6 +289,8 @@ impl ContextCalculator for FDLaplacianCalculator {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+
+    use nalgebra::DVector;
 
     use super::*;
     use crate::mesh::UniformGrid1D;
