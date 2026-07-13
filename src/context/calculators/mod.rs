@@ -22,9 +22,10 @@
 //! Spatial calculators ([`FDGradientCalculator`], [`FDLaplacianCalculator`],
 //! [`TrapezoidalIntegral`]) hold an [`Arc<dyn Mesh>`] internally. This is an
 //! implementation detail consistent with INV-1 (DD-007): the mesh never appears
-//! in the public `ContextCalculator` API. At v0.5.0, `Arc<dyn Mesh>` will be
-//! replaced by a concrete [`DiscreteOperator`] (INV-2, DD-012), with zero change
-//! to the `ContextCalculator` trait signature.
+//! in the public `ContextCalculator` API. `FDGradientCalculator` and
+//! `FDLaplacianCalculator` delegate their stencil math to a concrete
+//! [`DiscreteOperator`] implementation from [`crate::operators::fd`] (INV-2,
+//! DD-012, #47) with zero change to the `ContextCalculator` trait signature.
 //!
 //! [`ContextCalculator`]: crate::context::calculator::ContextCalculator
 //! [`SolverConfiguration`]: crate::solver::config::SolverConfiguration
