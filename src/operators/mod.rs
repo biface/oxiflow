@@ -35,7 +35,7 @@
 //! | Type | Scheme | Trait | Milestone |
 //! |---|---|---|---|
 //! | [`fd::UpwindGradient`], [`fd::CenteredGradient`], [`fd::CenteredLaplacian`] | FD | `DiscreteOperator` | v0.5.0 (#47) ✅ |
-    //! | [`fv::FVCenteredFlux`], [`fv::FVUpwindFlux`] | FV | `FluxDivergenceOperator` | v0.5.0 (#48) ✅ |
+//! | [`fv::FVCenteredFlux`], [`fv::FVUpwindFlux`] | FV | `FluxDivergenceOperator` | v0.5.0 (#48) ✅ |
 //! | [`weno::WENO3`], [`weno::WENO5`] | WENO | `FluxDivergenceOperator` | v0.5.0 (#49) ✅ |
 //! | Flux limiters (`MinMod`, `VanLeer`, `Superbee`) + adaptive selection | — | `FluxDivergenceOperator` | v0.5.0 (#49, in progress) |
 //! | `FiniteElement` | FEM P1/P2 | TBD | J7 — v2.0 |
