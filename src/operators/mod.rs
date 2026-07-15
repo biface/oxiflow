@@ -41,6 +41,8 @@
 //! | `FiniteElement` | FEM P1/P2 | TBD | J7 — v2.0 |
 
 pub mod fd;
+pub mod fv;
+pub mod weno;
 
 use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
