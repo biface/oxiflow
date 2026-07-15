@@ -35,8 +35,9 @@
 //! | Type | Scheme | Trait | Milestone |
 //! |---|---|---|---|
 //! | [`fd::UpwindGradient`], [`fd::CenteredGradient`], [`fd::CenteredLaplacian`] | FD | `DiscreteOperator` | v0.5.0 (#47) ✅ |
-//! | `ConservativeFV` | FV | `FluxDivergenceOperator` | v0.5.0 (#48) |
-//! | `Weno3`, `Weno5` | WENO + limiters | `FluxDivergenceOperator` | v0.5.0 (#49) |
+    //! | [`fv::FVCenteredFlux`], [`fv::FVUpwindFlux`] | FV | `FluxDivergenceOperator` | v0.5.0 (#48) ✅ |
+//! | [`weno::WENO3`], [`weno::WENO5`] | WENO | `FluxDivergenceOperator` | v0.5.0 (#49) ✅ |
+//! | Flux limiters (`MinMod`, `VanLeer`, `Superbee`) + adaptive selection | — | `FluxDivergenceOperator` | v0.5.0 (#49, in progress) |
 //! | `FiniteElement` | FEM P1/P2 | TBD | J7 — v2.0 |
 
 pub mod fd;
@@ -115,4 +116,63 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
         mesh: &Self::MeshType,
         ctx: &ComputeContext,
     ) -> Result<ContextValue, OxiflowError>;
+}
+
+// ── FluxBoundary ──────────────────────────────────────────────────────────────
+
+/// Boundary treatment shared by cell/face-based [`FluxDivergenceOperator`]
+/// families (`operators::fv`, `operators::weno`) — both face the same
+/// question: a finite `n`-node mesh only delimits `n−1` interior cells (FV)
+/// or lacks enough neighbors for a wide stencil at the edges (WENO) unless
+/// the domain wraps around.
+///
+/// Three families of treatment exist: periodic wrap (exact conservation by
+/// telescoping for FV; the only one implemented so far); ghost cells via the
+/// existing [`crate::boundary::BoundaryCondition`] system (a real
+/// integration, scheduled later this sprint, after `#49`); and FD-style
+/// one-sided truncation at the boundary (breaks FV's conservation property).
+/// Rather than picking one silently, `FluxBoundary` makes the choice an
+/// explicit constructor parameter on every operator that needs it.
+/// `#[non_exhaustive]` (DD-022) signals this is an extension point, not a
+/// closed set — only [`FluxBoundary::Periodic`] exists today.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FluxBoundary {
+    /// The domain wraps around: the last cell/node's right neighbor is the
+    /// first cell/node. Gives an exact discrete conservation property for
+    /// FV — the sum of per-cell flux divergences telescopes to zero, since
+    /// every internal face flux is counted once as a `+` contribution (its
+    /// left cell) and once as a `−` contribution (its right cell).
+    Periodic,
+}
+
+// ── check_cfl ─────────────────────────────────────────────────────────────────
+
+/// Checks the explicit advective CFL stability condition `|v|·dt/dx ≤ 1`.
+///
+/// Shared by `operators::fv` and `operators::weno` — both are explicit
+/// advective schemes subject to the same necessary stability condition
+/// (documented for Lax–Wendroff-type schemes). Covers the *advective*
+/// condition only; a diffusive term's own stability limit (Fourier number
+/// `D·dt/dx² ≤ 0.5`) is a separate concern, not checked here — conceptually
+/// the solver's step-size control's responsibility, not a spatial
+/// operator's, if ever enforced.
+pub(crate) fn check_cfl(
+    context: &'static str,
+    velocity: f64,
+    dt: f64,
+    dx: f64,
+) -> Result<(), OxiflowError> {
+    let cfl = velocity.abs() * dt / dx;
+    if cfl > 1.0 {
+        return Err(OxiflowError::PreconditionFailed {
+            context,
+            message: format!(
+                "CFL condition violated: |v|*dt/dx = {cfl:.6} > 1.0 \
+                 (v = {velocity}, dt = {dt}, dx = {dx}) — explicit advection \
+                 scheme is unstable at this step size"
+            ),
+        });
+    }
+    Ok(())
 }
