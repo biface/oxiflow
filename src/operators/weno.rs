@@ -73,7 +73,10 @@ use crate::context::variable::ContextVariable;
 use crate::mesh::structured::UniformGrid1D;
 use crate::mesh::Mesh;
 use crate::model::traits::RequiresContext;
-use crate::operators::{check_cfl, FluxBoundary, FluxDivergenceOperator};
+use crate::operators::{
+    check_cfl, ghost_cell_wide_divergence, periodic_wide_divergence, truncated_wide_divergence,
+    wrap, FluxBoundary, FluxDivergenceOperator,
+};
 
 /// Regularization constant preventing division by zero when a smoothness
 /// indicator vanishes (smooth data). Kept at the standard Jiang-Shu value
@@ -83,44 +86,6 @@ use crate::operators::{check_cfl, FluxBoundary, FluxDivergenceOperator};
 /// there was no concrete reason to change it alongside the weighting
 /// formula.
 const WENO_EPSILON: f64 = 1e-6;
-
-// ── Shared periodic wide-stencil divergence ──────────────────────────────────
-
-/// Computes the divergence of a wide-stencil face flux for a periodic
-/// domain — analogous to `operators::fv`'s two-point `periodic_divergence`,
-/// generalized to a `face_flux` that reads an arbitrary window of `u`
-/// (needed for WENO's multi-point stencils) rather than just the two
-/// immediately adjacent values.
-///
-/// `face_flux(u, n, i)` evaluates the flux at the face between node `i` and
-/// node `(i+1) % n`.
-fn periodic_wide_divergence(
-    u: &DVector<f64>,
-    dx: f64,
-    min_nodes: usize,
-    context: &'static str,
-    face_flux: impl Fn(&DVector<f64>, usize, usize) -> f64,
-) -> Result<DVector<f64>, OxiflowError> {
-    let n = u.len();
-    if n < min_nodes {
-        return Err(OxiflowError::InvalidDomain(format!(
-            "{context} requires at least {min_nodes} nodes, got {n}"
-        )));
-    }
-
-    let mut div = DVector::zeros(n);
-    for i in 0..n {
-        let flux_right = face_flux(u, n, i);
-        let flux_left = face_flux(u, n, (i + n - 1) % n);
-        div[i] = (flux_right - flux_left) / dx;
-    }
-    Ok(div)
-}
-
-/// Periodic index `i + k` wrapped into `[0, n)`, `k` possibly negative.
-fn wrap(i: usize, k: isize, n: usize) -> usize {
-    (i as isize + k).rem_euclid(n as isize) as usize
-}
 
 /// Combines two candidate reconstructions with WENO-Z nonlinear weights
 /// (Borges, Carmona, Costa & Don, 2008), replacing the classical Jiang-Shu
@@ -258,7 +223,7 @@ fn weno5_right(b: f64, c: f64, d: f64, e: f64, f: f64) -> f64 {
 // ── WENO3 operator ────────────────────────────────────────────────────────────
 
 /// 3rd-order WENO advective flux + centered Fick's-law diffusive flux.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct WENO3 {
     velocity: f64,
     diffusion: f64,
@@ -306,9 +271,37 @@ impl FluxDivergenceOperator for WENO3 {
         let dx = mesh.characteristic_length();
         check_cfl("WENO3", self.velocity, ctx.time_step(), dx)?;
 
-        let div = match self.boundary {
+        let div = match &self.boundary {
             FluxBoundary::Periodic => {
                 periodic_wide_divergence(u, dx, 3, "WENO3", |u, n, i| self.face_flux(dx, u, n, i))?
+            }
+            FluxBoundary::Truncation => {
+                // weno3_left reads {i-1, i, i+1} (margin_left=1, margin_right=1);
+                // weno3_right reads {i, i+1, i+2} (margin_left=0, margin_right=2) —
+                // see truncated_wide_divergence's documentation for why the
+                // boundary zone tracks the reconstruction actually selected.
+                let (margin_left, margin_right) =
+                    if self.velocity >= 0.0 { (1, 1) } else { (0, 2) };
+                truncated_wide_divergence(u, dx, margin_left, margin_right, "WENO3", |u, n, i| {
+                    self.face_flux(dx, u, n, i)
+                })?
+            }
+            FluxBoundary::GhostCell(left_bc, right_bc) => {
+                // NOT the same margins as Truncation: computing face_flux(-1)
+                // (needed for div[0]'s left face) reaches one cell further
+                // left than face_flux(0) does, so margin_left here is
+                // Truncation's margin_left + 1; margin_right is unchanged
+                // (the rightmost face actually needed, face_flux(n-1), is
+                // the same one Truncation's own safe-range derivation uses).
+                let margins = if self.velocity >= 0.0 { (2, 1) } else { (1, 2) };
+                ghost_cell_wide_divergence(
+                    u,
+                    dx,
+                    margins,
+                    (left_bc.as_ref(), right_bc.as_ref()),
+                    "WENO3",
+                    |u, n, i| self.face_flux(dx, u, n, i),
+                )?
             }
         };
         Ok(ContextValue::ScalarField(div))
@@ -318,7 +311,7 @@ impl FluxDivergenceOperator for WENO3 {
 // ── WENO5 operator ────────────────────────────────────────────────────────────
 
 /// 5th-order WENO advective flux + centered Fick's-law diffusive flux.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct WENO5 {
     velocity: f64,
     diffusion: f64,
@@ -378,9 +371,31 @@ impl FluxDivergenceOperator for WENO5 {
         let dx = mesh.characteristic_length();
         check_cfl("WENO5", self.velocity, ctx.time_step(), dx)?;
 
-        let div = match self.boundary {
+        let div = match &self.boundary {
             FluxBoundary::Periodic => {
                 periodic_wide_divergence(u, dx, 5, "WENO5", |u, n, i| self.face_flux(dx, u, n, i))?
+            }
+            FluxBoundary::Truncation => {
+                // weno5_left reads {i-2..i+2} (margin_left=2, margin_right=2);
+                // weno5_right reads {i-1..i+3} (margin_left=1, margin_right=3).
+                let (margin_left, margin_right) =
+                    if self.velocity >= 0.0 { (2, 2) } else { (1, 3) };
+                truncated_wide_divergence(u, dx, margin_left, margin_right, "WENO5", |u, n, i| {
+                    self.face_flux(dx, u, n, i)
+                })?
+            }
+            FluxBoundary::GhostCell(left_bc, right_bc) => {
+                // See WENO3's GhostCell arm for why margin_left = Truncation's
+                // margin_left + 1 here, margin_right unchanged.
+                let margins = if self.velocity >= 0.0 { (3, 2) } else { (2, 3) };
+                ghost_cell_wide_divergence(
+                    u,
+                    dx,
+                    margins,
+                    (left_bc.as_ref(), right_bc.as_ref()),
+                    "WENO5",
+                    |u, n, i| self.face_flux(dx, u, n, i),
+                )?
             }
         };
         Ok(ContextValue::ScalarField(div))
@@ -393,6 +408,7 @@ impl FluxDivergenceOperator for WENO5 {
 mod tests {
     use super::*;
     use std::f64::consts::PI;
+    use std::sync::Arc;
 
     fn mesh(n: usize) -> UniformGrid1D {
         UniformGrid1D::new(n, 0.0, 1.0).unwrap()
@@ -400,6 +416,37 @@ mod tests {
 
     fn ctx(dt: f64) -> ComputeContext {
         ComputeContext::new(0.0, dt)
+    }
+
+    // ── Test fixture: exact Dirichlet reflection ghost cell ────────────────
+    //
+    // ghost[-k] = 2*g - interior_at_depth — odd reflection about the
+    // prescribed value `g`, exact at every depth (DD-042, amendment 1).
+
+    #[derive(Debug)]
+    struct DirichletGhost(f64);
+
+    impl RequiresContext for DirichletGhost {
+        fn required_variables(&self) -> Vec<ContextVariable> {
+            vec![]
+        }
+    }
+
+    impl crate::boundary::BoundaryCondition for DirichletGhost {
+        fn boundary_type(&self) -> crate::boundary::BoundaryType {
+            crate::boundary::BoundaryType::Dirichlet
+        }
+        fn apply(
+            &self,
+            _state: &mut DVector<f64>,
+            _ctx: &ComputeContext,
+            _mesh: &dyn Mesh,
+        ) -> Result<(), OxiflowError> {
+            Ok(())
+        }
+        fn ghost_value(&self, _depth: usize, interior_at_depth: f64, _dx: f64) -> Option<f64> {
+            Some(2.0 * self.0 - interior_at_depth)
+        }
     }
 
     // ── Conservation (telescoping sum, same property as FV) ──────────────────
@@ -626,6 +673,188 @@ mod tests {
         let op = WENO5::new(10.0, 0.0, FluxBoundary::Periodic);
         let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
         let err = op.apply(&u, &m, &ctx(1.0)).unwrap_err();
+        assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
+    }
+
+    // ── Truncation boundary treatment (#DD-042 amendment scope) ───────────
+
+    #[test]
+    fn weno3_truncation_left_biased_boundary_matches_nearest_safe_cell() {
+        // v ≥ 0: margin_left=1, margin_right=1 — safe range [2, n-2].
+        let m = mesh(7);
+        let dx = m.characteristic_length();
+        let u =
+            ContextValue::ScalarField(DVector::from_vec(vec![0.2, 1.3, -0.7, 2.1, 0.0, -1.5, 0.6]));
+        let op = WENO3::new(1.0, 0.0, FluxBoundary::Truncation);
+        let div = op.apply(&u, &m, &ctx(0.01 * dx)).unwrap();
+        let div = div.as_scalar_field().unwrap();
+        assert_eq!(div[0], div[2]);
+        assert_eq!(div[1], div[2]);
+        assert_eq!(div[6], div[5]);
+    }
+
+    #[test]
+    fn weno3_truncation_right_biased_boundary_matches_nearest_safe_cell() {
+        // v < 0: margin_left=0, margin_right=2 — safe range [1, n-3].
+        let m = mesh(7);
+        let dx = m.characteristic_length();
+        let u =
+            ContextValue::ScalarField(DVector::from_vec(vec![0.2, 1.3, -0.7, 2.1, 0.0, -1.5, 0.6]));
+        let op = WENO3::new(-1.0, 0.0, FluxBoundary::Truncation);
+        let div = op.apply(&u, &m, &ctx(0.01 * dx)).unwrap();
+        let div = div.as_scalar_field().unwrap();
+        assert_eq!(div[0], div[1]);
+        assert_eq!(div[6], div[4]);
+        assert_eq!(div[5], div[4]);
+    }
+
+    #[test]
+    fn weno3_truncation_rejects_field_below_minimum_for_direction() {
+        let m = mesh(3);
+        let op = WENO3::new(1.0, 0.0, FluxBoundary::Truncation);
+        let u = ContextValue::ScalarField(DVector::from_element(3, 1.0));
+        // Left-biased needs at least 4 nodes (margin_left=1, margin_right=1).
+        let err = op.apply(&u, &m, &ctx(0.001)).unwrap_err();
+        assert!(matches!(err, OxiflowError::InvalidDomain(_)));
+    }
+
+    #[test]
+    fn weno5_truncation_left_biased_boundary_matches_nearest_safe_cell() {
+        // v ≥ 0: margin_left=2, margin_right=2 — safe range [3, n-3].
+        let m = mesh(9);
+        let dx = m.characteristic_length();
+        let u = ContextValue::ScalarField(DVector::from_vec(vec![
+            0.2, 1.3, -0.7, 2.1, 0.0, -1.5, 0.6, 0.9, -0.3,
+        ]));
+        let op = WENO5::new(1.0, 0.0, FluxBoundary::Truncation);
+        let div = op.apply(&u, &m, &ctx(0.001 * dx)).unwrap();
+        let div = div.as_scalar_field().unwrap();
+        assert_eq!(div[0], div[3]);
+        assert_eq!(div[1], div[3]);
+        assert_eq!(div[2], div[3]);
+        assert_eq!(div[8], div[6]);
+        assert_eq!(div[7], div[6]);
+    }
+
+    #[test]
+    fn weno5_truncation_rejects_field_below_minimum_for_direction() {
+        let m = mesh(5);
+        let op = WENO5::new(1.0, 0.0, FluxBoundary::Truncation);
+        let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
+        // Left-biased needs at least 6 nodes (margin_left=2, margin_right=2).
+        let err = op.apply(&u, &m, &ctx(0.001)).unwrap_err();
+        assert!(matches!(err, OxiflowError::InvalidDomain(_)));
+    }
+
+    // ── GhostCell boundary treatment (DD-042, amendment 1) ─────────────────
+
+    #[test]
+    fn weno3_ghost_cell_left_biased_matches_hand_built_extended_field() {
+        // v ≥ 0: margin_left=2, margin_right=1 (NOT the same as Truncation's
+        // (1,1) — see the GhostCell match arm's comment for why).
+        let values = vec![0.2, 1.3, -0.7, 2.1, 0.0];
+        let m = mesh(values.len());
+        let dx = m.characteristic_length();
+        let u = ContextValue::ScalarField(DVector::from_vec(values.clone()));
+        let g = 0.5;
+        let left_bc = Arc::new(DirichletGhost(g));
+        let right_bc = Arc::new(DirichletGhost(g));
+        let op = WENO3::new(1.0, 0.0, FluxBoundary::GhostCell(left_bc, right_bc));
+        let div = op.apply(&u, &m, &ctx(0.001 * dx)).unwrap();
+        let div = div.as_scalar_field().unwrap();
+
+        // Hand-built extended field: [ghost(-2), ghost(-1), u..., ghost(+1)].
+        let n = values.len();
+        let ghost_m2 = 2.0 * g - values[1]; // depth 2 ↔ interior index 1
+        let ghost_m1 = 2.0 * g - values[0]; // depth 1 ↔ interior index 0
+        let ghost_p1 = 2.0 * g - values[n - 1]; // depth 1 ↔ interior index n-1
+        let mut extended = vec![ghost_m2, ghost_m1];
+        extended.extend(values.iter().copied());
+        extended.push(ghost_p1);
+        let ext = DVector::from_vec(extended);
+        let m_ext = ext.len();
+
+        let face =
+            |i: usize| WENO3::new(1.0, 0.0, FluxBoundary::Periodic).face_flux(dx, &ext, m_ext, i);
+        // Real cell i maps to extended index i + margin_left(=2).
+        let expected_0 = (face(2) - face(1)) / dx;
+        let expected_last = (face(2 + n - 1) - face(2 + n - 2)) / dx;
+        assert!((div[0] - expected_0).abs() < 1e-10, "got {}", div[0]);
+        assert!(
+            (div[n - 1] - expected_last).abs() < 1e-10,
+            "got {}",
+            div[n - 1]
+        );
+    }
+
+    #[test]
+    fn weno5_ghost_cell_left_biased_matches_hand_built_extended_field() {
+        // v ≥ 0: margin_left=3, margin_right=2.
+        let values = vec![0.2, 1.3, -0.7, 2.1, 0.0, -1.5, 0.6];
+        let m = mesh(values.len());
+        let dx = m.characteristic_length();
+        let u = ContextValue::ScalarField(DVector::from_vec(values.clone()));
+        let g = -0.3;
+        let left_bc = Arc::new(DirichletGhost(g));
+        let right_bc = Arc::new(DirichletGhost(g));
+        let op = WENO5::new(1.0, 0.0, FluxBoundary::GhostCell(left_bc, right_bc));
+        let div = op.apply(&u, &m, &ctx(0.001 * dx)).unwrap();
+        let div = div.as_scalar_field().unwrap();
+
+        let n = values.len();
+        let ghost_m3 = 2.0 * g - values[2];
+        let ghost_m2 = 2.0 * g - values[1];
+        let ghost_m1 = 2.0 * g - values[0];
+        let ghost_p1 = 2.0 * g - values[n - 1];
+        let ghost_p2 = 2.0 * g - values[n - 2];
+        let mut extended = vec![ghost_m3, ghost_m2, ghost_m1];
+        extended.extend(values.iter().copied());
+        extended.push(ghost_p1);
+        extended.push(ghost_p2);
+        let ext = DVector::from_vec(extended);
+        let m_ext = ext.len();
+
+        let face =
+            |i: usize| WENO5::new(1.0, 0.0, FluxBoundary::Periodic).face_flux(dx, &ext, m_ext, i);
+        let expected_0 = (face(3) - face(2)) / dx;
+        let expected_last = (face(3 + n - 1) - face(3 + n - 2)) / dx;
+        assert!((div[0] - expected_0).abs() < 1e-10, "got {}", div[0]);
+        assert!(
+            (div[n - 1] - expected_last).abs() < 1e-10,
+            "got {}",
+            div[n - 1]
+        );
+    }
+
+    #[test]
+    fn weno3_ghost_cell_fails_explicitly_when_bc_has_no_ghost_value() {
+        #[derive(Debug)]
+        struct NoGhostBC;
+        impl RequiresContext for NoGhostBC {
+            fn required_variables(&self) -> Vec<ContextVariable> {
+                vec![]
+            }
+        }
+        impl crate::boundary::BoundaryCondition for NoGhostBC {
+            fn boundary_type(&self) -> crate::boundary::BoundaryType {
+                crate::boundary::BoundaryType::Neumann
+            }
+            fn apply(
+                &self,
+                _state: &mut DVector<f64>,
+                _ctx: &ComputeContext,
+                _mesh: &dyn Mesh,
+            ) -> Result<(), OxiflowError> {
+                Ok(())
+            }
+        }
+
+        let m = mesh(5);
+        let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
+        let left_bc = Arc::new(NoGhostBC);
+        let right_bc = Arc::new(DirichletGhost(0.0));
+        let op = WENO3::new(1.0, 0.0, FluxBoundary::GhostCell(left_bc, right_bc));
+        let err = op.apply(&u, &m, &ctx(0.001)).unwrap_err();
         assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
     }
 }
