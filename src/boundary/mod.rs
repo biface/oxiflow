@@ -288,6 +288,48 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
         ctx: &ComputeContext,
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError>;
+
+    /// Ghost-cell value for this boundary condition, at reflection depth
+    /// `depth` (DD-042, amendment 1).
+    ///
+    /// `FluxBoundary::GhostCell` (`operators::fv`, `operators::weno`) needs
+    /// values *outside* the real domain to close its face-flux computation
+    /// at the boundary — something `apply()` above does not provide, since
+    /// it only constrains real DOFs. `depth` counts ghost layers outward
+    /// from the boundary (`1` = nearest, `2` = next, ...) — `operators::fv`'s
+    /// 2-point stencil only ever needs `depth = 1`; `operators::weno`'s
+    /// wider stencils need up to `2` (`WENO3`) or `3` (`WENO5`) layers
+    /// depending on the upwind direction selected at the call site.
+    ///
+    /// `interior_at_depth` is the real interior value at the *symmetric*
+    /// depth — the method-of-images convention: ghost layer `k` mirrors
+    /// interior node `k−1` (so `depth = 1` pairs with the nearest interior
+    /// neighbor, `depth = 2` with the next one, etc.). Each layer is derived
+    /// directly from this real interior value, not from a previously
+    /// computed ghost layer — deliberately, so a Robin condition (e.g.
+    /// [`DanckwertsInlet`]) stays exact at every depth instead of eroding
+    /// through repeated extrapolation. A chained scheme (each ghost derived
+    /// from the previous one) was considered and rejected for exactly this
+    /// reason — see DD-042, amendment 1.
+    ///
+    /// Defaults to `None` — non-breaking for every existing or external
+    /// implementation. A generic Dirichlet/Neumann formula is deliberately
+    /// *not* supplied here as a fallback: a Robin condition has no generic
+    /// ghost value independent of its own α/β coefficients, and silently
+    /// approximating one for it would be wrong, not merely imprecise — see
+    /// DD-042 for the two concrete consumers (lahar-lake, chromatography)
+    /// that motivated this method and why a generic-by-`BoundaryType`
+    /// fallback was rejected in favor of per-implementation exactness.
+    ///
+    /// A `FluxBoundary::GhostCell` referencing a BC that does not override
+    /// this method (still returns `None`), or that cannot supply the
+    /// `depth` a caller needs, must fail explicitly
+    /// (`OxiflowError::PreconditionFailed`) rather than substitute an
+    /// approximation of its own.
+    fn ghost_value(&self, depth: usize, interior_at_depth: f64, dx: f64) -> Option<f64> {
+        let _ = (depth, interior_at_depth, dx);
+        None
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -583,6 +625,14 @@ mod tests {
         let ctx = ComputeContext::new(3.5, 0.01);
         TimeDependentBC.apply(&mut state, &ctx, &mesh).unwrap();
         assert!((state[0] - 3.5).abs() < 1e-12);
+    }
+
+    // ── ghost_value() (DD-042) ─────────────────────────────────────────────
+
+    #[test]
+    fn ghost_value_defaults_to_none() {
+        assert_eq!(ZeroFluxBC.ghost_value(1, 2.0, 0.1), None);
+        assert_eq!(FixedInletBC { value: 0.0 }.ghost_value(2, 2.0, 0.1), None);
     }
 
     // ── Debug supertrait ──────────────────────────────────────────────────────

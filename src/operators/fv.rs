@@ -44,6 +44,7 @@
 
 use nalgebra::DVector;
 
+use crate::boundary::BoundaryCondition;
 use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
@@ -84,13 +85,109 @@ fn periodic_divergence(
     Ok(div)
 }
 
+/// Computes the one-sided (decentered) flux divergence for a non-periodic
+/// domain — [`FluxBoundary::Truncation`].
+///
+/// Interior cells use the same centered two-face formula as
+/// [`periodic_divergence`]. The two boundary cells (`0` and `n−1`) have no
+/// face across the domain edge; rather than inventing one, each is assigned
+/// the same formula already computed for its nearest interior neighbor
+/// (`1` and `n−2` respectively) — see [`FluxBoundary::Truncation`]'s
+/// documentation for why this mirrors `operators::fd`'s existing boundary
+/// posture. Requires at least 3 cells: 2 boundary cells plus 1 interior cell
+/// to borrow from.
+fn truncated_divergence(
+    u: &DVector<f64>,
+    dx: f64,
+    face_flux: impl Fn(f64, f64) -> f64,
+) -> Result<DVector<f64>, OxiflowError> {
+    let n = u.len();
+    if n < 3 {
+        return Err(OxiflowError::InvalidDomain(format!(
+            "finite-volume flux with FluxBoundary::Truncation requires at least 3 cells, got {n}"
+        )));
+    }
+
+    let mut div = DVector::zeros(n);
+    for i in 1..n - 1 {
+        let flux_right = face_flux(u[i], u[i + 1]);
+        let flux_left = face_flux(u[i - 1], u[i]);
+        div[i] = (flux_right - flux_left) / dx;
+    }
+    div[0] = div[1];
+    div[n - 1] = div[n - 2];
+    Ok(div)
+}
+
+/// Computes the flux divergence using ghost-cell values supplied by real
+/// [`BoundaryCondition`]s — [`FluxBoundary::GhostCell`].
+///
+/// Interior cells use the same centered two-face formula as
+/// [`periodic_divergence`]/[`truncated_divergence`]. The two boundary cells
+/// use a ghost value from `left_bc`/`right_bc` (via
+/// [`BoundaryCondition::ghost_value`], depth 1 — FV's 2-point stencil never
+/// needs more) as the missing neighbor, instead of wrapping (`Periodic`) or
+/// reusing an interior formula (`Truncation`) — see
+/// [`FluxBoundary::GhostCell`]'s documentation for why only this variant
+/// references real boundary physics. Fails explicitly if either BC does not
+/// override `ghost_value()` (still returns `None`) — no generic fallback is
+/// substituted (DD-042).
+fn ghost_cell_divergence(
+    u: &DVector<f64>,
+    dx: f64,
+    left_bc: &dyn BoundaryCondition,
+    right_bc: &dyn BoundaryCondition,
+    context: &'static str,
+    face_flux: impl Fn(f64, f64) -> f64,
+) -> Result<DVector<f64>, OxiflowError> {
+    let n = u.len();
+    if n < 2 {
+        return Err(OxiflowError::InvalidDomain(format!(
+            "finite-volume flux requires at least 2 cells, got {n}"
+        )));
+    }
+
+    let ghost_left =
+        left_bc
+            .ghost_value(1, u[0], dx)
+            .ok_or_else(|| OxiflowError::PreconditionFailed {
+                context,
+                message: format!(
+                    "left boundary condition ({:?}) does not supply a ghost value at depth 1 — \
+                 FluxBoundary::GhostCell requires an exact ghost value, not a generic fallback",
+                    left_bc.boundary_type()
+                ),
+            })?;
+    let ghost_right =
+        right_bc
+            .ghost_value(1, u[n - 1], dx)
+            .ok_or_else(|| OxiflowError::PreconditionFailed {
+                context,
+                message: format!(
+                    "right boundary condition ({:?}) does not supply a ghost value at depth 1 — \
+                 FluxBoundary::GhostCell requires an exact ghost value, not a generic fallback",
+                    right_bc.boundary_type()
+                ),
+            })?;
+
+    let mut div = DVector::zeros(n);
+    for i in 1..n - 1 {
+        let flux_right = face_flux(u[i], u[i + 1]);
+        let flux_left = face_flux(u[i - 1], u[i]);
+        div[i] = (flux_right - flux_left) / dx;
+    }
+    div[0] = (face_flux(u[0], u[1]) - face_flux(ghost_left, u[0])) / dx;
+    div[n - 1] = (face_flux(u[n - 1], ghost_right) - face_flux(u[n - 2], u[n - 1])) / dx;
+    Ok(div)
+}
+
 // ── FVCenteredFlux ────────────────────────────────────────────────────────────
 
 /// 2nd-order centered advective flux + centered Fick's-law diffusive flux.
 ///
 /// `F(u, ∇u) = v·u − D·∂u/∂x`, with the advective term reconstructed as the
 /// average of the two neighboring cell values at each face.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct FVCenteredFlux {
     velocity: f64,
     diffusion: f64,
@@ -134,8 +231,17 @@ impl FluxDivergenceOperator for FVCenteredFlux {
         let d = self.diffusion;
         let face_flux = |left: f64, right: f64| v * (left + right) / 2.0 - d * (right - left) / dx;
 
-        let div = match self.boundary {
+        let div = match &self.boundary {
             FluxBoundary::Periodic => periodic_divergence(u, dx, face_flux)?,
+            FluxBoundary::Truncation => truncated_divergence(u, dx, face_flux)?,
+            FluxBoundary::GhostCell(left_bc, right_bc) => ghost_cell_divergence(
+                u,
+                dx,
+                left_bc.as_ref(),
+                right_bc.as_ref(),
+                "FVCenteredFlux",
+                face_flux,
+            )?,
         };
         Ok(ContextValue::ScalarField(div))
     }
@@ -148,7 +254,7 @@ impl FluxDivergenceOperator for FVCenteredFlux {
 /// `F(u, ∇u) = v·u − D·∂u/∂x`, with the advective term taken from the
 /// upstream cell (direction of `v`) at each face — robust for strong
 /// advection where `FVCenteredFlux` would oscillate.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct FVUpwindFlux {
     velocity: f64,
     diffusion: f64,
@@ -192,8 +298,17 @@ impl FluxDivergenceOperator for FVUpwindFlux {
             advective - d * (right - left) / dx
         };
 
-        let div = match self.boundary {
+        let div = match &self.boundary {
             FluxBoundary::Periodic => periodic_divergence(u, dx, face_flux)?,
+            FluxBoundary::Truncation => truncated_divergence(u, dx, face_flux)?,
+            FluxBoundary::GhostCell(left_bc, right_bc) => ghost_cell_divergence(
+                u,
+                dx,
+                left_bc.as_ref(),
+                right_bc.as_ref(),
+                "FVUpwindFlux",
+                face_flux,
+            )?,
         };
         Ok(ContextValue::ScalarField(div))
     }
@@ -204,6 +319,7 @@ impl FluxDivergenceOperator for FVUpwindFlux {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     fn mesh(n: usize) -> UniformGrid1D {
         UniformGrid1D::new(n, 0.0, 1.0).unwrap()
@@ -211,6 +327,64 @@ mod tests {
 
     fn ctx(dt: f64) -> ComputeContext {
         ComputeContext::new(0.0, dt)
+    }
+
+    // ── Test fixtures: BoundaryCondition with/without ghost_value() ───────────
+
+    /// Fixed-value ghost cell (Dirichlet-like), ignoring `boundary_state`/
+    /// `neighbor_state`/`dx` — enough to exercise `FluxBoundary::GhostCell`'s
+    /// wiring without depending on a real (not-yet-integrated) BC like
+    /// `DanckwertsInlet`.
+    #[derive(Debug)]
+    struct FixedGhost(f64);
+
+    impl RequiresContext for FixedGhost {
+        fn required_variables(&self) -> Vec<crate::context::variable::ContextVariable> {
+            vec![]
+        }
+    }
+
+    impl crate::boundary::BoundaryCondition for FixedGhost {
+        fn boundary_type(&self) -> crate::boundary::BoundaryType {
+            crate::boundary::BoundaryType::Dirichlet
+        }
+        fn apply(
+            &self,
+            _state: &mut DVector<f64>,
+            _ctx: &ComputeContext,
+            _mesh: &dyn Mesh,
+        ) -> Result<(), OxiflowError> {
+            Ok(())
+        }
+        fn ghost_value(&self, _depth: usize, _interior_at_depth: f64, _dx: f64) -> Option<f64> {
+            Some(self.0)
+        }
+    }
+
+    /// A BC that does not override `ghost_value()` — stays at the trait's
+    /// `None` default, to exercise `FluxBoundary::GhostCell`'s explicit
+    /// failure path.
+    #[derive(Debug)]
+    struct NoGhost;
+
+    impl RequiresContext for NoGhost {
+        fn required_variables(&self) -> Vec<crate::context::variable::ContextVariable> {
+            vec![]
+        }
+    }
+
+    impl crate::boundary::BoundaryCondition for NoGhost {
+        fn boundary_type(&self) -> crate::boundary::BoundaryType {
+            crate::boundary::BoundaryType::Neumann
+        }
+        fn apply(
+            &self,
+            _state: &mut DVector<f64>,
+            _ctx: &ComputeContext,
+            _mesh: &dyn Mesh,
+        ) -> Result<(), OxiflowError> {
+            Ok(())
+        }
     }
 
     // ── Conservation property (#48 acceptance criterion) ──────────────────────
@@ -285,6 +459,98 @@ mod tests {
         let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
         // |v|*dt/dx = 1.0 * 0.2 / 0.25 = 0.8 ≤ 1
         assert!(op.apply(&u, &m, &ctx(0.2)).is_ok());
+    }
+
+    // ── Truncation boundary treatment (#DD-042 amendment scope) ───────────────
+
+    #[test]
+    fn centered_flux_truncation_boundary_matches_nearest_interior_formula() {
+        let m = mesh(6);
+        let dx = m.characteristic_length();
+        let u = ContextValue::ScalarField(DVector::from_vec(vec![0.2, 1.3, -0.7, 2.1, 0.0, -1.5]));
+        let op = FVCenteredFlux::new(0.8, 0.05, FluxBoundary::Truncation);
+        let result = op.apply(&u, &m, &ctx(0.1 * dx)).unwrap();
+        let div = result.as_scalar_field().unwrap().clone();
+        // Boundary cells reuse their nearest interior neighbor's stencil
+        // value — see FluxBoundary::Truncation's documentation.
+        assert_eq!(div[0], div[1]);
+        assert_eq!(div[div.len() - 1], div[div.len() - 2]);
+    }
+
+    #[test]
+    fn upwind_flux_truncation_rejects_field_below_three_cells() {
+        let m = mesh(5);
+        let op = FVUpwindFlux::new(0.5, 0.0, FluxBoundary::Truncation);
+        let u = ContextValue::ScalarField(DVector::from_vec(vec![1.0, 2.0]));
+        let err = op.apply(&u, &m, &ctx(0.001)).unwrap_err();
+        assert!(matches!(err, OxiflowError::InvalidDomain(_)));
+    }
+
+    #[test]
+    fn centered_flux_truncation_does_not_conserve_sum_in_general() {
+        // Documented tradeoff (FluxBoundary::Truncation): unlike Periodic,
+        // the outermost face fluxes are each counted once, not twice —
+        // no telescoping, so the sum is generally non-zero for a non-trivial
+        // field. Asserting non-conservation here guards against silently
+        // reintroducing exact conservation by accident later.
+        let m = mesh(6);
+        let dx = m.characteristic_length();
+        let u = ContextValue::ScalarField(DVector::from_vec(vec![0.2, 1.3, -0.7, 2.1, 0.0, -1.5]));
+        let op = FVCenteredFlux::new(0.8, 0.05, FluxBoundary::Truncation);
+        let result = op.apply(&u, &m, &ctx(0.1 * dx)).unwrap();
+        let sum: f64 = result.as_scalar_field().unwrap().iter().sum();
+        assert!(sum.abs() > 1e-6, "expected non-zero sum, got {sum}");
+    }
+
+    // ── GhostCell boundary treatment (DD-042) ──────────────────────────────
+
+    #[test]
+    fn centered_flux_ghost_cell_matches_hand_derived_value() {
+        // Pure diffusion (v=0) so the face flux reduces to -D*(right-left)/dx
+        // — easy to hand-verify against a known ghost value.
+        let m = mesh(4);
+        let dx = m.characteristic_length();
+        let values = vec![0.0, 1.0, 0.0, -1.0];
+        let u = ContextValue::ScalarField(DVector::from_vec(values.clone()));
+        let d = 0.5;
+        let left_bc = Arc::new(FixedGhost(2.0));
+        let right_bc = Arc::new(FixedGhost(1.0));
+        let op = FVCenteredFlux::new(0.0, d, FluxBoundary::GhostCell(left_bc, right_bc));
+        let result = op.apply(&u, &m, &ctx(0.01)).unwrap();
+        let div = result.as_scalar_field().unwrap();
+
+        // div[0] = -D * ((values[1]-values[0]) - (values[0]-ghost_left)) / dx²
+        let expected_0 = -d * ((values[1] - values[0]) - (values[0] - 2.0)) / (dx * dx);
+        assert!((div[0] - expected_0).abs() < 1e-10, "got {}", div[0]);
+
+        let n = values.len();
+        let expected_n = -d * ((1.0 - values[n - 1]) - (values[n - 1] - values[n - 2])) / (dx * dx);
+        assert!(
+            (div[n - 1] - expected_n).abs() < 1e-10,
+            "got {}",
+            div[n - 1]
+        );
+    }
+
+    #[test]
+    fn centered_flux_ghost_cell_fails_explicitly_when_bc_has_no_ghost_value() {
+        let m = mesh(4);
+        let u = ContextValue::ScalarField(DVector::from_element(4, 1.0));
+        let left_bc = Arc::new(NoGhost);
+        let right_bc = Arc::new(FixedGhost(0.0));
+        let op = FVCenteredFlux::new(0.0, 0.1, FluxBoundary::GhostCell(left_bc, right_bc));
+        let err = op.apply(&u, &m, &ctx(0.001)).unwrap_err();
+        assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
+    }
+
+    #[test]
+    fn upwind_flux_ghost_cell_accepts_minimum_two_cells() {
+        let m = mesh(2);
+        let u = ContextValue::ScalarField(DVector::from_vec(vec![1.0, 2.0]));
+        let left_bc = Arc::new(FixedGhost(0.0));
+        let right_bc = Arc::new(FixedGhost(3.0));
+        let op = FVUpwindFlux::new(0.5, 0.0, FluxBoundary::GhostCell(left_bc, right_bc));
+        assert!(op.apply(&u, &m, &ctx(0.01)).is_ok());
     }
 
     // ── InvalidDomain on undersized field ──────────────────────────────────
