@@ -38,9 +38,10 @@
 //! | [`fv::FVCenteredFlux`], [`fv::FVUpwindFlux`] | FV | `FluxDivergenceOperator` | v0.5.0 (#48) ✅ |
 //! | [`weno::WENO3`], [`weno::WENO5`] | WENO | `FluxDivergenceOperator` | v0.5.0 (#49) ✅ |
 //! | [`limiters::LimitedFlux`] (`MinMod`/`VanLeer`/`Superbee`) | MUSCL | `FluxDivergenceOperator` | v0.5.0 (#99) ✅ |
-//! | Adaptive WENO/limiter selection | — | — | v0.5.0 (#99, design pending — see `limiters` module doc) |
+//! | [`adaptive::AdaptiveFlux`] (WENO3/limiter blend, Péclet-gated) | — | `FluxDivergenceOperator` | v0.5.0 (#99) ✅ |
 //! | `FiniteElement` | FEM P1/P2 | TBD | J7 — v2.0 |
 
+pub mod adaptive;
 pub mod fd;
 pub mod fv;
 pub mod limiters;

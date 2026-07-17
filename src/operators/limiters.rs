@@ -79,17 +79,15 @@
 //! `GhostCell` uses `(2, 1)`/`(1, 2)` (one extra layer on the left — see
 //! `operators::weno`'s `GhostCell` match arm for why).
 //!
-//! ## Adaptive WENO/limiter selection — not in this module
+//! ## Adaptive WENO/limiter selection — `operators::adaptive`
 //!
 //! The originating issue (`#99`) also calls for an adaptive scheme that
 //! picks WENO where the solution is smooth and a limiter where it is steep.
-//! That selection logic is intentionally **not** implemented here — it
-//! needs its own design pass (candidate approach: reuse `operators::weno`'s
-//! already-computed smoothness indicators `β` per cell, gated by a
-//! global Péclet-number threshold that decides whether the mechanism
-//! engages at all, since velocity/diffusion are constant in this module's
-//! scope and a genuinely *local* Péclet number has no meaning here). Tracked
-//! as follow-up work, not deferred silently.
+//! That selection logic lives in [`crate::operators::adaptive::AdaptiveFlux`],
+//! not here — it reuses `WENO3`'s own smoothness indicator per cell, gated
+//! by a global Péclet-number threshold (velocity/diffusion are constant in
+//! this module's scope, so a genuinely *local* Péclet number has no meaning
+//! here — see that module's documentation for the full rationale).
 //!
 //! [`UniformGrid1D`]: crate::mesh::structured::UniformGrid1D
 
@@ -187,7 +185,7 @@ impl LimitedFlux {
         }
     }
 
-    fn face_flux(&self, dx: f64, u: &DVector<f64>, n: usize, i: usize) -> f64 {
+    pub(crate) fn face_flux(&self, dx: f64, u: &DVector<f64>, n: usize, i: usize) -> f64 {
         let v = self.velocity;
         let u_face = if v >= 0.0 {
             let (a, b, c) = (u[wrap(i, -1, n)], u[i], u[wrap(i, 1, n)]);
