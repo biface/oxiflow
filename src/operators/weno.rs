@@ -240,7 +240,7 @@ impl WENO3 {
         }
     }
 
-    fn face_flux(&self, dx: f64, u: &DVector<f64>, n: usize, i: usize) -> f64 {
+    pub(crate) fn face_flux(&self, dx: f64, u: &DVector<f64>, n: usize, i: usize) -> f64 {
         let v = self.velocity;
         let u_face = if v >= 0.0 {
             weno3_left(u[wrap(i, -1, n)], u[i], u[wrap(i, 1, n)])
@@ -249,6 +249,29 @@ impl WENO3 {
         };
         let diffusive = self.diffusion * (u[wrap(i, 1, n)] - u[i]) / dx;
         v * u_face - diffusive
+    }
+
+    /// Local smoothness indicator at face `i`, in `[0, 1)` — `0` for a
+    /// perfectly smooth (locally linear) window, approaching `1` near a
+    /// discontinuity or kink. Used by `operators::adaptive::AdaptiveFlux`
+    /// (#99) to blend WENO with a limiter per face, not by `WENO3` itself.
+    ///
+    /// `τ = |β0 − β1|` — the same WENO-Z smoothness contrast [`weno_combine2`]
+    /// uses internally — normalized by `β0 + β1` so the result stays bounded
+    /// regardless of the field's magnitude: `τ ≤ max(β0, β1) ≤ β0 + β1`
+    /// always, so `τ / (β0 + β1 + ε) < 1`. `β0 ≈ β1` (comparable slopes on
+    /// both substencils — smooth or at a critical point) gives a value near
+    /// `0`; `β0` and `β1` differing sharply (a kink nearby) gives a value
+    /// approaching `1`.
+    pub(crate) fn smoothness(&self, u: &DVector<f64>, n: usize, i: usize) -> f64 {
+        let (beta0, beta1) = if self.velocity >= 0.0 {
+            let (a, b, c) = (u[wrap(i, -1, n)], u[i], u[wrap(i, 1, n)]);
+            ((b - a).powi(2), (c - b).powi(2))
+        } else {
+            let (b, c, d) = (u[i], u[wrap(i, 1, n)], u[wrap(i, 2, n)]);
+            ((c - b).powi(2), (d - c).powi(2))
+        };
+        (beta0 - beta1).abs() / (beta0 + beta1 + WENO_EPSILON)
     }
 }
 
