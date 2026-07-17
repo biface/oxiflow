@@ -1,0 +1,64 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `operators::weno`"><title>oxiflow::operators::weno - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module weno</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.4.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module weno</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-operatorsweno" title="Module `operators::weno`">Module <code>operators::weno</code></a><ul><li><a href="#why-weno" title="Why WENO">Why WENO</a></li><li><a href="#cell-average-semantics--shared-with-operatorsfv-dd-041" title="Cell-average semantics — shared with `operators::fv` (DD-041)">Cell-average semantics — shared with <code>operators::fv</code> (DD-041)</a></li><li><a href="#upwind-direction-selection" title="Upwind-direction selection">Upwind-direction selection</a></li><li><a href="#fluxboundary-and-cfl" title="`FluxBoundary` and CFL"><code>FluxBoundary</code> and CFL</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>operators</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">operators</a></div><h1>Module <span>weno</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/operators/weno.rs.html#1-883">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-operatorsweno"><a class="doc-anchor" href="#module-operatorsweno">§</a>Module <code>operators::weno</code></h2>
+<p>WENO (Weighted Essentially Non-Oscillatory) reconstruction schemes for
+<a href="../../mesh/structured/struct.UniformGrid1D.html" title="struct oxiflow::mesh::structured::UniformGrid1D"><code>UniformGrid1D</code></a> — <code>WENO3</code> (3rd order), <code>WENO5</code> (5th order) (#49,
+DD-039).</p>
+<h3 id="why-weno"><a class="doc-anchor" href="#why-weno">§</a>Why WENO</h3>
+<p><code>operators::fv</code>’s <code>FVUpwindFlux</code> is only 1st order; <code>FVCenteredFlux</code>
+oscillates near sharp fronts. WENO reconstructs the face value from
+several candidate stencils, weighting each by a nonlinear function of its
+local smoothness — smooth stencils dominate the combination (recovering
+high formal order), while stencils straddling a discontinuity are
+suppressed (avoiding the oscillations a fixed high-order linear
+reconstruction would produce there). The substencil reconstruction
+formulas and ideal weights follow Jiang &amp; Shu (1996); the nonlinear
+weighting formula itself uses WENO-Z (Borges, Carmona, Costa &amp; Don,
+2008) rather than the original Jiang-Shu weighting — see
+[<code>weno_combine2</code>] for why (critical-point accuracy).</p>
+<p>Like <code>operators::fv</code>: <code>F(u, ∇u) = v·u − D·∂u/∂x</code> (advection, Fick’s law
+diffusion) — only the advective face value is WENO-reconstructed; the
+diffusive term is always the direct centered difference between the two
+nodes adjacent to the face, exactly as in <code>operators::fv</code>.</p>
+<h3 id="cell-average-semantics--shared-with-operatorsfv-dd-041"><a class="doc-anchor" href="#cell-average-semantics--shared-with-operatorsfv-dd-041">§</a>Cell-average semantics — shared with <code>operators::fv</code> (DD-041)</h3>
+<p><code>u[i]</code> here is the average of <code>u</code> over the cell whose faces sit at nodes
+<code>i</code> and <code>i+1</code> — the <em>same</em> cell-average interpretation <code>operators::fv</code>
+uses (DD-040), not a nodal point-value interpretation. This module
+originally claimed the opposite (“no cell/node question here”), reasoning
+that WENO reconstructs directly from <code>UniformGrid1D</code>’s nodal array
+without a separate cell-center computation, unlike FV. That reasoning
+missed the reason cell averages matter here: with cell averages,
+<code>d(u_i)/dt = -(F(x_i+h/2) - F(x_i-h/2))/h</code> is <em>exact</em> (divergence theorem
+over the cell), so the flux-difference step introduces no error of its
+own — accuracy is governed purely by the reconstruction’s own order (3rd
+for WENO3, 5th for WENO5). With a nodal point-value interpretation
+instead, differencing two independently-reconstructed half-point values
+has its <em>own</em> <code>O(h²)</code> truncation error regardless of how accurate the
+reconstruction is — this was caught empirically (order-verification
+tests measured order ≈2 instead of the expected 3/5) and confirmed by
+direct Taylor expansion of the resulting stencil. See the correction
+history above <code>weno3_left</code> for the full account. This is DD-041 — a new
+decision extending DD-040’s cell-average convention to a second
+consumer, not an amendment rewriting what DD-040 itself decided.</p>
+<h3 id="upwind-direction-selection"><a class="doc-anchor" href="#upwind-direction-selection">§</a>Upwind-direction selection</h3>
+<p><code>velocity</code> is a constant scalar (the “simple case” of DD-039 — space/time
+varying parameters would be declared via <code>required_variables()</code> instead,
+not needed by <code>#49</code>’s scope). Because the sign of <code>velocity</code> never
+changes across the domain, the upwind bias is chosen once from
+<code>velocity</code>’s sign and applied at every face — no per-face direction
+switching logic is needed (that would only matter for a
+space-varying velocity field, out of scope here).</p>
+<h3 id="fluxboundary-and-cfl"><a class="doc-anchor" href="#fluxboundary-and-cfl">§</a><code>FluxBoundary</code> and CFL</h3>
+<p>Both reuse <a href="../enum.FluxBoundary.html" title="enum oxiflow::operators::FluxBoundary"><code>crate::operators::FluxBoundary</code></a> and
+[<code>crate::operators::check_cfl</code>], shared with <code>operators::fv</code> — same
+boundary-treatment question, same advective stability condition. See
+their documentation for rationale.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.WENO3.html" title="struct oxiflow::operators::weno::WENO3">WENO3</a></dt><dd>3rd-order WENO advective flux + centered Fick’s-law diffusive flux.</dd><dt><a class="struct" href="struct.WENO5.html" title="struct oxiflow::operators::weno::WENO5">WENO5</a></dt><dd>5th-order WENO advective flux + centered Fick’s-law diffusive flux.</dd></dl></section></div></main></body></html>

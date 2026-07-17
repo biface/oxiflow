@@ -1,0 +1,44 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `operators::fv`"><title>oxiflow::operators::fv - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module fv</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.4.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module fv</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-operatorsfv" title="Module `operators::fv`">Module <code>operators::fv</code></a><ul><li><a href="#cell-semantics-dd-040" title="Cell semantics (DD-040)">Cell semantics (DD-040)</a></li><li><a href="#fluxboundary--an-explicit-choice-not-a-hidden-assumption" title="`FluxBoundary` — an explicit choice, not a hidden assumption"><code>FluxBoundary</code> — an explicit choice, not a hidden assumption</a></li><li><a href="#cfl-check" title="CFL check">CFL check</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>operators</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">operators</a></div><h1>Module <span>fv</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/operators/fv.rs.html#1-574">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-operatorsfv"><a class="doc-anchor" href="#module-operatorsfv">§</a>Module <code>operators::fv</code></h2>
+<p>Finite-volume <a href="../trait.FluxDivergenceOperator.html" title="trait oxiflow::operators::FluxDivergenceOperator"><code>FluxDivergenceOperator</code></a> implementations for
+<a href="../../mesh/structured/struct.UniformGrid1D.html" title="struct oxiflow::mesh::structured::UniformGrid1D"><code>UniformGrid1D</code></a> — <code>FVCenteredFlux</code> (2nd-order centered advection),
+<code>FVUpwindFlux</code> (1st-order upwind advection, robust for strong advection)
+(#48, DD-039, DD-040).</p>
+<p>Both compute the full flux <code>F(u, ∇u) = v·u − D·∂u/∂x</code> (advection, Fick’s
+law diffusion) — the diffusive term is always centered in both schemes;
+only the advective term differs (centered vs upwind). Only advection
+needs directional bias for stability; diffusion is symmetric.</p>
+<h3 id="cell-semantics-dd-040"><a class="doc-anchor" href="#cell-semantics-dd-040">§</a>Cell semantics (DD-040)</h3>
+<p><code>UniformGrid1D</code>/<code>Mesh</code> stay purely nodal (INV-1) — no cell-center API was
+added. <code>u[i]</code> is interpreted as the average of the cell whose faces sit
+at nodes <code>i</code> and <code>i+1</code>; a face flux is therefore evaluated directly at a
+mesh node, not at a separately-computed cell center.</p>
+<h3 id="fluxboundary--an-explicit-choice-not-a-hidden-assumption"><a class="doc-anchor" href="#fluxboundary--an-explicit-choice-not-a-hidden-assumption">§</a><code>FluxBoundary</code> — an explicit choice, not a hidden assumption</h3>
+<p>A finite <code>n</code>-node mesh only delimits <code>n−1</code> interior cells unless the
+domain wraps around — matching the number of state values to the number
+of cells requires <em>some</em> boundary convention. <a href="../enum.FluxBoundary.html" title="enum oxiflow::operators::FluxBoundary"><code>FluxBoundary</code></a> (defined
+in <a href="../index.html" title="mod oxiflow::operators"><code>crate::operators</code></a>, shared with <code>operators::weno</code> — both families
+face the same boundary question) makes this an explicit constructor
+parameter rather than a hidden assumption; see its documentation for the
+alternatives considered.</p>
+<h3 id="cfl-check"><a class="doc-anchor" href="#cfl-check">§</a>CFL check</h3>
+<p>Both schemes check the explicit advective stability condition
+<code>|v|·dt/dx ≤ 1</code> via the shared [<code>crate::operators::check_cfl</code>] (the
+condition documented for Lax–Wendroff-type explicit advection schemes)
+inside <code>apply()</code>, using <code>ctx.time_step()</code> — failing explicitly via
+<a href="../../context/error/enum.OxiflowError.html#variant.PreconditionFailed" title="variant oxiflow::context::error::OxiflowError::PreconditionFailed"><code>OxiflowError::PreconditionFailed</code></a> rather than silently returning an
+unstable result. This covers the <em>advective</em> stability condition only;
+the diffusive term has its own explicit-stability limit (Fourier number
+<code>D·dt/dx² ≤ 0.5</code>), not checked here — out of <code>#48</code>’s scope, and belongs
+conceptually to the solver’s step-size control, not a spatial operator,
+if ever enforced.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.FVCenteredFlux.html" title="struct oxiflow::operators::fv::FVCenteredFlux">FVCentered<wbr>Flux</a></dt><dd>2nd-order centered advective flux + centered Fick’s-law diffusive flux.</dd><dt><a class="struct" href="struct.FVUpwindFlux.html" title="struct oxiflow::operators::fv::FVUpwindFlux">FVUpwind<wbr>Flux</a></dt><dd>1st-order upwind advective flux + centered Fick’s-law diffusive flux.</dd></dl></section></div></main></body></html>

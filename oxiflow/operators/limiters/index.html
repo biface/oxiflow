@@ -1,0 +1,84 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `operators::limiters`"><title>oxiflow::operators::limiters - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module limiters</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.4.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module limiters</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-operatorslimiters" title="Module `operators::limiters`">Module <code>operators::limiters</code></a><ul><li><a href="#why-a-limiter-alongside-fv-and-weno" title="Why a limiter, alongside FV and WENO">Why a limiter, alongside FV and WENO</a></li><li><a href="#muscl-reconstruction-not-a-flux-blend" title="MUSCL reconstruction, not a flux blend">MUSCL reconstruction, not a flux blend</a></li><li><a href="#cell-semantics" title="Cell semantics">Cell semantics</a></li><li><a href="#r--00-locally-constant-field" title="`r = 0/0` (locally constant field)"><code>r = 0/0</code> (locally constant field)</a></li><li><a href="#fluxboundary-and-cfl" title="`FluxBoundary` and CFL"><code>FluxBoundary</code> and CFL</a></li><li><a href="#adaptive-wenolimiter-selection--operatorsadaptive" title="Adaptive WENO/limiter selection — `operators::adaptive`">Adaptive WENO/limiter selection — <code>operators::adaptive</code></a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>operators</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">operators</a></div><h1>Module <span>limiters</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/operators/limiters.rs.html#1-512">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-operatorslimiters"><a class="doc-anchor" href="#module-operatorslimiters">§</a>Module <code>operators::limiters</code></h2>
+<p>Flux-limited (MUSCL-style) advective flux + centered diffusive flux for
+<a href="../../mesh/structured/struct.UniformGrid1D.html" title="struct oxiflow::mesh::structured::UniformGrid1D"><code>UniformGrid1D</code></a> — <a href="enum.Limiter.html" title="enum oxiflow::operators::limiters::Limiter"><code>Limiter</code></a> (<code>MinMod</code>, <code>VanLeer</code>, <code>Superbee</code>) and
+<a href="struct.LimitedFlux.html" title="struct oxiflow::operators::limiters::LimitedFlux"><code>LimitedFlux</code></a> (#99, split out of <code>#49</code> at closing time — DD-012,
+DD-039, DD-041).</p>
+<h3 id="why-a-limiter-alongside-fv-and-weno"><a class="doc-anchor" href="#why-a-limiter-alongside-fv-and-weno">§</a>Why a limiter, alongside FV and WENO</h3>
+<p><code>operators::fv::FVUpwindFlux</code> is 1st order (diffusive on sharp fronts);
+<code>operators::fv::FVCenteredFlux</code> and <code>operators::weno</code> are higher order
+but need a smoothness-driven blend (WENO’s nonlinear weights) or, here, a
+slope limiter to stay non-oscillatory near a discontinuity while
+recovering 2nd order where the solution is smooth. A limiter is
+considerably cheaper than WENO’s multi-substencil reconstruction —
+useful on its own for advection-dominated regions where WENO’s extra
+cost buys little, and as the “steep” half of the adaptive WENO/limiter
+blend (a separate, not-yet-designed piece of work — see the tracking
+note at the end of this doc).</p>
+<h3 id="muscl-reconstruction-not-a-flux-blend"><a class="doc-anchor" href="#muscl-reconstruction-not-a-flux-blend">§</a>MUSCL reconstruction, not a flux blend</h3>
+<p>Two equivalent formulations exist in the literature: blending a low- and
+a high-order <em>flux</em> with <code>φ(r)</code> (Sweby, 1984), or directly building a
+limited-slope <em>reconstruction</em> of the face value. This module uses the
+latter — one reconstructed face value per direction, not two flux
+evaluations combined — since it avoids re-deriving/re-exposing
+<code>operators::fv</code>’s low/high flux formulas as a dependency of this module;
+the two are mathematically identical for this scalar <code>F = v·u</code> advective
+term.</p>
+<p>For <code>v ≥ 0</code> (window <code>{a, b, c} = {u[i−1], u[i], u[i+1]}</code>, the same
+offsets <code>operators::weno</code>’s <code>weno3_left</code> uses):</p>
+<div class="example-wrap"><pre class="language-text"><code>r = (b − a) / (c − b)                  (upstream slope / downstream slope)
+u_face = b + 0.5·φ(r)·(c − b)</code></pre></div>
+<p><code>v &lt; 0</code> mirrors this (window <code>{b, c, d} = {u[i], u[i+1], u[i+2]}</code>, same
+offsets as <code>weno3_right</code>):</p>
+<div class="example-wrap"><pre class="language-text"><code>r = (d − c) / (c − b)
+u_face = c − 0.5·φ(r)·(c − b)</code></pre></div>
+<p><code>φ(r) = 0</code> recovers pure upwind (1st order, always non-oscillatory);
+<code>φ(r) = 1</code> recovers a centered/Lax–Wendroff-type correction (2nd order,
+can oscillate) — every limiter here interpolates between the two based
+on the local ratio of consecutive slopes <code>r</code>. The diffusive term is
+always the direct centered difference between the two nodes adjacent to
+the face, exactly as in <code>operators::fv</code>/<code>operators::weno</code>.</p>
+<h3 id="cell-semantics"><a class="doc-anchor" href="#cell-semantics">§</a>Cell semantics</h3>
+<p>Same cell-average interpretation as <code>operators::fv</code> (DD-040) and
+<code>operators::weno</code> (DD-041) — <code>u[i]</code> is the average of <code>u</code> over the cell
+whose faces sit at nodes <code>i</code> and <code>i+1</code>.</p>
+<h3 id="r--00-locally-constant-field"><a class="doc-anchor" href="#r--00-locally-constant-field">§</a><code>r = 0/0</code> (locally constant field)</h3>
+<p><code>ratio</code> (the helper computing <code>r</code>) returns <code>0.0</code> when the denominator is smaller than a fixed
+epsilon, rather than propagating a <code>NaN</code>. This is safe in both cases it
+covers: a genuinely constant local field also has a numerator near zero,
+so <code>c − b ≈ 0</code> makes the face value insensitive to <code>φ</code>’s exact value
+regardless; a genuine local extremum (numerator non-negligible, opposite
+or discontinuous slope) is exactly where every limiter here is designed
+to clip toward pure upwind — every <code>Limiter::phi</code> maps <code>r ≤ 0</code> to <code>0</code>, so
+defaulting the ill-conditioned ratio to <code>0.0</code> lands on the same
+non-oscillatory choice a genuine extremum would demand, not an arbitrary
+one.</p>
+<h3 id="fluxboundary-and-cfl"><a class="doc-anchor" href="#fluxboundary-and-cfl">§</a><code>FluxBoundary</code> and CFL</h3>
+<p>Reuses <a href="../enum.FluxBoundary.html" title="enum oxiflow::operators::FluxBoundary"><code>crate::operators::FluxBoundary</code></a>, [<code>crate::operators::check_cfl</code>],
+and the same wide-stencil boundary helpers <code>operators::weno</code> uses
+(<code>periodic_wide_divergence</code>, <code>truncated_wide_divergence</code>,
+<code>ghost_cell_wide_divergence</code>, relocated to <code>operators</code> — see their
+module-level doc there) — <code>LimitedFlux</code>’s stencil footprint is exactly
+<code>WENO3</code>’s (<code>{i−1, i, i+1}</code> for <code>v ≥ 0</code>, <code>{i, i+1, i+2}</code> for <code>v &lt; 0</code>), so
+the same margins apply: <code>Truncation</code> uses <code>(1, 1)</code>/<code>(0, 2)</code>;
+<code>GhostCell</code> uses <code>(2, 1)</code>/<code>(1, 2)</code> (one extra layer on the left — see
+<code>operators::weno</code>’s <code>GhostCell</code> match arm for why).</p>
+<h3 id="adaptive-wenolimiter-selection--operatorsadaptive"><a class="doc-anchor" href="#adaptive-wenolimiter-selection--operatorsadaptive">§</a>Adaptive WENO/limiter selection — <code>operators::adaptive</code></h3>
+<p>The originating issue (<code>#99</code>) also calls for an adaptive scheme that
+picks WENO where the solution is smooth and a limiter where it is steep.
+That selection logic lives in <a href="../adaptive/struct.AdaptiveFlux.html" title="struct oxiflow::operators::adaptive::AdaptiveFlux"><code>crate::operators::adaptive::AdaptiveFlux</code></a>,
+not here — it reuses <code>WENO3</code>’s own smoothness indicator per cell, gated
+by a global Péclet-number threshold (velocity/diffusion are constant in
+this module’s scope, so a genuinely <em>local</em> Péclet number has no meaning
+here — see that module’s documentation for the full rationale).</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.LimitedFlux.html" title="struct oxiflow::operators::limiters::LimitedFlux">Limited<wbr>Flux</a></dt><dd>Flux-limited (MUSCL) advective flux + centered Fick’s-law diffusive
+flux, 2nd order where smooth, non-oscillatory near discontinuities.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.Limiter.html" title="enum oxiflow::operators::limiters::Limiter">Limiter</a></dt><dd>Slope limiter function <code>φ(r)</code>, <code>r</code> the ratio of consecutive slopes.</dd></dl></section></div></main></body></html>

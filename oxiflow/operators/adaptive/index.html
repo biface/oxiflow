@@ -1,0 +1,67 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `operators::adaptive`"><title>oxiflow::operators::adaptive - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module adaptive</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.4.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module adaptive</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-operatorsadaptive" title="Module `operators::adaptive`">Module <code>operators::adaptive</code></a><ul><li><a href="#what-local-péclet-actually-means-here" title="What “local Péclet” actually means here">What “local Péclet” actually means here</a></li><li><a href="#reuses-weno3-and-limitedflux-directly--no-reconstruction-math" title="Reuses `WENO3` and `LimitedFlux` directly — no reconstruction math">Reuses <code>WENO3</code> and <code>LimitedFlux</code> directly — no reconstruction math</a></li><li><a href="#fluxboundary-and-stencil-footprint" title="`FluxBoundary` and stencil footprint"><code>FluxBoundary</code> and stencil footprint</a></li><li><a href="#scope-note" title="Scope note">Scope note</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>operators</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">operators</a></div><h1>Module <span>adaptive</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/operators/adaptive.rs.html#1-323">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-operatorsadaptive"><a class="doc-anchor" href="#module-operatorsadaptive">§</a>Module <code>operators::adaptive</code></h2>
+<p>Adaptive WENO/limiter selection — <a href="struct.AdaptiveFlux.html" title="struct oxiflow::operators::adaptive::AdaptiveFlux"><code>AdaptiveFlux</code></a> (#99, second half; the
+mechanical half — <code>operators::limiters</code> — landed separately).</p>
+<h3 id="what-local-péclet-actually-means-here"><a class="doc-anchor" href="#what-local-p%C3%A9clet-actually-means-here">§</a>What “local Péclet” actually means here</h3>
+<p>The originating issue asked for a scheme that “activates the limiter
+when local Péclet exceeds a threshold”. Taken literally, that has no
+meaning in this module’s scope: the mesh Péclet number
+<code>Pe = |v|·dx/D</code> is <em>constant</em> across the whole domain when velocity and
+diffusion are themselves constant (the case both <code>operators::weno</code> and
+<code>operators::limiters</code> are scoped to) — there is nothing “local” for it to
+vary over. Resolved as follows (agreed before implementation, not
+reinterpreted afterward):</p>
+<ul>
+<li><strong>Péclet is a global on/off gate.</strong> If <code>Pe ≤ peclet_threshold</code>
+(diffusion-dominated), the limiter never engages — every face uses
+<code>WENO3</code> alone, matching how a diffusion-dominated problem behaves: the
+diffusive term already damps the oscillations WENO’s nonlinear
+weighting exists to suppress, so blending in a limiter buys nothing and
+only costs accuracy where WENO alone is already 3rd order.</li>
+<li><strong>The actual per-face, per-cell decision is smoothness-driven</strong>,
+reusing <a href="../weno/struct.WENO3.html" title="struct oxiflow::operators::weno::WENO3"><code>WENO3::smoothness</code></a> — a normalized <code>[0, 1)</code> indicator already
+available from the WENO-Z weighting formula, not a separate detector
+built for this module. <code>0</code> (smooth substencils) keeps the face at pure
+WENO; approaching <code>1</code> (a kink/discontinuity straddles the stencil)
+blends toward the limiter’s reconstruction instead.</li>
+</ul>
+<p>Concretely, per face <code>i</code>:</p>
+<div class="example-wrap"><pre class="language-text"><code>gate  = smoothness(i)  if Pe &gt; peclet_threshold, else 0
+F(i)  = (1 − gate)·F_weno(i) + gate·F_limited(i)</code></pre></div>
+<p><code>gate = 0</code> everywhere recovers <code>WENO3</code> exactly (both the Péclet gate and
+a genuinely smooth field produce this). <code>gate → 1</code> recovers
+<code>LimitedFlux</code> at that face. Because <code>smoothness</code> only ever reaches <code>1</code> in
+the limit and is otherwise a continuous function of the data, the blend
+never has a hard discontinuous switch between the two schemes — avoiding
+a spurious source of oscillation the switch itself could otherwise
+introduce.</p>
+<h3 id="reuses-weno3-and-limitedflux-directly--no-reconstruction-math"><a class="doc-anchor" href="#reuses-weno3-and-limitedflux-directly--no-reconstruction-math">§</a>Reuses <code>WENO3</code> and <code>LimitedFlux</code> directly — no reconstruction math</h3>
+<p>duplicated here</p>
+<p><code>AdaptiveFlux</code> holds one <code>WENO3</code> and one <code>LimitedFlux</code> internally,
+constructed with the same <code>velocity</code>/<code>diffusion</code>/<code>boundary</code>, and calls
+their (already tested) <code>face_flux</code>/<code>smoothness</code>. This module contributes
+only the blending policy above — same posture as <code>operators::limiters</code>
+not re-deriving <code>operators::fv</code>’s flux formulas.</p>
+<h3 id="fluxboundary-and-stencil-footprint"><a class="doc-anchor" href="#fluxboundary-and-stencil-footprint">§</a><code>FluxBoundary</code> and stencil footprint</h3>
+<p><code>LimitedFlux</code>’s stencil is deliberately identical to <code>WENO3</code>’s (see
+<code>operators::limiters</code>’s module doc) — the blended face flux therefore has
+exactly <code>WENO3</code>’s footprint too, so <code>AdaptiveFlux</code> reuses the exact same
+<code>Truncation</code>/<code>GhostCell</code> margins as <code>WENO3</code> (see its <code>apply()</code> for the
+derivation).</p>
+<h3 id="scope-note"><a class="doc-anchor" href="#scope-note">§</a>Scope note</h3>
+<p><code>WENO5</code> is not wired into this module — no concrete need for it here yet
+(<code>WENO3</code> already demonstrates the blending policy; extending to <code>WENO5</code>
+is additive, not a redesign, if a concrete need for the extra order
+arises).</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.AdaptiveFlux.html" title="struct oxiflow::operators::adaptive::AdaptiveFlux">Adaptive<wbr>Flux</a></dt><dd>Adaptive blend of <a href="../weno/struct.WENO3.html" title="struct oxiflow::operators::weno::WENO3"><code>WENO3</code></a> and <a href="../limiters/struct.LimitedFlux.html" title="struct oxiflow::operators::limiters::LimitedFlux"><code>LimitedFlux</code></a>, gated by a global
+mesh Péclet number and driven per-face by WENO’s own smoothness
+indicator — see the module documentation for the full rationale.</dd></dl></section></div></main></body></html>

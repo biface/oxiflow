@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/operators/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.96.0 (ac68faa20 2026-05-25)" data-channel="1.96.0" data-search-js="search-b5634cc7.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-5013f961.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/operators/mod.rs`."><title>mod.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
         onload="renderMathInElement(document.body, {
@@ -8,23 +8,424 @@
         ]
     });">
 </script>
-</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">oxiflow/operators/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-2"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Module `operators`
+</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">oxiflow/operators/</div>mod.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Module `operators`
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! Spatial discretization operators — INV-2 invariant.
 <a href=#4 id=4 data-nosnippet>4</a>//!
 <a href=#5 id=5 data-nosnippet>5</a>//! ## Core principle (INV-2)
 <a href=#6 id=6 data-nosnippet>6</a>//!
-<a href=#7 id=7 data-nosnippet>7</a>//! Temporal integrators are decoupled from the spatial discretization scheme via
-<a href=#8 id=8 data-nosnippet>8</a>//! the `DiscreteOperator&lt;M: Mesh&gt;` trait. No method — FD, FV or FEM — is called
-<a href=#9 id=9 data-nosnippet>9</a>//! directly in an integrator. Each scheme is a separate trait implementation
-<a href=#10 id=10 data-nosnippet>10</a>//! (DD-012, J4b).
-<a href=#11 id=11 data-nosnippet>11</a>//!
-<a href=#12 id=12 data-nosnippet>12</a>//! ## Planned implementations
-<a href=#13 id=13 data-nosnippet>13</a>//!
-<a href=#14 id=14 data-nosnippet>14</a>//! | Type | Scheme | Milestone |
-<a href=#15 id=15 data-nosnippet>15</a>//! |---|---|---|
-<a href=#16 id=16 data-nosnippet>16</a>//! | `FiniteDifference1D` | Upwind/centered FD | J4b — v0.6 |
-<a href=#17 id=17 data-nosnippet>17</a>//! | `FiniteVolume` | Conservative FV + MinMod | J4b — v0.6 |
-<a href=#18 id=18 data-nosnippet>18</a>//! | `WENO5` | WENO 5 order | J4b — v0.6 |
-<a href=#19 id=19 data-nosnippet>19</a>//! | `FiniteElement` | FEM P1/P2 on mesh | J7 — v2.0 |
-</span></code></pre></div></section></main></body></html>
+<a href=#7 id=7 data-nosnippet>7</a>//! Spatial discretization is decoupled from the rest of the engine through two
+<a href=#8 id=8 data-nosnippet>8</a>//! sibling traits — never a single generic-over-everything trait, and never a
+<a href=#9 id=9 data-nosnippet>9</a>//! scheme called directly from a consumer:
+<a href=#10 id=10 data-nosnippet>10</a>//!
+<a href=#11 id=11 data-nosnippet>11</a>//! - [`DiscreteOperator`] — raw differential quantities (`∂u/∂x`, `∂²u/∂x²`) that
+<a href=#12 id=12 data-nosnippet>12</a>//!   never need physical parameters or context access; `dx` comes from the mesh
+<a href=#13 id=13 data-nosnippet>13</a>//!   alone. Consumed transparently through [`crate::context::ContextCalculator`]
+<a href=#14 id=14 data-nosnippet>14</a>//!   (e.g. `FDGradientCalculator`) — a model declares a required context
+<a href=#15 id=15 data-nosnippet>15</a>//!   variable and never knows which scheme produced it (DD-012).
+<a href=#16 id=16 data-nosnippet>16</a>//! - [`FluxDivergenceOperator`] — the complete `∇·F(u, ∇u)` term, which does need
+<a href=#17 id=17 data-nosnippet>17</a>//!   physical parameters (advection velocity, diffusion coefficient) that may be
+<a href=#18 id=18 data-nosnippet>18</a>//!   space/time-varying. Carries `ctx: &amp;ComputeContext` and `RequiresContext`
+<a href=#19 id=19 data-nosnippet>19</a>//!   directly on `apply()`. Consumed by `DiscretizedModel&lt;Op&gt;` (DD-038, DD-039).
+<a href=#20 id=20 data-nosnippet>20</a>//!
+<a href=#21 id=21 data-nosnippet>21</a>//! `FluxDivergenceOperator` is a **sibling** trait, not a sub-trait of
+<a href=#22 id=22 data-nosnippet>22</a>//! `DiscreteOperator`: their `apply()` signatures diverge (with/without `ctx`),
+<a href=#23 id=23 data-nosnippet>23</a>//! so a sub-trait relationship could not cleanly reuse the parent method.
+<a href=#24 id=24 data-nosnippet>24</a>//! Forcing `ctx`/`RequiresContext` onto `DiscreteOperator` for every scheme was
+<a href=#25 id=25 data-nosnippet>25</a>//! considered and rejected (DD-012, amendment 2) — it would have imposed that
+<a href=#26 id=26 data-nosnippet>26</a>//! capability on FD, which never needs it.
+<a href=#27 id=27 data-nosnippet>27</a>//!
+<a href=#28 id=28 data-nosnippet>28</a>//! **Selection criterion for future schemes** (FEM, spectral methods, J20):
+<a href=#29 id=29 data-nosnippet>29</a>//! does the scheme need per-call access to physical context, or does it reduce
+<a href=#30 id=30 data-nosnippet>30</a>//! to a local differentiation from mesh data alone? The former implements
+<a href=#31 id=31 data-nosnippet>31</a>//! `FluxDivergenceOperator`; the latter implements `DiscreteOperator`.
+<a href=#32 id=32 data-nosnippet>32</a>//!
+<a href=#33 id=33 data-nosnippet>33</a>//! ## Planned implementations
+<a href=#34 id=34 data-nosnippet>34</a>//!
+<a href=#35 id=35 data-nosnippet>35</a>//! | Type | Scheme | Trait | Milestone |
+<a href=#36 id=36 data-nosnippet>36</a>//! |---|---|---|---|
+<a href=#37 id=37 data-nosnippet>37</a>//! | [`fd::UpwindGradient`], [`fd::CenteredGradient`], [`fd::CenteredLaplacian`] | FD | `DiscreteOperator` | v0.5.0 (#47) ✅ |
+<a href=#38 id=38 data-nosnippet>38</a>//! | [`fv::FVCenteredFlux`], [`fv::FVUpwindFlux`] | FV | `FluxDivergenceOperator` | v0.5.0 (#48) ✅ |
+<a href=#39 id=39 data-nosnippet>39</a>//! | [`weno::WENO3`], [`weno::WENO5`] | WENO | `FluxDivergenceOperator` | v0.5.0 (#49) ✅ |
+<a href=#40 id=40 data-nosnippet>40</a>//! | [`limiters::LimitedFlux`] (`MinMod`/`VanLeer`/`Superbee`) | MUSCL | `FluxDivergenceOperator` | v0.5.0 (#99) ✅ |
+<a href=#41 id=41 data-nosnippet>41</a>//! | [`adaptive::AdaptiveFlux`] (WENO3/limiter blend, Péclet-gated) | — | `FluxDivergenceOperator` | v0.5.0 (#99) ✅ |
+<a href=#42 id=42 data-nosnippet>42</a>//! | `FiniteElement` | FEM P1/P2 | TBD | J7 — v2.0 |
+<a href=#43 id=43 data-nosnippet>43</a>
+<a href=#44 id=44 data-nosnippet>44</a></span><span class="kw">pub mod </span>adaptive;
+<a href=#45 id=45 data-nosnippet>45</a><span class="kw">pub mod </span>fd;
+<a href=#46 id=46 data-nosnippet>46</a><span class="kw">pub mod </span>fv;
+<a href=#47 id=47 data-nosnippet>47</a><span class="kw">pub mod </span>limiters;
+<a href=#48 id=48 data-nosnippet>48</a><span class="kw">pub mod </span>weno;
+<a href=#49 id=49 data-nosnippet>49</a>
+<a href=#50 id=50 data-nosnippet>50</a><span class="kw">use </span><span class="kw">crate</span>::boundary::BoundaryCondition;
+<a href=#51 id=51 data-nosnippet>51</a><span class="kw">use </span><span class="kw">crate</span>::context::compute::ComputeContext;
+<a href=#52 id=52 data-nosnippet>52</a><span class="kw">use </span><span class="kw">crate</span>::context::error::OxiflowError;
+<a href=#53 id=53 data-nosnippet>53</a><span class="kw">use </span><span class="kw">crate</span>::context::value::ContextValue;
+<a href=#54 id=54 data-nosnippet>54</a><span class="kw">use </span><span class="kw">crate</span>::mesh::Mesh;
+<a href=#55 id=55 data-nosnippet>55</a><span class="kw">use </span><span class="kw">crate</span>::model::traits::RequiresContext;
+<a href=#56 id=56 data-nosnippet>56</a><span class="kw">use </span>nalgebra::DVector;
+<a href=#57 id=57 data-nosnippet>57</a>
+<a href=#58 id=58 data-nosnippet>58</a><span class="doccomment">/// Raw spatial differential operator (FD family) — INV-2.
+<a href=#59 id=59 data-nosnippet>59</a>///
+<a href=#60 id=60 data-nosnippet>60</a>/// Computes a single differential quantity (`∂u/∂x`, `∂²u/∂x²`, ...) from a
+<a href=#61 id=61 data-nosnippet>61</a>/// field and a mesh, with no dependency on physical parameters or runtime
+<a href=#62 id=62 data-nosnippet>62</a>/// context: `dx` comes entirely from `mesh`. Consumed transparently through
+<a href=#63 id=63 data-nosnippet>63</a>/// [`crate::context::ContextCalculator`] (DD-012) — never called directly by a
+<a href=#64 id=64 data-nosnippet>64</a>/// temporal integrator.
+<a href=#65 id=65 data-nosnippet>65</a>///
+<a href=#66 id=66 data-nosnippet>66</a>/// Uses an associated type `MeshType`, not a generic parameter, per DD-012
+<a href=#67 id=67 data-nosnippet>67</a>/// amendment 1: each scheme implementation targets exactly one mesh family, so
+<a href=#68 id=68 data-nosnippet>68</a>/// a generic `DiscreteOperator&lt;M: Mesh&gt;` would add flexibility no consumer
+<a href=#69 id=69 data-nosnippet>69</a>/// needs, at the cost of object-safety (INV-4).
+<a href=#70 id=70 data-nosnippet>70</a>///
+<a href=#71 id=71 data-nosnippet>71</a>/// Distinct from [`FluxDivergenceOperator`] (DD-039), which computes the
+<a href=#72 id=72 data-nosnippet>72</a>/// complete `∇·F(u, ∇u)` term and does need context access — see the module
+<a href=#73 id=73 data-nosnippet>73</a>/// documentation above for the selection criterion between the two.
+<a href=#74 id=74 data-nosnippet>74</a></span><span class="kw">pub trait </span>DiscreteOperator: Send + Sync {
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="doccomment">/// The mesh family this scheme is implemented for.
+<a href=#76 id=76 data-nosnippet>76</a>    </span><span class="kw">type </span>MeshType: Mesh;
+<a href=#77 id=77 data-nosnippet>77</a>
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="doccomment">/// Applies the scheme to `field` on `mesh`, returning the differential
+<a href=#79 id=79 data-nosnippet>79</a>    /// quantity the scheme computes.
+<a href=#80 id=80 data-nosnippet>80</a>    </span><span class="kw">fn </span>apply(
+<a href=#81 id=81 data-nosnippet>81</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#82 id=82 data-nosnippet>82</a>        field: <span class="kw-2">&amp;</span>ContextValue,
+<a href=#83 id=83 data-nosnippet>83</a>        mesh: <span class="kw-2">&amp;</span><span class="self">Self</span>::MeshType,
+<a href=#84 id=84 data-nosnippet>84</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ContextValue, OxiflowError&gt;;
+<a href=#85 id=85 data-nosnippet>85</a>}
+<a href=#86 id=86 data-nosnippet>86</a>
+<a href=#87 id=87 data-nosnippet>87</a><span class="doccomment">/// Complete flux-divergence spatial operator (FV/WENO family) — DD-039.
+<a href=#88 id=88 data-nosnippet>88</a>///
+<a href=#89 id=89 data-nosnippet>89</a>/// Computes the full `∇·F(u, ∇u)` term of the canonical PDE form, which —
+<a href=#90 id=90 data-nosnippet>90</a>/// unlike [`DiscreteOperator`] — requires knowledge of the physics of `F`
+<a href=#91 id=91 data-nosnippet>91</a>/// (advection velocity, diffusion coefficient, ...), potentially varying in
+<a href=#92 id=92 data-nosnippet>92</a>/// space or time. Carries [`RequiresContext`] and receives `ctx` directly on
+<a href=#93 id=93 data-nosnippet>93</a>/// `apply()`.
+<a href=#94 id=94 data-nosnippet>94</a>///
+<a href=#95 id=95 data-nosnippet>95</a>/// A **sibling** trait to `DiscreteOperator`, not a sub-trait: the two
+<a href=#96 id=96 data-nosnippet>96</a>/// `apply()` signatures diverge (with/without `ctx`), so a sub-trait
+<a href=#97 id=97 data-nosnippet>97</a>/// relationship could not reuse the parent method cleanly (DD-039, option B
+<a href=#98 id=98 data-nosnippet>98</a>/// rejected). Adding `ctx`/`RequiresContext` to `DiscreteOperator` itself was
+<a href=#99 id=99 data-nosnippet>99</a>/// also rejected (DD-012, amendment 2; DD-039, option A) — it would force
+<a href=#100 id=100 data-nosnippet>100</a>/// that capability onto FD schemes, which never need it.
+<a href=#101 id=101 data-nosnippet>101</a>///
+<a href=#102 id=102 data-nosnippet>102</a>/// Two consumption modes fall out of `RequiresContext` for free, with no new
+<a href=#103 id=103 data-nosnippet>103</a>/// mechanism: a scheme with only constant physical parameters returns
+<a href=#104 id=104 data-nosnippet>104</a>/// `required_variables() -&gt; vec![]` and reads its own fields directly in
+<a href=#105 id=105 data-nosnippet>105</a>/// `apply()`; a scheme with space/time-varying parameters declares them as
+<a href=#106 id=106 data-nosnippet>106</a>/// [`crate::context::ContextVariable`]s in `required_variables()` and reads
+<a href=#107 id=107 data-nosnippet>107</a>/// them from `ctx`, resolved and ordered beforehand by `chain.rs` (DD-009)
+<a href=#108 id=108 data-nosnippet>108</a>/// exactly as for any `PhysicalModel`/`BoundaryCondition`.
+<a href=#109 id=109 data-nosnippet>109</a>///
+<a href=#110 id=110 data-nosnippet>110</a>/// Consumed by `DiscretizedModel&lt;Op&gt;` (DD-038), which binds `Op:
+<a href=#111 id=111 data-nosnippet>111</a>/// FluxDivergenceOperator` — an FD scheme cannot be plugged in there; that
+<a href=#112 id=112 data-nosnippet>112</a>/// becomes a compile error, not a silent runtime bug.
+<a href=#113 id=113 data-nosnippet>113</a></span><span class="kw">pub trait </span>FluxDivergenceOperator: RequiresContext + Send + Sync {
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="doccomment">/// The mesh family this scheme is implemented for.
+<a href=#115 id=115 data-nosnippet>115</a>    </span><span class="kw">type </span>MeshType: Mesh;
+<a href=#116 id=116 data-nosnippet>116</a>
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="doccomment">/// Applies the scheme to `field` on `mesh`, resolving any physical
+<a href=#118 id=118 data-nosnippet>118</a>    /// parameter declared in [`RequiresContext::required_variables`] from
+<a href=#119 id=119 data-nosnippet>119</a>    /// `ctx`, and returns `∇·F(u, ∇u)`.
+<a href=#120 id=120 data-nosnippet>120</a>    </span><span class="kw">fn </span>apply(
+<a href=#121 id=121 data-nosnippet>121</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#122 id=122 data-nosnippet>122</a>        field: <span class="kw-2">&amp;</span>ContextValue,
+<a href=#123 id=123 data-nosnippet>123</a>        mesh: <span class="kw-2">&amp;</span><span class="self">Self</span>::MeshType,
+<a href=#124 id=124 data-nosnippet>124</a>        ctx: <span class="kw-2">&amp;</span>ComputeContext,
+<a href=#125 id=125 data-nosnippet>125</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ContextValue, OxiflowError&gt;;
+<a href=#126 id=126 data-nosnippet>126</a>}
+<a href=#127 id=127 data-nosnippet>127</a>
+<a href=#128 id=128 data-nosnippet>128</a><span class="comment">// ── FluxBoundary ──────────────────────────────────────────────────────────────
+<a href=#129 id=129 data-nosnippet>129</a>
+<a href=#130 id=130 data-nosnippet>130</a></span><span class="doccomment">/// Boundary treatment shared by cell/face-based [`FluxDivergenceOperator`]
+<a href=#131 id=131 data-nosnippet>131</a>/// families (`operators::fv`, `operators::weno`) — both face the same
+<a href=#132 id=132 data-nosnippet>132</a>/// question: a finite `n`-node mesh only delimits `n−1` interior cells (FV)
+<a href=#133 id=133 data-nosnippet>133</a>/// or lacks enough neighbors for a wide stencil at the edges (WENO) unless
+<a href=#134 id=134 data-nosnippet>134</a>/// the domain wraps around.
+<a href=#135 id=135 data-nosnippet>135</a>///
+<a href=#136 id=136 data-nosnippet>136</a>/// Three families of treatment exist: periodic wrap (exact conservation by
+<a href=#137 id=137 data-nosnippet>137</a>/// telescoping for FV; the only one implemented so far); ghost cells via the
+<a href=#138 id=138 data-nosnippet>138</a>/// existing [`crate::boundary::BoundaryCondition`] system (a real
+<a href=#139 id=139 data-nosnippet>139</a>/// integration, scheduled later this sprint, after `#49`); and FD-style
+<a href=#140 id=140 data-nosnippet>140</a>/// one-sided truncation at the boundary (breaks FV's conservation property).
+<a href=#141 id=141 data-nosnippet>141</a>/// Rather than picking one silently, `FluxBoundary` makes the choice an
+<a href=#142 id=142 data-nosnippet>142</a>/// explicit constructor parameter on every operator that needs it.
+<a href=#143 id=143 data-nosnippet>143</a>/// `#[non_exhaustive]` (DD-022) signals this is an extension point, not a
+<a href=#144 id=144 data-nosnippet>144</a>/// closed set — only [`FluxBoundary::Periodic`] exists today.
+<a href=#145 id=145 data-nosnippet>145</a></span><span class="attr">#[non_exhaustive]
+<a href=#146 id=146 data-nosnippet>146</a>#[derive(Debug, Clone)]
+<a href=#147 id=147 data-nosnippet>147</a></span><span class="kw">pub enum </span>FluxBoundary {
+<a href=#148 id=148 data-nosnippet>148</a>    <span class="doccomment">/// The domain wraps around: the last cell/node's right neighbor is the
+<a href=#149 id=149 data-nosnippet>149</a>    /// first cell/node. Gives an exact discrete conservation property for
+<a href=#150 id=150 data-nosnippet>150</a>    /// FV — the sum of per-cell flux divergences telescopes to zero, since
+<a href=#151 id=151 data-nosnippet>151</a>    /// every internal face flux is counted once as a `+` contribution (its
+<a href=#152 id=152 data-nosnippet>152</a>    /// left cell) and once as a `−` contribution (its right cell).
+<a href=#153 id=153 data-nosnippet>153</a>    </span>Periodic,
+<a href=#154 id=154 data-nosnippet>154</a>
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="doccomment">/// One-sided (decentered) fallback at the two boundary cells — no wrap,
+<a href=#156 id=156 data-nosnippet>156</a>    /// no invented value outside the domain.
+<a href=#157 id=157 data-nosnippet>157</a>    ///
+<a href=#158 id=158 data-nosnippet>158</a>    /// Each boundary cell is assigned the same stencil formula already
+<a href=#159 id=159 data-nosnippet>159</a>    /// computed for the nearest cell that has a full interior stencil,
+<a href=#160 id=160 data-nosnippet>160</a>    /// rather than reconstructing a face flux across the domain edge — the
+<a href=#161 id=161 data-nosnippet>161</a>    /// same posture `operators::fd`'s `CenteredLaplacian`/`UpwindGradient`
+<a href=#162 id=162 data-nosnippet>162</a>    /// already take at their own boundary nodes (DD-012): reuse an
+<a href=#163 id=163 data-nosnippet>163</a>    /// available one-sided formula instead of inventing an exterior point.
+<a href=#164 id=164 data-nosnippet>164</a>    /// Breaks FV's exact conservation property (`Periodic`'s telescoping
+<a href=#165 id=165 data-nosnippet>165</a>    /// sum no longer holds, since the outermost face fluxes are each
+<a href=#166 id=166 data-nosnippet>166</a>    /// counted only once, not twice) — a documented compromise (DD-042),
+<a href=#167 id=167 data-nosnippet>167</a>    /// not an oversight.
+<a href=#168 id=168 data-nosnippet>168</a>    ///
+<a href=#169 id=169 data-nosnippet>169</a>    /// Requires enough cells for at least one cell with a full stencil to
+<a href=#170 id=170 data-nosnippet>170</a>    /// exist: 3 for `operators::fv` (2-point stencil, one interior cell to
+<a href=#171 id=171 data-nosnippet>171</a>    /// borrow from), 3 for `WENO3` (needs 1 cell of margin each side), 5
+<a href=#172 id=172 data-nosnippet>172</a>    /// for `WENO5` (needs 2 cells of margin each side) — checked explicitly
+<a href=#173 id=173 data-nosnippet>173</a>    /// by each operator, not silently producing a degenerate result.
+<a href=#174 id=174 data-nosnippet>174</a>    </span>Truncation,
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="doccomment">/// Ghost-cell fallback (DD-042): the two boundary cells' missing
+<a href=#177 id=177 data-nosnippet>177</a>    /// neighbors are supplied by the real [`crate::boundary::BoundaryCondition`]
+<a href=#178 id=178 data-nosnippet>178</a>    /// already registered on the `Domain` for that edge, via
+<a href=#179 id=179 data-nosnippet>179</a>    /// [`crate::boundary::BoundaryCondition::ghost_value`] — the one variant
+<a href=#180 id=180 data-nosnippet>180</a>    /// of `FluxBoundary` that references actual boundary physics, unlike
+<a href=#181 id=181 data-nosnippet>181</a>    /// `Periodic`/`Truncation`, which are purely numerical stencil-closure
+<a href=#182 id=182 data-nosnippet>182</a>    /// conventions.
+<a href=#183 id=183 data-nosnippet>183</a>    ///
+<a href=#184 id=184 data-nosnippet>184</a>    /// `Arc` rather than `Box`: the same `BoundaryCondition` instance is
+<a href=#185 id=185 data-nosnippet>185</a>    /// typically already owned by `Domain` (`Vec&lt;Box&lt;dyn BoundaryCondition&gt;&gt;`)
+<a href=#186 id=186 data-nosnippet>186</a>    /// and shared here, not duplicated.
+<a href=#187 id=187 data-nosnippet>187</a>    ///
+<a href=#188 id=188 data-nosnippet>188</a>    /// If the referenced BC does not override `ghost_value()` (still
+<a href=#189 id=189 data-nosnippet>189</a>    /// returns `None`), `apply()` fails explicitly via
+<a href=#190 id=190 data-nosnippet>190</a>    /// [`OxiflowError::PreconditionFailed`] rather than silently
+<a href=#191 id=191 data-nosnippet>191</a>    /// substituting an approximation — see DD-042 for why no generic
+<a href=#192 id=192 data-nosnippet>192</a>    /// per-`BoundaryType` fallback is attempted here.
+<a href=#193 id=193 data-nosnippet>193</a>    </span>GhostCell(
+<a href=#194 id=194 data-nosnippet>194</a>        std::sync::Arc&lt;<span class="kw">dyn </span><span class="kw">crate</span>::boundary::BoundaryCondition&gt;,
+<a href=#195 id=195 data-nosnippet>195</a>        std::sync::Arc&lt;<span class="kw">dyn </span><span class="kw">crate</span>::boundary::BoundaryCondition&gt;,
+<a href=#196 id=196 data-nosnippet>196</a>    ),
+<a href=#197 id=197 data-nosnippet>197</a>}
+<a href=#198 id=198 data-nosnippet>198</a>
+<a href=#199 id=199 data-nosnippet>199</a><span class="comment">// ── check_cfl ─────────────────────────────────────────────────────────────────
+<a href=#200 id=200 data-nosnippet>200</a>
+<a href=#201 id=201 data-nosnippet>201</a></span><span class="doccomment">/// Checks the explicit advective CFL stability condition `|v|·dt/dx ≤ 1`.
+<a href=#202 id=202 data-nosnippet>202</a>///
+<a href=#203 id=203 data-nosnippet>203</a>/// Shared by `operators::fv` and `operators::weno` — both are explicit
+<a href=#204 id=204 data-nosnippet>204</a>/// advective schemes subject to the same necessary stability condition
+<a href=#205 id=205 data-nosnippet>205</a>/// (documented for Lax–Wendroff-type schemes). Covers the *advective*
+<a href=#206 id=206 data-nosnippet>206</a>/// condition only; a diffusive term's own stability limit (Fourier number
+<a href=#207 id=207 data-nosnippet>207</a>/// `D·dt/dx² ≤ 0.5`) is a separate concern, not checked here — conceptually
+<a href=#208 id=208 data-nosnippet>208</a>/// the solver's step-size control's responsibility, not a spatial
+<a href=#209 id=209 data-nosnippet>209</a>/// operator's, if ever enforced.
+<a href=#210 id=210 data-nosnippet>210</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>check_cfl(
+<a href=#211 id=211 data-nosnippet>211</a>    context: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
+<a href=#212 id=212 data-nosnippet>212</a>    velocity: f64,
+<a href=#213 id=213 data-nosnippet>213</a>    dt: f64,
+<a href=#214 id=214 data-nosnippet>214</a>    dx: f64,
+<a href=#215 id=215 data-nosnippet>215</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), OxiflowError&gt; {
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="kw">let </span>cfl = velocity.abs() * dt / dx;
+<a href=#217 id=217 data-nosnippet>217</a>    <span class="kw">if </span>cfl &gt; <span class="number">1.0 </span>{
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OxiflowError::PreconditionFailed {
+<a href=#219 id=219 data-nosnippet>219</a>            context,
+<a href=#220 id=220 data-nosnippet>220</a>            message: <span class="macro">format!</span>(
+<a href=#221 id=221 data-nosnippet>221</a>                <span class="string">"CFL condition violated: |v|*dt/dx = {cfl:.6} &gt; 1.0 \
+<a href=#222 id=222 data-nosnippet>222</a>                 (v = {velocity}, dt = {dt}, dx = {dx}) — explicit advection \
+<a href=#223 id=223 data-nosnippet>223</a>                 scheme is unstable at this step size"
+<a href=#224 id=224 data-nosnippet>224</a>            </span>),
+<a href=#225 id=225 data-nosnippet>225</a>        });
+<a href=#226 id=226 data-nosnippet>226</a>    }
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="prelude-val">Ok</span>(())
+<a href=#228 id=228 data-nosnippet>228</a>}
+<a href=#229 id=229 data-nosnippet>229</a>
+<a href=#230 id=230 data-nosnippet>230</a><span class="comment">// ── Shared wide-stencil divergence helpers ──────────────────────────────────
+<a href=#231 id=231 data-nosnippet>231</a>//
+<a href=#232 id=232 data-nosnippet>232</a>// Originally introduced in `operators::weno` (#49) for its multi-point
+<a href=#233 id=233 data-nosnippet>233</a>// stencils, relocated here `pub(crate)` once `operators::limiters` (#99)
+<a href=#234 id=234 data-nosnippet>234</a>// turned out to need the exact same boundary-handling logic for its
+<a href=#235 id=235 data-nosnippet>235</a>// 3-point MUSCL stencil — a second concrete consumer, not a speculative
+<a href=#236 id=236 data-nosnippet>236</a>// generalization (same posture as DD-042's own "no anticipation without a
+<a href=#237 id=237 data-nosnippet>237</a>// second concrete need").
+<a href=#238 id=238 data-nosnippet>238</a>
+<a href=#239 id=239 data-nosnippet>239</a></span><span class="doccomment">/// Periodic index `i + k` wrapped into `[0, n)`, `k` possibly negative.
+<a href=#240 id=240 data-nosnippet>240</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>wrap(i: usize, k: isize, n: usize) -&gt; usize {
+<a href=#241 id=241 data-nosnippet>241</a>    (i <span class="kw">as </span>isize + k).rem_euclid(n <span class="kw">as </span>isize) <span class="kw">as </span>usize
+<a href=#242 id=242 data-nosnippet>242</a>}
+<a href=#243 id=243 data-nosnippet>243</a>
+<a href=#244 id=244 data-nosnippet>244</a><span class="doccomment">/// Computes the divergence of a wide-stencil face flux for a periodic
+<a href=#245 id=245 data-nosnippet>245</a>/// domain — analogous to `operators::fv`'s two-point `periodic_divergence`,
+<a href=#246 id=246 data-nosnippet>246</a>/// generalized to a `face_flux` that reads an arbitrary window of `u`
+<a href=#247 id=247 data-nosnippet>247</a>/// rather than just the two immediately adjacent values.
+<a href=#248 id=248 data-nosnippet>248</a>///
+<a href=#249 id=249 data-nosnippet>249</a>/// `face_flux(u, n, i)` evaluates the flux at the face between node `i` and
+<a href=#250 id=250 data-nosnippet>250</a>/// node `(i+1) % n`.
+<a href=#251 id=251 data-nosnippet>251</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>periodic_wide_divergence(
+<a href=#252 id=252 data-nosnippet>252</a>    u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;,
+<a href=#253 id=253 data-nosnippet>253</a>    dx: f64,
+<a href=#254 id=254 data-nosnippet>254</a>    min_nodes: usize,
+<a href=#255 id=255 data-nosnippet>255</a>    context: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
+<a href=#256 id=256 data-nosnippet>256</a>    face_flux: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>DVector&lt;f64&gt;, usize, usize) -&gt; f64,
+<a href=#257 id=257 data-nosnippet>257</a>) -&gt; <span class="prelude-ty">Result</span>&lt;DVector&lt;f64&gt;, OxiflowError&gt; {
+<a href=#258 id=258 data-nosnippet>258</a>    <span class="kw">let </span>n = u.len();
+<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">if </span>n &lt; min_nodes {
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OxiflowError::InvalidDomain(<span class="macro">format!</span>(
+<a href=#261 id=261 data-nosnippet>261</a>            <span class="string">"{context} requires at least {min_nodes} nodes, got {n}"
+<a href=#262 id=262 data-nosnippet>262</a>        </span>)));
+<a href=#263 id=263 data-nosnippet>263</a>    }
+<a href=#264 id=264 data-nosnippet>264</a>
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="kw">let </span><span class="kw-2">mut </span>div = DVector::zeros(n);
+<a href=#266 id=266 data-nosnippet>266</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..n {
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="kw">let </span>flux_right = face_flux(u, n, i);
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>flux_left = face_flux(u, n, (i + n - <span class="number">1</span>) % n);
+<a href=#269 id=269 data-nosnippet>269</a>        div[i] = (flux_right - flux_left) / dx;
+<a href=#270 id=270 data-nosnippet>270</a>    }
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="prelude-val">Ok</span>(div)
+<a href=#272 id=272 data-nosnippet>272</a>}
+<a href=#273 id=273 data-nosnippet>273</a>
+<a href=#274 id=274 data-nosnippet>274</a><span class="doccomment">/// Computes the one-sided (decentered) divergence for a non-periodic domain
+<a href=#275 id=275 data-nosnippet>275</a>/// — [`FluxBoundary::Truncation`], wide-stencil generalization of
+<a href=#276 id=276 data-nosnippet>276</a>/// `operators::fv`'s `truncated_divergence`.
+<a href=#277 id=277 data-nosnippet>277</a>///
+<a href=#278 id=278 data-nosnippet>278</a>/// `face_flux(u, n, k)` reads offsets in `[-margin_left, margin_right]`
+<a href=#279 id=279 data-nosnippet>279</a>/// relative to `k` (asymmetric for upwind-biased stencils — e.g. WENO3's
+<a href=#280 id=280 data-nosnippet>280</a>/// left-biased reconstruction reads `{k−1, k, k+1}`, its right-biased one
+<a href=#281 id=281 data-nosnippet>281</a>/// reads `{k, k+1, k+2}`; the caller computes `margin_left`/`margin_right`
+<a href=#282 id=282 data-nosnippet>282</a>/// from the reconstruction actually selected, not a fixed value, so the
+<a href=#283 id=283 data-nosnippet>283</a>/// boundary zone is no wider than the stencil in use actually requires). A
+<a href=#284 id=284 data-nosnippet>284</a>/// cell `i`'s divergence reads `face_flux(i)` (right face) and
+<a href=#285 id=285 data-nosnippet>285</a>/// `face_flux(i−1)` (left face); the safe (non-wrapping) range for both is
+<a href=#286 id=286 data-nosnippet>286</a>/// `[margin_left+1, n−1−margin_right]`. Cells outside that range — lacking a
+<a href=#287 id=287 data-nosnippet>287</a>/// full stencil on at least one side — are assigned the same value already
+<a href=#288 id=288 data-nosnippet>288</a>/// computed for the nearest safe cell, the same posture as
+<a href=#289 id=289 data-nosnippet>289</a>/// `operators::fv::truncated_divergence` and `operators::fd`'s boundary
+<a href=#290 id=290 data-nosnippet>290</a>/// stencils. The two boundary zones are generally of different sizes
+<a href=#291 id=291 data-nosnippet>291</a>/// (`margin_left+1` cells on the left, `margin_right` cells on the right) —
+<a href=#292 id=292 data-nosnippet>292</a>/// an inherent consequence of `face(i)` and `face(i−1)` both needing to be
+<a href=#293 id=293 data-nosnippet>293</a>/// safe for cell `i`, not an asymmetry bug.
+<a href=#294 id=294 data-nosnippet>294</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>truncated_wide_divergence(
+<a href=#295 id=295 data-nosnippet>295</a>    u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;,
+<a href=#296 id=296 data-nosnippet>296</a>    dx: f64,
+<a href=#297 id=297 data-nosnippet>297</a>    margin_left: usize,
+<a href=#298 id=298 data-nosnippet>298</a>    margin_right: usize,
+<a href=#299 id=299 data-nosnippet>299</a>    context: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
+<a href=#300 id=300 data-nosnippet>300</a>    face_flux: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>DVector&lt;f64&gt;, usize, usize) -&gt; f64,
+<a href=#301 id=301 data-nosnippet>301</a>) -&gt; <span class="prelude-ty">Result</span>&lt;DVector&lt;f64&gt;, OxiflowError&gt; {
+<a href=#302 id=302 data-nosnippet>302</a>    <span class="kw">let </span>n = u.len();
+<a href=#303 id=303 data-nosnippet>303</a>    <span class="kw">let </span>min_nodes = margin_left + margin_right + <span class="number">2</span>;
+<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">if </span>n &lt; min_nodes {
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(OxiflowError::InvalidDomain(<span class="macro">format!</span>(
+<a href=#306 id=306 data-nosnippet>306</a>            <span class="string">"{context} with FluxBoundary::Truncation requires at least {min_nodes} nodes \
+<a href=#307 id=307 data-nosnippet>307</a>             for this upwind direction (margin_left={margin_left}, margin_right={margin_right}), \
+<a href=#308 id=308 data-nosnippet>308</a>             got {n}"
+<a href=#309 id=309 data-nosnippet>309</a>        </span>)));
+<a href=#310 id=310 data-nosnippet>310</a>    }
+<a href=#311 id=311 data-nosnippet>311</a>
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">let </span>safe_start = margin_left + <span class="number">1</span>;
+<a href=#313 id=313 data-nosnippet>313</a>    <span class="kw">let </span>safe_end = n - <span class="number">1 </span>- margin_right; <span class="comment">// inclusive
+<a href=#314 id=314 data-nosnippet>314</a>
+<a href=#315 id=315 data-nosnippet>315</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>div = DVector::zeros(n);
+<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">for </span>i <span class="kw">in </span>safe_start..=safe_end {
+<a href=#317 id=317 data-nosnippet>317</a>        <span class="kw">let </span>flux_right = face_flux(u, n, i);
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="kw">let </span>flux_left = face_flux(u, n, i - <span class="number">1</span>);
+<a href=#319 id=319 data-nosnippet>319</a>        div[i] = (flux_right - flux_left) / dx;
+<a href=#320 id=320 data-nosnippet>320</a>    }
+<a href=#321 id=321 data-nosnippet>321</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..safe_start {
+<a href=#322 id=322 data-nosnippet>322</a>        div[i] = div[safe_start];
+<a href=#323 id=323 data-nosnippet>323</a>    }
+<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">for </span>i <span class="kw">in </span>(safe_end + <span class="number">1</span>)..n {
+<a href=#325 id=325 data-nosnippet>325</a>        div[i] = div[safe_end];
+<a href=#326 id=326 data-nosnippet>326</a>    }
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="prelude-val">Ok</span>(div)
+<a href=#328 id=328 data-nosnippet>328</a>}
+<a href=#329 id=329 data-nosnippet>329</a>
+<a href=#330 id=330 data-nosnippet>330</a><span class="doccomment">/// Builds a ghost-padded copy of `u` for [`FluxBoundary::GhostCell`] —
+<a href=#331 id=331 data-nosnippet>331</a>/// `margin_left` ghost values prepended, `u` in the middle, `margin_right`
+<a href=#332 id=332 data-nosnippet>332</a>/// ghost values appended, so that every real cell's stencil (however wide)
+<a href=#333 id=333 data-nosnippet>333</a>/// finds all its neighbors in-bounds with plain indexing — no wraparound.
+<a href=#334 id=334 data-nosnippet>334</a>///
+<a href=#335 id=335 data-nosnippet>335</a>/// Each ghost value comes from [`BoundaryCondition::ghost_value`] at the
+<a href=#336 id=336 data-nosnippet>336</a>/// depth matching its distance from the domain edge, paired with the real
+<a href=#337 id=337 data-nosnippet>337</a>/// interior value at the *symmetric* depth (method of images — DD-042,
+<a href=#338 id=338 data-nosnippet>338</a>/// amendment 1): depth `k` pairs with interior index `k−1` from that edge.
+<a href=#339 id=339 data-nosnippet>339</a>/// Every layer is derived directly from a real interior value, never from a
+<a href=#340 id=340 data-nosnippet>340</a>/// previously computed ghost layer, so a Robin condition's exactness does
+<a href=#341 id=341 data-nosnippet>341</a>/// not erode with depth.
+<a href=#342 id=342 data-nosnippet>342</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>ghost_padded_field(
+<a href=#343 id=343 data-nosnippet>343</a>    u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;,
+<a href=#344 id=344 data-nosnippet>344</a>    dx: f64,
+<a href=#345 id=345 data-nosnippet>345</a>    margins: (usize, usize),
+<a href=#346 id=346 data-nosnippet>346</a>    bcs: (<span class="kw-2">&amp;</span><span class="kw">dyn </span>BoundaryCondition, <span class="kw-2">&amp;</span><span class="kw">dyn </span>BoundaryCondition),
+<a href=#347 id=347 data-nosnippet>347</a>    context: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
+<a href=#348 id=348 data-nosnippet>348</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;f64&gt;, OxiflowError&gt; {
+<a href=#349 id=349 data-nosnippet>349</a>    <span class="kw">let </span>(margin_left, margin_right) = margins;
+<a href=#350 id=350 data-nosnippet>350</a>    <span class="kw">let </span>(left_bc, right_bc) = bcs;
+<a href=#351 id=351 data-nosnippet>351</a>    <span class="kw">let </span>n = u.len();
+<a href=#352 id=352 data-nosnippet>352</a>    <span class="kw">let </span><span class="kw-2">mut </span>extended = Vec::with_capacity(n + margin_left + margin_right);
+<a href=#353 id=353 data-nosnippet>353</a>
+<a href=#354 id=354 data-nosnippet>354</a>    <span class="comment">// Left ghosts, deepest first, so the array reads left-to-right in
+<a href=#355 id=355 data-nosnippet>355</a>    // increasing physical position once `u` follows.
+<a href=#356 id=356 data-nosnippet>356</a>    </span><span class="kw">for </span>depth <span class="kw">in </span>(<span class="number">1</span>..=margin_left).rev() {
+<a href=#357 id=357 data-nosnippet>357</a>        <span class="kw">let </span>interior_at_depth = u[depth - <span class="number">1</span>];
+<a href=#358 id=358 data-nosnippet>358</a>        <span class="kw">let </span>g = left_bc
+<a href=#359 id=359 data-nosnippet>359</a>            .ghost_value(depth, interior_at_depth, dx)
+<a href=#360 id=360 data-nosnippet>360</a>            .ok_or_else(|| OxiflowError::PreconditionFailed {
+<a href=#361 id=361 data-nosnippet>361</a>                context,
+<a href=#362 id=362 data-nosnippet>362</a>                message: <span class="macro">format!</span>(
+<a href=#363 id=363 data-nosnippet>363</a>                    <span class="string">"left boundary condition ({:?}) does not supply a ghost value at depth \
+<a href=#364 id=364 data-nosnippet>364</a>                     {depth} — FluxBoundary::GhostCell requires an exact value, not a generic \
+<a href=#365 id=365 data-nosnippet>365</a>                     fallback"</span>,
+<a href=#366 id=366 data-nosnippet>366</a>                    left_bc.boundary_type()
+<a href=#367 id=367 data-nosnippet>367</a>                ),
+<a href=#368 id=368 data-nosnippet>368</a>            })<span class="question-mark">?</span>;
+<a href=#369 id=369 data-nosnippet>369</a>        extended.push(g);
+<a href=#370 id=370 data-nosnippet>370</a>    }
+<a href=#371 id=371 data-nosnippet>371</a>
+<a href=#372 id=372 data-nosnippet>372</a>    extended.extend(u.iter().copied());
+<a href=#373 id=373 data-nosnippet>373</a>
+<a href=#374 id=374 data-nosnippet>374</a>    <span class="kw">for </span>depth <span class="kw">in </span><span class="number">1</span>..=margin_right {
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">let </span>interior_at_depth = u[n - depth];
+<a href=#376 id=376 data-nosnippet>376</a>        <span class="kw">let </span>g = right_bc
+<a href=#377 id=377 data-nosnippet>377</a>            .ghost_value(depth, interior_at_depth, dx)
+<a href=#378 id=378 data-nosnippet>378</a>            .ok_or_else(|| OxiflowError::PreconditionFailed {
+<a href=#379 id=379 data-nosnippet>379</a>                context,
+<a href=#380 id=380 data-nosnippet>380</a>                message: <span class="macro">format!</span>(
+<a href=#381 id=381 data-nosnippet>381</a>                    <span class="string">"right boundary condition ({:?}) does not supply a ghost value at depth \
+<a href=#382 id=382 data-nosnippet>382</a>                     {depth} — FluxBoundary::GhostCell requires an exact value, not a generic \
+<a href=#383 id=383 data-nosnippet>383</a>                     fallback"</span>,
+<a href=#384 id=384 data-nosnippet>384</a>                    right_bc.boundary_type()
+<a href=#385 id=385 data-nosnippet>385</a>                ),
+<a href=#386 id=386 data-nosnippet>386</a>            })<span class="question-mark">?</span>;
+<a href=#387 id=387 data-nosnippet>387</a>        extended.push(g);
+<a href=#388 id=388 data-nosnippet>388</a>    }
+<a href=#389 id=389 data-nosnippet>389</a>
+<a href=#390 id=390 data-nosnippet>390</a>    <span class="prelude-val">Ok</span>(extended)
+<a href=#391 id=391 data-nosnippet>391</a>}
+<a href=#392 id=392 data-nosnippet>392</a>
+<a href=#393 id=393 data-nosnippet>393</a><span class="doccomment">/// Computes the divergence for [`FluxBoundary::GhostCell`] by delegating to
+<a href=#394 id=394 data-nosnippet>394</a>/// `face_flux` over a [`ghost_padded_field`] — every real cell's stencil,
+<a href=#395 id=395 data-nosnippet>395</a>/// including the two boundary ones, reads only in-bounds data, so no
+<a href=#396 id=396 data-nosnippet>396</a>/// separate boundary-cell code path is needed here (unlike
+<a href=#397 id=397 data-nosnippet>397</a>/// [`truncated_wide_divergence`]): the padding does the work.
+<a href=#398 id=398 data-nosnippet>398</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>ghost_cell_wide_divergence(
+<a href=#399 id=399 data-nosnippet>399</a>    u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;,
+<a href=#400 id=400 data-nosnippet>400</a>    dx: f64,
+<a href=#401 id=401 data-nosnippet>401</a>    margins: (usize, usize),
+<a href=#402 id=402 data-nosnippet>402</a>    bcs: (<span class="kw-2">&amp;</span><span class="kw">dyn </span>BoundaryCondition, <span class="kw-2">&amp;</span><span class="kw">dyn </span>BoundaryCondition),
+<a href=#403 id=403 data-nosnippet>403</a>    context: <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str,
+<a href=#404 id=404 data-nosnippet>404</a>    face_flux: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span>DVector&lt;f64&gt;, usize, usize) -&gt; f64,
+<a href=#405 id=405 data-nosnippet>405</a>) -&gt; <span class="prelude-ty">Result</span>&lt;DVector&lt;f64&gt;, OxiflowError&gt; {
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">let </span>n = u.len();
+<a href=#407 id=407 data-nosnippet>407</a>    <span class="kw">let </span>margin_left = margins.<span class="number">0</span>;
+<a href=#408 id=408 data-nosnippet>408</a>    <span class="kw">let </span>extended = ghost_padded_field(u, dx, margins, bcs, context)<span class="question-mark">?</span>;
+<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">let </span>extended = DVector::from_vec(extended);
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">let </span>m = extended.len();
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>    <span class="kw">let </span><span class="kw-2">mut </span>div = DVector::zeros(n);
+<a href=#413 id=413 data-nosnippet>413</a>    <span class="kw">for </span>i <span class="kw">in </span><span class="number">0</span>..n {
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="kw">let </span>k = i + margin_left;
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">let </span>flux_right = face_flux(<span class="kw-2">&amp;</span>extended, m, k);
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">let </span>flux_left = face_flux(<span class="kw-2">&amp;</span>extended, m, k - <span class="number">1</span>);
+<a href=#417 id=417 data-nosnippet>417</a>        div[i] = (flux_right - flux_left) / dx;
+<a href=#418 id=418 data-nosnippet>418</a>    }
+<a href=#419 id=419 data-nosnippet>419</a>    <span class="prelude-val">Ok</span>(div)
+<a href=#420 id=420 data-nosnippet>420</a>}
+</code></pre></div></section></main></body></html>
