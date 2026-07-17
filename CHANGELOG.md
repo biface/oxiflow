@@ -9,6 +9,58 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-17
+
+### Added
+
+- `DiscreteOperator` trait — `operators::fd::{UpwindGradient, CenteredGradient,
+  CenteredLaplacian}` (#46, #47, DD-012)
+- `FluxDivergenceOperator` trait, sibling to `DiscreteOperator` — computes the full
+  `∇·F(u, ∇u)` term, needs physical parameters `DiscreteOperator` deliberately does not
+  provide (#97, DD-039)
+- `DiscretizedModel<Op: FluxDivergenceOperator>` composite — plugs any
+  `FluxDivergenceOperator` into `PhysicalModel` (#93, DD-038)
+- `operators::fv::{FVCenteredFlux, FVUpwindFlux}` — finite-volume advection/diffusion,
+  cell-average semantics (#48, DD-040)
+- `operators::weno::{WENO3, WENO5}` — Jiang-Shu substencils, WENO-Z nonlinear weighting
+  (Borges et al. 2008) for critical-point accuracy (#49, DD-041)
+- `FluxBoundary` enum — explicit boundary-treatment choice per operator:
+  - `Periodic` — exact conservation via telescoping (#48, #49)
+  - `Truncation` — one-sided decentered fallback at boundary cells, breaks exact
+    conservation (documented trade-off) (DD-042)
+  - `GhostCell` — real `BoundaryCondition` physics via `ghost_value(depth,
+    interior_at_depth, dx)`, method-of-images convention, exact at every depth for a
+    Robin condition (DD-042, amendment 1)
+- `BoundaryCondition::ghost_value(depth, interior_at_depth, dx) -> Option<f64>` — default
+  method, `None` by default, non-breaking (DD-042)
+- `operators::limiters::{Limiter, LimitedFlux}` — `MinMod`/`VanLeer`/`Superbee`, MUSCL
+  reconstruction (#99)
+- `operators::adaptive::AdaptiveFlux` — blends `WENO3`/`LimitedFlux` per face, gated by a
+  global mesh Péclet number, driven by `WENO3`'s own smoothness indicator (#99)
+- `operators::check_cfl` — shared explicit-advection CFL check (FV, WENO, limiters,
+  adaptive)
+
+### Changed
+
+- `FDGradientCalculator`/`FDLaplacianCalculator` delegate their stencil math to
+  `operators::fd` instead of hand-rolled loops (#94, DD-012)
+- `FluxBoundary` drops `Copy`/`PartialEq`/`Eq` (`Arc<dyn BoundaryCondition>` has neither) —
+  `FVCenteredFlux`/`FVUpwindFlux`/`WENO3`/`WENO5` drop `Copy` accordingly
+- Wide-stencil divergence helpers (`periodic_wide_divergence`, `truncated_wide_divergence`,
+  `ghost_padded_field`, `ghost_cell_wide_divergence`, `wrap`) relocated from
+  `operators::weno` to `operators` (`pub(crate)`) — shared by `operators::limiters` and
+  `operators::adaptive`
+
+### Fixed
+
+- No user-facing bug in this release; two internal design errors were caught and
+  corrected before merge (see `DESIGN_DECISIONS.md` for the full account, not silently
+  fixed): WENO's initial nodal-semantics claim (DD-041), and `FluxBoundary::GhostCell`'s
+  initial single-point `ghost_value` signature being insufficient for WENO's wider
+  stencils (DD-042, amendment 1)
+
+## [0.4.0] — 2026-06-25
+
 ### Added
 
 - `SteppableSolver` trait in `src/solver/methods/mod.rs` — single-step `step()` primitive,
@@ -152,7 +204,9 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-[Unreleased]: https://github.com/biface/oxiflow/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/biface/oxiflow/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/biface/oxiflow/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/biface/oxiflow/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/biface/oxiflow/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/biface/oxiflow/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/biface/oxiflow/compare/v0.0.5...v0.1.0

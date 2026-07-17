@@ -153,8 +153,8 @@ third-party frameworks remain compatible across engine versions:
 | J1 — Core Architecture | v0.1.0   | ✅ Published  | ContextValue · OxiflowError · Mesh (INV-1)      |
 | J2 — Complete Context  | v0.2.0   | ✅ Published  | Requiring BCs · topological ordering · calculators |
 | J3 — Multi-Component   | v0.3.0   | ✅ Published  | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3) |
-| J4a — Integrators      | v0.4.0   | ⏳ Planned    | Euler, RK4, DoPri45, Backward Euler, Crank–Nicolson, BDF2, IMEX |
-| J4b — Discretisation   | v0.5.0   | ⏳ Planned    | DiscreteOperator (INV-2) · FD/FV · WENO3/5     |
+| J4a — Integrators      | v0.4.0   | ✅ Published  | Euler, RK4, DoPri45, Backward Euler, Crank–Nicolson, BDF2, IMEX |
+| J4b — Discretisation   | v0.5.0   | ✅ Published  | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · flux limiters + adaptive selection |
 | J5 — Performance       | v0.6.0   | ⏳ Planned    | Rayon · dirty-flag cache · Criterion benchmarks |
 | J6 — Ecosystem v1.0    | v1.0.0   | ⏳ Planned    | 7 examples · FEM audit · stable API             |
 | J7 — FEM               | v2.0.0   | 🔭 Horizon   | Unstructured meshes · ALE · INV-4 plugin-safe   |

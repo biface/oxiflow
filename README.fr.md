@@ -155,8 +155,8 @@ assurent la compatibilité des frameworks tiers entre les versions du moteur :
 | J1 — Architecture cœur | v0.1.0   | ✅ Publié    | ContextValue · OxiflowError · Mesh (INV-1)                       |
 | J2 — Contexte complet  | v0.2.0   | ✅ Publié    | BCs requirantes · ordonnancement topologique · calculateurs      |
 | J3 — Multi-composants  | v0.3.0   | ✅ Publié    | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3)   |
-| J4a — Intégrateurs     | v0.4.0   | ⏳ Planifié  | Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson, BDF2, IMEX |
-| J4b — Discrétisation   | v0.5.0   | ⏳ Planifié  | DiscreteOperator (INV-2) · FD/FV · WENO3/5                       |
+| J4a — Intégrateurs     | v0.4.0   | ✅ Publié    | Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson, BDF2, IMEX |
+| J4b — Discrétisation   | v0.5.0   | ✅ Publié    | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · limiteurs de flux + sélection adaptative |
 | J5 — Performance       | v0.6.0   | ⏳ Planifié  | Rayon · cache dirty-flag · benchmarks Criterion                  |
 | J6 — Écosystème v1.0   | v1.0.0   | ⏳ Planifié  | 7 exemples · audit FEM · API stable                              |
 | J7 — FEM               | v2.0.0   | 🔭 Horizon  | Maillages non structurés · ALE · INV-4 plugin-safe               |
