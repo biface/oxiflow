@@ -50,6 +50,8 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::LinearSolver;
 use crate::solver::scenario::Domain;
+#[cfg(feature = "sparse")]
+use crate::solver::sparse::SparseLinearSolver;
 
 /// Finite-difference step size for [`finite_difference_jacobian`].
 ///
@@ -141,6 +143,179 @@ pub(crate) fn theta_method_step(
 
     let u_next: DVector<f64> = u_n_field + delta_u;
     Ok(ContextValue::ScalarField(u_next))
+}
+
+// ── Sparse / banded path (DD-013 second phase, DD-043) ─────────────────────────
+//
+// `#[cfg(feature = "sparse")]` only. Bandwidth is always an explicit
+// parameter here, supplied by the caller (the solver's own HOW-side
+// configuration, e.g. `BackwardEulerSolver::with_jacobian_bandwidth`) — it
+// is never read from `Domain`/`PhysicalModel`. See DD-043, amendment 1, for
+// why `PhysicalModel::jacobian_bandwidth` was rejected: bandwidth is a
+// property of the numerical scheme (HOW), not of the physical model (WHAT).
+
+/// Assembles the nonzero entries of $\partial f/\partial u$ within a band of
+/// half-width `bandwidth` around the diagonal, via Curtis-Powell-Reid (CPR)
+/// graph coloring: for a genuinely banded Jacobian, columns more than
+/// `2*bandwidth + 1` apart never share a nonzero row, so all columns of the
+/// same color can be perturbed **simultaneously** in a single
+/// [`evaluate_derivative`] call — `2*bandwidth + 1` evaluations total,
+/// instead of [`finite_difference_jacobian`]'s `n`.
+///
+/// Returns `(n, triplets)` — raw `(row, col, value)` entries, not yet a
+/// `faer` sparse matrix, so callers computing the *system* matrix
+/// (`I - theta*dt*J`, see [`theta_method_step_adaptive`]) can fold the
+/// identity in before building the sparse type once, rather than building
+/// the raw Jacobian in sparse form only to rebuild it again.
+#[cfg(feature = "sparse")]
+pub(crate) fn banded_jacobian_entries(
+    domain: &Domain,
+    chain: &[&dyn ContextCalculator],
+    state: &ContextValue,
+    t: f64,
+    dt: f64,
+    bandwidth: usize,
+) -> Result<(usize, Vec<(usize, usize, f64)>), OxiflowError> {
+    let base_field = state.as_scalar_field()?.clone();
+    let n = base_field.len();
+
+    let mut base_state = state.clone();
+    let f0 = evaluate_derivative(domain, chain, &mut base_state, t, dt)?;
+    let f0_field = f0.as_scalar_field()?.clone();
+
+    let n_colors = 2 * bandwidth + 1;
+    let mut triplets = Vec::new();
+
+    for color in 0..n_colors {
+        let columns: Vec<usize> = (color..n).step_by(n_colors).collect();
+        if columns.is_empty() {
+            continue;
+        }
+
+        let mut perturbed_field = base_field.clone();
+        for &j in &columns {
+            perturbed_field[j] += FD_EPSILON;
+        }
+        let mut perturbed_state = ContextValue::ScalarField(perturbed_field);
+
+        let f_c = evaluate_derivative(domain, chain, &mut perturbed_state, t, dt)?;
+        let f_c_field = f_c.as_scalar_field()?;
+
+        // Columns of the same color are spaced `n_colors > 2*bandwidth`
+        // apart, so their bands ([j-bandwidth, j+bandwidth]) never
+        // overlap — each perturbed row's response is attributable to
+        // exactly one column, no disambiguation needed.
+        for &j in &columns {
+            let lo = j.saturating_sub(bandwidth);
+            let hi = (j + bandwidth + 1).min(n);
+            for i in lo..hi {
+                let deriv = (f_c_field[i] - f0_field[i]) / FD_EPSILON;
+                triplets.push((i, j, deriv));
+            }
+        }
+    }
+
+    Ok((n, triplets))
+}
+
+/// [`banded_jacobian_entries`], assembled into a `faer` sparse matrix.
+///
+/// Kept separate from [`banded_jacobian_entries`] for dense/sparse parity
+/// testing against [`finite_difference_jacobian`] — see the test module.
+#[cfg(feature = "sparse")]
+pub(crate) fn banded_finite_difference_jacobian(
+    domain: &Domain,
+    chain: &[&dyn ContextCalculator],
+    state: &ContextValue,
+    t: f64,
+    dt: f64,
+    bandwidth: usize,
+) -> Result<faer::sparse::SparseColMat<usize, f64>, OxiflowError> {
+    let (n, triplets) = banded_jacobian_entries(domain, chain, state, t, dt, bandwidth)?;
+
+    let faer_triplets: Vec<faer::sparse::Triplet<usize, usize, f64>> = triplets
+        .into_iter()
+        .map(|(i, j, v)| faer::sparse::Triplet::new(i, j, v))
+        .collect();
+
+    faer::sparse::SparseColMat::try_new_from_triplets(n, n, &faer_triplets).map_err(|e| {
+        OxiflowError::PreconditionFailed {
+            context: "banded_finite_difference_jacobian",
+            message: format!("failed to build sparse matrix from triplets: {e:?}"),
+        }
+    })
+}
+
+/// Same contract as [`theta_method_step`], with an additional sparse path:
+/// when `jacobian_bandwidth` is `Some(k)` **and** `n > sparse_threshold`,
+/// assembles `I - theta*dt*J` directly in sparse (banded) form via
+/// [`banded_jacobian_entries`] and solves it with `sparse_solver`. Falls
+/// back to [`theta_method_step`] unchanged in every other case — `None`
+/// bandwidth, or a small enough system that the dense path is cheaper
+/// regardless of bandwidth.
+///
+/// `jacobian_bandwidth`/`sparse_threshold`/`sparse_solver` are supplied by
+/// the caller's own HOW-side configuration (DD-043, amendment 1) — never
+/// read from `Domain` or `PhysicalModel`.
+#[cfg(feature = "sparse")]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn theta_method_step_adaptive(
+    domain: &Domain,
+    chain: &[&dyn ContextCalculator],
+    state: &mut ContextValue,
+    t: f64,
+    dt: f64,
+    theta: f64,
+    dense_solver: &dyn LinearSolver,
+    sparse_solver: &dyn SparseLinearSolver,
+    sparse_threshold: usize,
+    jacobian_bandwidth: Option<usize>,
+) -> Result<ContextValue, OxiflowError> {
+    let n = state.as_scalar_field()?.len();
+
+    match jacobian_bandwidth {
+        Some(k) if n > sparse_threshold => {
+            let f_n = evaluate_derivative(domain, chain, state, t, dt)?;
+            let u_n_field = state.as_scalar_field()?.clone();
+            let f_n_field = f_n.as_scalar_field()?.clone();
+
+            // Jacobian frozen at the (now BC-corrected) u^n, evaluated at
+            // t + dt — same convention as theta_method_step.
+            let (n_check, raw_triplets) =
+                banded_jacobian_entries(domain, chain, state, t + dt, dt, k)?;
+            debug_assert_eq!(n_check, n);
+
+            // I - theta*dt*J, folded into the triplets directly rather than
+            // building J's sparse matrix first and combining afterward —
+            // banded_jacobian_entries always includes the diagonal (j is
+            // always within its own band), so every row gets its "+1.0".
+            let coeff = -theta * dt;
+            let system_triplets: Vec<faer::sparse::Triplet<usize, usize, f64>> = raw_triplets
+                .into_iter()
+                .map(|(i, j, deriv)| {
+                    let mut value = coeff * deriv;
+                    if i == j {
+                        value += 1.0;
+                    }
+                    faer::sparse::Triplet::new(i, j, value)
+                })
+                .collect();
+
+            let system_matrix =
+                faer::sparse::SparseColMat::try_new_from_triplets(n, n, &system_triplets)
+                    .map_err(|e| OxiflowError::PreconditionFailed {
+                        context: "theta_method_step_adaptive",
+                        message: format!("failed to build sparse system matrix: {e:?}"),
+                    })?;
+
+            let rhs = f_n_field * dt;
+            let delta_u = sparse_solver.solve(&system_matrix, &rhs)?;
+
+            let u_next: DVector<f64> = u_n_field + delta_u;
+            Ok(ContextValue::ScalarField(u_next))
+        }
+        _ => theta_method_step(domain, chain, state, t, dt, theta, dense_solver),
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -300,6 +475,246 @@ mod tests {
         for v in field.iter() {
             assert!(v.is_finite(), "value diverged: {v}");
             assert!(v.abs() < 1.0, "expected strong damping, got {v}");
+        }
+    }
+}
+
+#[cfg(all(test, feature = "sparse"))]
+mod sparse_tests {
+    use super::*;
+    use crate::context::compute::ComputeContext;
+    use crate::context::variable::ContextVariable;
+    use crate::mesh::{Mesh, UniformGrid1D};
+    use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::solver::chain::build_calculator_chain;
+    use crate::solver::linear::NalgebraDenseSolver;
+    use crate::solver::scenario::Scenario;
+    use crate::solver::sparse::FaerSparseSolver;
+
+    /// Discrete tridiagonal diffusion — `du_i/dt = D*(u[i-1] - 2u[i] +
+    /// u[i+1])`, zero outside the domain. Not a real `BoundaryCondition` —
+    /// this fixture exists only to exercise the banded path with a
+    /// genuinely local, bandwidth-1 coupling (real Dirichlet/Neumann
+    /// boundary handling is out of scope here, see the module's own
+    /// known-untested-limitation note).
+    #[derive(Debug)]
+    struct TridiagonalDiffusion {
+        diffusion: f64,
+    }
+
+    impl RequiresContext for TridiagonalDiffusion {
+        fn required_variables(&self) -> Vec<ContextVariable> {
+            vec![]
+        }
+    }
+
+    impl PhysicalModel for TridiagonalDiffusion {
+        fn compute_physics(
+            &self,
+            state: &ContextValue,
+            _ctx: &ComputeContext,
+        ) -> Result<ContextValue, OxiflowError> {
+            let u = state.as_scalar_field()?;
+            let n = u.len();
+            let d = self.diffusion;
+            let out = DVector::from_fn(n, |i, _| {
+                let left = if i > 0 { u[i - 1] } else { 0.0 };
+                let right = if i + 1 < n { u[i + 1] } else { 0.0 };
+                d * (left - 2.0 * u[i] + right)
+            });
+            Ok(ContextValue::ScalarField(out))
+        }
+
+        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+            let n = mesh.n_dof();
+            ContextValue::ScalarField(DVector::from_fn(
+                n,
+                |i, _| if i == n / 2 { 1.0 } else { 0.0 },
+            ))
+        }
+
+        fn name(&self) -> &str {
+            "tridiagonal_diffusion_test"
+        }
+    }
+
+    /// A [`SparseLinearSolver`] that panics if ever called — used to prove
+    /// the dense path was actually taken (threshold/bandwidth conditions
+    /// not met), not just that the result happens to look dense-like.
+    struct PanicIfCalled;
+
+    impl SparseLinearSolver for PanicIfCalled {
+        fn solve(
+            &self,
+            _a: &faer::sparse::SparseColMat<usize, f64>,
+            _b: &DVector<f64>,
+        ) -> Result<DVector<f64>, OxiflowError> {
+            panic!("sparse solver called when the dense path should have been taken");
+        }
+    }
+
+    fn make_mesh(n: usize) -> Box<dyn Mesh> {
+        Box::new(UniformGrid1D::new(n, 0.0, 1.0).unwrap())
+    }
+
+    #[test]
+    fn banded_jacobian_entries_match_dense_jacobian() {
+        let n = 12;
+        let scenario = Scenario::single(
+            Box::new(TridiagonalDiffusion { diffusion: 0.7 }),
+            make_mesh(n),
+        );
+        let domain = scenario.single_domain().unwrap();
+        let requirements = scenario.context_requirements();
+        let chain = build_calculator_chain(&requirements, &[]).unwrap();
+        let state = domain.model.initial_state(domain.mesh.as_ref());
+
+        let dense = finite_difference_jacobian(domain, &chain, &state, 0.0, 0.01).unwrap();
+        let (n_check, banded_triplets) =
+            banded_jacobian_entries(domain, &chain, &state, 0.0, 0.01, 1).unwrap();
+        assert_eq!(n_check, n);
+
+        // Every banded entry must match the corresponding dense entry.
+        for (i, j, v) in &banded_triplets {
+            assert!(
+                (dense[(*i, *j)] - v).abs() < 1e-6,
+                "mismatch at ({i},{j}): dense={}, banded={v}",
+                dense[(*i, *j)]
+            );
+        }
+
+        // Every dense entry outside the band must be (near) zero — a
+        // genuinely tridiagonal problem has no coupling beyond bandwidth 1,
+        // so nothing should be missing from the banded set that matters.
+        for i in 0..n {
+            for j in 0..n {
+                if i.abs_diff(j) > 1 {
+                    assert!(
+                        dense[(i, j)].abs() < 1e-6,
+                        "unexpected nonzero outside the band at ({i},{j}): {}",
+                        dense[(i, j)]
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn adaptive_step_with_no_bandwidth_matches_theta_method_step_exactly() {
+        let n = 6;
+        let scenario = Scenario::single(
+            Box::new(TridiagonalDiffusion { diffusion: 0.5 }),
+            make_mesh(n),
+        );
+        let domain = scenario.single_domain().unwrap();
+        let requirements = scenario.context_requirements();
+        let chain = build_calculator_chain(&requirements, &[]).unwrap();
+
+        let mut state_a = domain.model.initial_state(domain.mesh.as_ref());
+        let mut state_b = state_a.clone();
+
+        let via_adaptive = theta_method_step_adaptive(
+            domain,
+            &chain,
+            &mut state_a,
+            0.0,
+            0.05,
+            1.0,
+            &NalgebraDenseSolver,
+            &PanicIfCalled,
+            100,
+            None, // no bandwidth declared -> dense path, unconditionally
+        )
+        .unwrap();
+
+        let via_plain =
+            theta_method_step(domain, &chain, &mut state_b, 0.0, 0.05, 1.0, &NalgebraDenseSolver)
+                .unwrap();
+
+        let a = via_adaptive.as_scalar_field().unwrap();
+        let b = via_plain.as_scalar_field().unwrap();
+        for i in 0..n {
+            assert!((a[i] - b[i]).abs() < 1e-12, "mismatch at {i}: {} vs {}", a[i], b[i]);
+        }
+    }
+
+    #[test]
+    fn small_system_stays_dense_even_with_bandwidth_declared() {
+        let n = 6; // below sparse_threshold below
+        let scenario = Scenario::single(
+            Box::new(TridiagonalDiffusion { diffusion: 0.5 }),
+            make_mesh(n),
+        );
+        let domain = scenario.single_domain().unwrap();
+        let requirements = scenario.context_requirements();
+        let chain = build_calculator_chain(&requirements, &[]).unwrap();
+        let mut state = domain.model.initial_state(domain.mesh.as_ref());
+
+        // PanicIfCalled proves the sparse path was never entered: bandwidth
+        // is declared (Some(1)) but n (6) does not exceed sparse_threshold
+        // (100), so the dense path must be taken regardless.
+        let result = theta_method_step_adaptive(
+            domain,
+            &chain,
+            &mut state,
+            0.0,
+            0.05,
+            1.0,
+            &NalgebraDenseSolver,
+            &PanicIfCalled,
+            100,
+            Some(1),
+        )
+        .unwrap();
+
+        assert!(result.as_scalar_field().unwrap().iter().all(|v| v.is_finite()));
+    }
+
+    #[test]
+    fn adaptive_step_with_bandwidth_matches_dense_result_above_threshold() {
+        let n = 40; // above the small sparse_threshold used below
+        let diffusion = 0.3;
+        let dt = 0.02;
+
+        let scenario_a = Scenario::single(Box::new(TridiagonalDiffusion { diffusion }), make_mesh(n));
+        let domain_a = scenario_a.single_domain().unwrap();
+        let requirements_a = scenario_a.context_requirements();
+        let chain_a = build_calculator_chain(&requirements_a, &[]).unwrap();
+        let mut state_a = domain_a.model.initial_state(domain_a.mesh.as_ref());
+
+        let scenario_b = Scenario::single(Box::new(TridiagonalDiffusion { diffusion }), make_mesh(n));
+        let domain_b = scenario_b.single_domain().unwrap();
+        let requirements_b = scenario_b.context_requirements();
+        let chain_b = build_calculator_chain(&requirements_b, &[]).unwrap();
+        let mut state_b = domain_b.model.initial_state(domain_b.mesh.as_ref());
+
+        let via_sparse = theta_method_step_adaptive(
+            domain_a,
+            &chain_a,
+            &mut state_a,
+            0.0,
+            dt,
+            1.0,
+            &NalgebraDenseSolver,
+            &FaerSparseSolver,
+            10, // sparse_threshold well below n=40
+            Some(1),
+        )
+        .unwrap();
+
+        let via_dense =
+            theta_method_step(domain_b, &chain_b, &mut state_b, 0.0, dt, 1.0, &NalgebraDenseSolver)
+                .unwrap();
+
+        let a = via_sparse.as_scalar_field().unwrap();
+        let b = via_dense.as_scalar_field().unwrap();
+        for i in 0..n {
+            assert!(
+                (a[i] - b[i]).abs() < 1e-6,
+                "sparse/dense mismatch at {i}: {} vs {}",
+                a[i],
+                b[i]
+            );
         }
     }
 }
