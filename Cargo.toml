@@ -19,18 +19,44 @@ categories  = ["science", "algorithms"]
 # ──────────────────────────────────────────────────────────────────────────────
 
 [dependencies]
-# Algèbre linéaire — vecteurs, matrices, champs / Linear algebra — vectors, matrices, fields
+# Algèbre linéaire dense — vecteurs, matrices, champs. DD-013 (issue #13) :
+# nalgebra retenu plutôt qu'une implémentation maison (option A).
 nalgebra  = "0.33"
-# Gestion des erreurs typées / Typed error handling (DD-004)
+# Gestion des erreurs typées — DD-004 (issue #4) : enum `OxiflowError` via
+# thiserror plutôt que des erreurs `String` (option A).
 thiserror = "2"
 
 # Optionnelles / Optional
-# feature `parallel` — parallélisme opt-in via Rayon (DD-014, J5)
+# feature `parallel` — parallélisme opt-in via Rayon. DD-014 (issue #14,
+# décision ; issue #51, implémentation) : feature opt-in + seuil configurable
+# (option A) plutôt qu'activation systématique (option B) ou threading manuel
+# (option C).
 rayon = { version = "1", optional = true }
-# feature `serde`    — sérialisation des types publics (J6)
+# feature `serde`    — sérialisation des types publics. DD-025 (issue #66,
+# décision ; issue #67, implémentation Option A) : `cfg_attr` sur les types
+# valeur dès v0.1.0, `SimulationSnapshot` (Option B, issue #71) à v0.6.0.
 serde = { version = "1", features = ["derive"], optional = true }
-# feature `hdf5`     — large experimental dataset I/O (planned J3+)
-hdf5  = { version = "0.8", optional = true }
+# feature `hdf5`     — données expérimentales volumineuses (`ExternalTabulated`).
+# DD-027 (issue #75) : HDF5 conservé pour ce seul usage (VTK devient le pivot
+# des résultats — feature `vtk`, pas encore ajoutée ici).
+# Migré vers `hdf5-metno` (chore #79) via l'alias `package` de Cargo : le nom
+# local reste `hdf5`, donc aucun site d'appel (`use hdf5::...`) n'a besoin
+# d'être modifié — seule cette ligne change. `hdf5 = "0.8"` (wrapper aldanor)
+# est explicitement décrit par DD-027 comme non maintenu et ne compilant plus
+# contre les toolchains Rust récentes ; `hdf5-metno` est le fork activement
+# maintenu (Institut météorologique norvégien), même auteur original en
+# co-mainteneur.
+hdf5  = { package = "hdf5-metno", version = "0.10", optional = true }
+# feature `sparse`   — solveur linéaire creux pour les intégrateurs implicites
+# sur grandes grilles. DD-013 (issue #13, décision faer pour le volet creux) ;
+# DD-043 (issue #50, v0.6.0) : trait frère de LinearSolver, pas une extension
+# (voir solver::sparse). `default-features = false` : seul `sparse-linalg`
+# (LU sur faer::sparse::SparseColMat) est nécessaire — les features par défaut
+# de faer tirent aussi `npy` (I/O .npy, inutilisé ici) et son propre `rayon`
+# interne (distinct de la feature `parallel` de ce crate), qui entraînent des
+# dépendances transitives avec un MSRV bien supérieur à celui de ce crate,
+# sans bénéfice ici.
+faer  = { version = "0.24", optional = true, default-features = false, features = ["std", "sparse-linalg"] }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Features
@@ -39,12 +65,13 @@ hdf5  = { version = "0.8", optional = true }
 [features]
 default  = []
 
-# Parallélisme opt-in via Rayon — activé uniquement au-delà du seuil configurable
-# Opt-in parallelism via Rayon — activated only beyond the configurable threshold
+# Parallélisme opt-in via Rayon — DD-014 (issue #14, décision ; issue #51,
+# implémentation) : activé uniquement au-delà d'un seuil configurable
+# (`set_parallel_threshold`), jamais par défaut.
 parallel = ["dep:rayon"]
 
-# Sérialisation des types publics via serde
-# Public types serialization via serde
+# Sérialisation des types publics via serde — DD-025 (issue #66, décision ;
+# issue #67, implémentation Option A).
 serde    = ["dep:serde", "nalgebra/serde-serialize"]
 
 # Support HDF5 pour les données expérimentales volumineuses
@@ -56,11 +83,13 @@ hdf5     = ["dep:hdf5"]
 # ──────────────────────────────────────────────────────────────────────────────
 
 [dev-dependencies]
+# Benchmarks — suite prévue à v0.7.0/J5 (issue #53, encore ouverte : le
+# harness ci-dessous n'est pas encore activé, seul le crate est déclaré).
 criterion = { version = "0.8", features = ["html_reports"] }
+# Fixtures de test (JSON de référence) — pas de DD/issue dédiée, usage
+# interne aux tests uniquement.
 serde_json = { version = "1" }
 
-# Benchmarks Criterion — activés à J5 (v0.7) lorsque benches/ sera créé
-# Criterion benchmarks — activated at J5 (v0.7) when benches/ is created
 # [[bench]]
 # name    = "oxiflow_benchmarks"
 # harness = false
