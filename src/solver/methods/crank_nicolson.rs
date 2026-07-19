@@ -31,19 +31,38 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 use crate::solver::methods::implicit::theta_method_step;
+#[cfg(feature = "sparse")]
+use crate::solver::methods::implicit::theta_method_step_adaptive;
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
+#[cfg(feature = "sparse")]
+use crate::solver::sparse::SparseLinearSolver;
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
 /// Crank-Nicolson solver — semi-implicit, 2nd order.
 pub struct CrankNicolsonSolver {
     linear_solver: Box<dyn LinearSolver>,
+    /// Sparse backend (DD-043) — see
+    /// [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)'s
+    /// fields for the full rationale, identical here.
+    #[cfg(feature = "sparse")]
+    sparse_solver: Option<Box<dyn SparseLinearSolver>>,
+    #[cfg(feature = "sparse")]
+    sparse_threshold: usize,
+    #[cfg(feature = "sparse")]
+    jacobian_bandwidth: Option<usize>,
 }
 
 impl Default for CrankNicolsonSolver {
     fn default() -> Self {
         Self {
             linear_solver: Box::new(NalgebraDenseSolver),
+            #[cfg(feature = "sparse")]
+            sparse_solver: None,
+            #[cfg(feature = "sparse")]
+            sparse_threshold: 100,
+            #[cfg(feature = "sparse")]
+            jacobian_bandwidth: None,
         }
     }
 }
@@ -59,6 +78,29 @@ impl CrankNicolsonSolver {
         self.linear_solver = linear_solver;
         self
     }
+
+    /// Configures the sparse backend (DD-043) — see
+    /// [`BackwardEulerSolver::with_sparse_solver`](super::backward_euler::BackwardEulerSolver::with_sparse_solver).
+    #[cfg(feature = "sparse")]
+    pub fn with_sparse_solver(mut self, sparse_solver: Box<dyn SparseLinearSolver>) -> Self {
+        self.sparse_solver = Some(sparse_solver);
+        self
+    }
+
+    /// System size above which the sparse path is used (default 100).
+    #[cfg(feature = "sparse")]
+    pub fn with_sparse_threshold(mut self, sparse_threshold: usize) -> Self {
+        self.sparse_threshold = sparse_threshold;
+        self
+    }
+
+    /// Declares the Jacobian's half-bandwidth (e.g.
+    /// `scheme.stencil_radius()`, DD-039).
+    #[cfg(feature = "sparse")]
+    pub fn with_jacobian_bandwidth(mut self, jacobian_bandwidth: usize) -> Self {
+        self.jacobian_bandwidth = Some(jacobian_bandwidth);
+        self
+    }
 }
 
 impl Solver for CrankNicolsonSolver {
@@ -71,6 +113,41 @@ impl Solver for CrankNicolsonSolver {
     }
 }
 
+#[cfg(feature = "sparse")]
+impl SteppableSolver for CrankNicolsonSolver {
+    fn step(
+        &self,
+        domain: &Domain,
+        chain: &[&dyn ContextCalculator],
+        state: &mut ContextValue,
+        _history: &[ContextValue],
+        t: f64,
+        dt: f64,
+    ) -> Result<ContextValue, OxiflowError> {
+        // history_depth() defaults to 0 -- Crank-Nicolson is a one-step
+        // method, `_history` is always empty here and intentionally unused.
+        //
+        // See BackwardEulerSolver::step for why dispatch is gated on
+        // `sparse_solver` alone.
+        match &self.sparse_solver {
+            Some(sparse_solver) => theta_method_step_adaptive(
+                domain,
+                chain,
+                state,
+                t,
+                dt,
+                0.5,
+                self.linear_solver.as_ref(),
+                sparse_solver.as_ref(),
+                self.sparse_threshold,
+                self.jacobian_bandwidth,
+            ),
+            None => theta_method_step(domain, chain, state, t, dt, 0.5, self.linear_solver.as_ref()),
+        }
+    }
+}
+
+#[cfg(not(feature = "sparse"))]
 impl SteppableSolver for CrankNicolsonSolver {
     fn step(
         &self,
