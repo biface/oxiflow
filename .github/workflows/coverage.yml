@@ -50,7 +50,32 @@ jobs:
           cargo llvm-cov --all-targets \
             --lcov --output-path lcov-default.info
 
-      # ── Run 2 : all features ──────────────────────────────────────────────
+      # ── Run 2 : sparse feature (faer) — DD-013, DD-043 (#50) ───────────────
+      # Code réel depuis ce sprint (solver::sparse, banded jacobian,
+      # BackwardEuler/CrankNicolson dispatch) — contrairement à `hdf5`
+      # ci-dessous, ce run couvre du comportement effectif.
+      - name: Coverage — sparse feature
+        run: |
+          cargo llvm-cov --all-targets --features sparse \
+            --lcov --output-path lcov-sparse.info
+
+      # ── Run 3 : hdf5 feature — DD-027 (#75), migré vers hdf5-metno (#79) ───
+      # Pas encore activé : aucun code n'utilise cette feature
+      # (`ExternalTabulated` non implémenté) — un run de couverture n'aurait
+      # aucune ligne réelle à mesurer. À activer avec l'implémentation
+      # réelle, en réutilisant l'installation système ci-dessous.
+      #
+      # - name: Install system dependencies (HDF5)
+      #   run: |
+      #     sudo apt-get update -q
+      #     sudo apt-get install -y --no-install-recommends libhdf5-dev pkg-config
+      #
+      # - name: Coverage — hdf5 feature
+      #   run: |
+      #     cargo llvm-cov --all-targets --features hdf5 \
+      #       --lcov --output-path lcov-hdf5.info
+
+      # ── Run 4 : all features ──────────────────────────────────────────────
       # À activer dès qu'au moins un feature optionnel est déclaré dans
       # Cargo.toml (parallel, serde, hdf5...).
       #
@@ -59,7 +84,7 @@ jobs:
       #     cargo llvm-cov --all-targets --all-features \
       #       --lcov --output-path lcov-all.info
 
-      # ── Run 3 : parallel feature only ─────────────────────────────────────
+      # ── Run 5 : parallel feature only ─────────────────────────────────────
       # À activer quand Cargo.toml contient : [features] parallel = [...]
       #
       # - name: Coverage — parallel feature
@@ -67,7 +92,7 @@ jobs:
       #     cargo llvm-cov --all-targets --features parallel \
       #       --lcov --output-path lcov-parallel.info
 
-      # ── Run 4 : serde feature only ────────────────────────────────────────
+      # ── Run 6 : serde feature only ────────────────────────────────────────
       - name: Coverage — serde feature
         run: |
           cargo llvm-cov --all-targets --features serde \
@@ -86,6 +111,6 @@ jobs:
       - name: Upload to Codecov
         uses: codecov/codecov-action@v4
         with:
-          files: lcov-default.info,lcov-serde.info
+          files: lcov-default.info,lcov-sparse.info,lcov-serde.info
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
