@@ -42,6 +42,7 @@
 //! variant, so a signature mismatch there is the most likely first
 //! compile error.
 
+use faer::prelude::Solve;
 use nalgebra::DVector;
 
 use crate::context::error::OxiflowError;
