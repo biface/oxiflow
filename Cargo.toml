@@ -74,9 +74,14 @@ parallel = ["dep:rayon"]
 # issue #67, implémentation Option A).
 serde    = ["dep:serde", "nalgebra/serde-serialize"]
 
-# Support HDF5 pour les données expérimentales volumineuses
-# HDF5 support for large experimental datasets
+# Support HDF5 pour les données expérimentales volumineuses — DD-027
+# (issue #75). Dépendance migrée vers `hdf5-metno` (chore #79) — voir le
+# commentaire sur la dépendance ci-dessus.
 hdf5     = ["dep:hdf5"]
+
+# Solveur linéaire creux (faer) — DD-013 (issue #13) / DD-043 (issue #50,
+# v0.6.0). Trait frère de LinearSolver (solver::sparse), pas une extension.
+sparse   = ["dep:faer"]
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Dépendances de développement / Development dependencies
