@@ -183,6 +183,12 @@ impl FluxDivergenceOperator for AdaptiveFlux {
         };
         Ok(ContextValue::ScalarField(div))
     }
+
+    fn stencil_radius(&self) -> usize {
+        // Same footprint as WENO3 (see module doc) — delegate rather than
+        // repeat the literal, so the two can never drift apart.
+        self.weno.stencil_radius()
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

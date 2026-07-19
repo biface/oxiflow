@@ -329,6 +329,12 @@ impl FluxDivergenceOperator for WENO3 {
         };
         Ok(ContextValue::ScalarField(div))
     }
+
+    fn stencil_radius(&self) -> usize {
+        // Widest reach across both upwind directions and all three boundary
+        // treatments is 2 cells (see the GhostCell margins above).
+        2
+    }
 }
 
 // ── WENO5 operator ────────────────────────────────────────────────────────────
@@ -422,6 +428,12 @@ impl FluxDivergenceOperator for WENO5 {
             }
         };
         Ok(ContextValue::ScalarField(div))
+    }
+
+    fn stencil_radius(&self) -> usize {
+        // Widest reach across both upwind directions and all three boundary
+        // treatments is 3 cells (see the GhostCell margins above).
+        3
     }
 }
 
