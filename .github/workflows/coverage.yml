@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # full history required for Codecov branch tracking
 
@@ -109,7 +109,7 @@ jobs:
 
       # ── Upload to Codecov ─────────────────────────────────────────────────
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v6
         with:
           files: lcov-default.info,lcov-sparse.info,lcov-serde.info
           fail_ci_if_error: true
