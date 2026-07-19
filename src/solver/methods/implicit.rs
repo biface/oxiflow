@@ -154,6 +154,23 @@ pub(crate) fn theta_method_step(
 // why `PhysicalModel::jacobian_bandwidth` was rejected: bandwidth is a
 // property of the numerical scheme (HOW), not of the physical model (WHAT).
 
+/// A single Jacobian entry: `(row, col, value)` — one nonzero of `∂f/∂u`
+/// within the band, as produced by [`banded_jacobian_entries`]. Not yet a
+/// `faer` triplet: callers convert only when they actually need the
+/// sparse matrix type (see [`banded_finite_difference_jacobian`] and
+/// [`theta_method_step_adaptive`]), rather than paying that conversion
+/// cost inside the assembly loop itself.
+#[cfg(feature = "sparse")]
+type SparseEntry = (usize, usize, f64);
+
+/// Return type of [`banded_jacobian_entries`]: the system size `n`, and
+/// the raw list of [`SparseEntry`] within the declared band. Each
+/// `(row, col)` pair appears at most once — every column belongs to
+/// exactly one CPR color, so no two colors can ever produce the same
+/// entry.
+#[cfg(feature = "sparse")]
+type BandedJacobianResult = Result<(usize, Vec<SparseEntry>), OxiflowError>;
+
 /// Assembles the nonzero entries of $\partial f/\partial u$ within a band of
 /// half-width `bandwidth` around the diagonal, via Curtis-Powell-Reid (CPR)
 /// graph coloring: for a genuinely banded Jacobian, columns more than
@@ -175,7 +192,7 @@ pub(crate) fn banded_jacobian_entries(
     t: f64,
     dt: f64,
     bandwidth: usize,
-) -> Result<(usize, Vec<(usize, usize, f64)>), OxiflowError> {
+) -> BandedJacobianResult {
     let base_field = state.as_scalar_field()?.clone();
     let n = base_field.len();
 
@@ -222,6 +239,10 @@ pub(crate) fn banded_jacobian_entries(
 ///
 /// Kept separate from [`banded_jacobian_entries`] for dense/sparse parity
 /// testing against [`finite_difference_jacobian`] — see the test module.
+// TODO(v0.6.0): wire in once BackwardEulerSolver/CrankNicolsonSolver
+// select the banded path in practice (DD-043) — currently only exercised
+// by the dense/sparse parity test.
+#[allow(dead_code)]
 #[cfg(feature = "sparse")]
 pub(crate) fn banded_finite_difference_jacobian(
     domain: &Domain,
