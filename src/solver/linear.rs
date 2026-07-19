@@ -6,14 +6,20 @@
 //! `A * x = b` knows nothing about `t`, `dt`, or any `Domain` — it is a
 //! generic service, not a temporal-integration concern. The implicit
 //! integrators ([`crate::solver::methods::implicit`]) are its first
-//! consumer, but DD-013 already anticipates a second one unrelated to time
-//! integration: sparse FEM systems at v2.0/J7, via a `faer` backend
-//! implementing this same trait.
+//! consumer. DD-013 also anticipates further consumers unrelated to time
+//! integration — sparse FEM systems at v2.0/J7 among them — but any sparse
+//! backend is a sibling trait (see below), never a second implementation
+//! of `LinearSolver` itself.
 //!
 //! [`NalgebraDenseSolver`] (dense LU) is the default for the small systems
 //! implicit integrators produce at J4a. The sparse `faer` backend arrives
-//! at v0.5.0 (DD-013, second phase) as an additional implementation of
-//! this same trait — no change needed here when it does.
+//! at v0.6.0 (DD-013 second phase, DD-043) as **`SparseLinearSolver`**
+//! (`solver::sparse`) — a sibling trait, not another implementation of
+//! `LinearSolver` itself: `faer`'s sparse matrix type is structurally
+//! incompatible with `DMatrix` without a conversion that would erase the
+//! memory benefit sparsity is meant to provide (DD-043). `LinearSolver` and
+//! `NalgebraDenseSolver` are unaffected by that addition — no change needed
+//! here when it lands.
 
 use nalgebra::{DMatrix, DVector};
 
