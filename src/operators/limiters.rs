@@ -255,6 +255,11 @@ impl FluxDivergenceOperator for LimitedFlux {
         };
         Ok(ContextValue::ScalarField(div))
     }
+
+    fn stencil_radius(&self) -> usize {
+        // Same stencil footprint as WENO3 — see the module doc.
+        2
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
