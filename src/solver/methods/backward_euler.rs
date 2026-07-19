@@ -31,8 +31,12 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 use crate::solver::methods::implicit::theta_method_step;
+#[cfg(feature = "sparse")]
+use crate::solver::methods::implicit::theta_method_step_adaptive;
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
+#[cfg(feature = "sparse")]
+use crate::solver::sparse::SparseLinearSolver;
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
 /// Backward Euler solver — implicit, 1st order.
@@ -43,17 +47,43 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// use oxiflow::solver::methods::backward_euler::BackwardEulerSolver;
 ///
 /// let solver = BackwardEulerSolver::new();
-/// // Or, once a sparse backend lands (v0.5.0, DD-013):
-/// // let solver = BackwardEulerSolver::new().with_linear_solver(Box::new(FaerSparseSolver));
+/// // Sparse backend (v0.6.0, DD-013 second phase, DD-043) — dense path
+/// // stays untouched unless all three are configured explicitly:
+/// // let solver = BackwardEulerSolver::new()
+/// //     .with_jacobian_bandwidth(scheme.stencil_radius())
+/// //     .with_sparse_solver(Box::new(FaerSparseSolver))
+/// //     .with_sparse_threshold(100); // default
 /// ```
 pub struct BackwardEulerSolver {
     linear_solver: Box<dyn LinearSolver>,
+    /// Sparse backend (DD-043) — `None` by default: the dense path
+    /// ([`theta_method_step`]) is unconditionally used unless this is
+    /// explicitly configured via [`Self::with_sparse_solver`].
+    #[cfg(feature = "sparse")]
+    sparse_solver: Option<Box<dyn SparseLinearSolver>>,
+    /// System size above which the sparse path is used, once a
+    /// `sparse_solver` and a `jacobian_bandwidth` are both configured.
+    /// Ignored (no effect) if `sparse_solver` is `None`.
+    #[cfg(feature = "sparse")]
+    sparse_threshold: usize,
+    /// Half-bandwidth of the Jacobian — a HOW-side assertion supplied by
+    /// the caller (e.g. `scheme.stencil_radius()`, DD-039), never read
+    /// from `Domain`/`PhysicalModel` (DD-043, amendment 1). `None` by
+    /// default: no assumption about locality, dense path only.
+    #[cfg(feature = "sparse")]
+    jacobian_bandwidth: Option<usize>,
 }
 
 impl Default for BackwardEulerSolver {
     fn default() -> Self {
         Self {
             linear_solver: Box::new(NalgebraDenseSolver),
+            #[cfg(feature = "sparse")]
+            sparse_solver: None,
+            #[cfg(feature = "sparse")]
+            sparse_threshold: 100,
+            #[cfg(feature = "sparse")]
+            jacobian_bandwidth: None,
         }
     }
 }
@@ -69,6 +99,32 @@ impl BackwardEulerSolver {
         self.linear_solver = linear_solver;
         self
     }
+
+    /// Configures the sparse backend (DD-043). Has no effect on its own —
+    /// the sparse path also requires [`Self::with_jacobian_bandwidth`] and
+    /// a system larger than [`Self::with_sparse_threshold`] (default 100)
+    /// at solve time; otherwise the dense path is used unchanged.
+    #[cfg(feature = "sparse")]
+    pub fn with_sparse_solver(mut self, sparse_solver: Box<dyn SparseLinearSolver>) -> Self {
+        self.sparse_solver = Some(sparse_solver);
+        self
+    }
+
+    /// System size above which the sparse path is used (default 100) —
+    /// see [`Self::with_sparse_solver`].
+    #[cfg(feature = "sparse")]
+    pub fn with_sparse_threshold(mut self, sparse_threshold: usize) -> Self {
+        self.sparse_threshold = sparse_threshold;
+        self
+    }
+
+    /// Declares the Jacobian's half-bandwidth (e.g.
+    /// `scheme.stencil_radius()`, DD-039) — see [`Self::with_sparse_solver`].
+    #[cfg(feature = "sparse")]
+    pub fn with_jacobian_bandwidth(mut self, jacobian_bandwidth: usize) -> Self {
+        self.jacobian_bandwidth = Some(jacobian_bandwidth);
+        self
+    }
 }
 
 impl Solver for BackwardEulerSolver {
@@ -81,6 +137,45 @@ impl Solver for BackwardEulerSolver {
     }
 }
 
+#[cfg(feature = "sparse")]
+impl SteppableSolver for BackwardEulerSolver {
+    fn step(
+        &self,
+        domain: &Domain,
+        chain: &[&dyn ContextCalculator],
+        state: &mut ContextValue,
+        _history: &[ContextValue],
+        t: f64,
+        dt: f64,
+    ) -> Result<ContextValue, OxiflowError> {
+        // history_depth() defaults to 0 -- Backward Euler is a one-step
+        // method, `_history` is always empty here and intentionally unused.
+        //
+        // Dispatch is gated on `sparse_solver` alone: with no solver
+        // configured there is nothing to hand `theta_method_step_adaptive`,
+        // so the dense path is taken directly rather than going through it
+        // with a `None` bandwidth (equivalent result, one fewer branch to
+        // reason about). The `n > sparse_threshold && bandwidth.is_some()`
+        // condition is `theta_method_step_adaptive`'s own responsibility.
+        match &self.sparse_solver {
+            Some(sparse_solver) => theta_method_step_adaptive(
+                domain,
+                chain,
+                state,
+                t,
+                dt,
+                1.0,
+                self.linear_solver.as_ref(),
+                sparse_solver.as_ref(),
+                self.sparse_threshold,
+                self.jacobian_bandwidth,
+            ),
+            None => theta_method_step(domain, chain, state, t, dt, 1.0, self.linear_solver.as_ref()),
+        }
+    }
+}
+
+#[cfg(not(feature = "sparse"))]
 impl SteppableSolver for BackwardEulerSolver {
     fn step(
         &self,
