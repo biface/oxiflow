@@ -170,7 +170,15 @@ impl SteppableSolver for BackwardEulerSolver {
                 self.sparse_threshold,
                 self.jacobian_bandwidth,
             ),
-            None => theta_method_step(domain, chain, state, t, dt, 1.0, self.linear_solver.as_ref()),
+            None => theta_method_step(
+                domain,
+                chain,
+                state,
+                t,
+                dt,
+                1.0,
+                self.linear_solver.as_ref(),
+            ),
         }
     }
 }

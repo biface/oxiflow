@@ -302,11 +302,12 @@ pub(crate) fn theta_method_step_adaptive(
                 .collect();
 
             let system_matrix =
-                faer::sparse::SparseColMat::try_new_from_triplets(n, n, &system_triplets)
-                    .map_err(|e| OxiflowError::PreconditionFailed {
+                faer::sparse::SparseColMat::try_new_from_triplets(n, n, &system_triplets).map_err(
+                    |e| OxiflowError::PreconditionFailed {
                         context: "theta_method_step_adaptive",
                         message: format!("failed to build sparse system matrix: {e:?}"),
-                    })?;
+                    },
+                )?;
 
             let rhs = f_n_field * dt;
             let delta_u = sparse_solver.solve(&system_matrix, &rhs)?;
@@ -627,14 +628,26 @@ mod sparse_tests {
         )
         .unwrap();
 
-        let via_plain =
-            theta_method_step(domain, &chain, &mut state_b, 0.0, 0.05, 1.0, &NalgebraDenseSolver)
-                .unwrap();
+        let via_plain = theta_method_step(
+            domain,
+            &chain,
+            &mut state_b,
+            0.0,
+            0.05,
+            1.0,
+            &NalgebraDenseSolver,
+        )
+        .unwrap();
 
         let a = via_adaptive.as_scalar_field().unwrap();
         let b = via_plain.as_scalar_field().unwrap();
         for i in 0..n {
-            assert!((a[i] - b[i]).abs() < 1e-12, "mismatch at {i}: {} vs {}", a[i], b[i]);
+            assert!(
+                (a[i] - b[i]).abs() < 1e-12,
+                "mismatch at {i}: {} vs {}",
+                a[i],
+                b[i]
+            );
         }
     }
 
@@ -667,7 +680,11 @@ mod sparse_tests {
         )
         .unwrap();
 
-        assert!(result.as_scalar_field().unwrap().iter().all(|v| v.is_finite()));
+        assert!(result
+            .as_scalar_field()
+            .unwrap()
+            .iter()
+            .all(|v| v.is_finite()));
     }
 
     #[test]
@@ -676,13 +693,15 @@ mod sparse_tests {
         let diffusion = 0.3;
         let dt = 0.02;
 
-        let scenario_a = Scenario::single(Box::new(TridiagonalDiffusion { diffusion }), make_mesh(n));
+        let scenario_a =
+            Scenario::single(Box::new(TridiagonalDiffusion { diffusion }), make_mesh(n));
         let domain_a = scenario_a.single_domain().unwrap();
         let requirements_a = scenario_a.context_requirements();
         let chain_a = build_calculator_chain(&requirements_a, &[]).unwrap();
         let mut state_a = domain_a.model.initial_state(domain_a.mesh.as_ref());
 
-        let scenario_b = Scenario::single(Box::new(TridiagonalDiffusion { diffusion }), make_mesh(n));
+        let scenario_b =
+            Scenario::single(Box::new(TridiagonalDiffusion { diffusion }), make_mesh(n));
         let domain_b = scenario_b.single_domain().unwrap();
         let requirements_b = scenario_b.context_requirements();
         let chain_b = build_calculator_chain(&requirements_b, &[]).unwrap();
@@ -702,9 +721,16 @@ mod sparse_tests {
         )
         .unwrap();
 
-        let via_dense =
-            theta_method_step(domain_b, &chain_b, &mut state_b, 0.0, dt, 1.0, &NalgebraDenseSolver)
-                .unwrap();
+        let via_dense = theta_method_step(
+            domain_b,
+            &chain_b,
+            &mut state_b,
+            0.0,
+            dt,
+            1.0,
+            &NalgebraDenseSolver,
+        )
+        .unwrap();
 
         let a = via_sparse.as_scalar_field().unwrap();
         let b = via_dense.as_scalar_field().unwrap();
