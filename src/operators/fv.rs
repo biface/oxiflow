@@ -245,6 +245,11 @@ impl FluxDivergenceOperator for FVCenteredFlux {
         };
         Ok(ContextValue::ScalarField(div))
     }
+
+    fn stencil_radius(&self) -> usize {
+        // Two-point face flux — one neighbor on each side.
+        1
+    }
 }
 
 // ── FVUpwindFlux ──────────────────────────────────────────────────────────────
@@ -311,6 +316,11 @@ impl FluxDivergenceOperator for FVUpwindFlux {
             )?,
         };
         Ok(ContextValue::ScalarField(div))
+    }
+
+    fn stencil_radius(&self) -> usize {
+        // Two-point face flux — one neighbor on each side.
+        1
     }
 }
 

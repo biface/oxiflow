@@ -190,6 +190,11 @@ mod tests {
             let n = field.as_scalar_field()?.len();
             Ok(ContextValue::ScalarField(DVector::from_element(n, self.0)))
         }
+
+        fn stencil_radius(&self) -> usize {
+            // Constant output, no neighbor access at all.
+            0
+        }
     }
 
     fn fixture(value: f64) -> DiscretizedModel<ConstantFlux> {

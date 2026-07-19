@@ -123,6 +123,22 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
         mesh: &Self::MeshType,
         ctx: &ComputeContext,
     ) -> Result<ContextValue, OxiflowError>;
+
+    /// Half-width of the stencil this scheme reads on each side of a cell —
+    /// a property of the numerical scheme itself (HOW), never of the
+    /// physical model it backs (DD-043, amendment 1). No default: every
+    /// implementation must state its own value explicitly, the same
+    /// posture as [`crate::model::traits::RequiresContext::required_variables`].
+    ///
+    /// Read directly by the caller on the concrete `Op` — before it is ever
+    /// boxed into a `Box<dyn PhysicalModel>` — and handed explicitly to a
+    /// solver's own configuration (e.g.
+    /// `BackwardEulerSolver::with_jacobian_bandwidth(scheme.stencil_radius())`,
+    /// v0.6.0/#50). Never read back from a `PhysicalModel`: bandwidth is a
+    /// solver-side assertion (HOW), not a model declaration (WHAT) — see
+    /// DD-043, amendment 1, for the rejected alternative
+    /// (`PhysicalModel::jacobian_bandwidth`) and why it was rejected.
+    fn stencil_radius(&self) -> usize;
 }
 
 // ── FluxBoundary ──────────────────────────────────────────────────────────────
