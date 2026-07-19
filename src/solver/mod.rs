@@ -28,6 +28,8 @@ pub mod linear;
 pub mod methods;
 pub mod orchestrator;
 pub mod scenario;
+#[cfg(feature = "sparse")]
+pub mod sparse;
 
 pub use config::{IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration};
 pub use scenario::{Domain, DomainId, Scenario};
