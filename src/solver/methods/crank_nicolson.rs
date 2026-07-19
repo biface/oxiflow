@@ -142,7 +142,15 @@ impl SteppableSolver for CrankNicolsonSolver {
                 self.sparse_threshold,
                 self.jacobian_bandwidth,
             ),
-            None => theta_method_step(domain, chain, state, t, dt, 0.5, self.linear_solver.as_ref()),
+            None => theta_method_step(
+                domain,
+                chain,
+                state,
+                t,
+                dt,
+                0.5,
+                self.linear_solver.as_ref(),
+            ),
         }
     }
 }
