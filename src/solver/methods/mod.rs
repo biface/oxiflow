@@ -302,7 +302,23 @@ pub trait SteppableSolver: Solver {
                 u = next;
             }
 
-            check_finite(&u, t_next)?;
+            if let Err(e) = check_finite(&u, t_next) {
+                self.on_divergence(&crate::solver::snapshot::SimulationSnapshot {
+                    time_config: config.time.clone(),
+                    integrator: config.integrator.clone(),
+                    state: u.clone(),
+                    t: t_next,
+                    n_steps: step + 1,
+                    error: Some(e.to_string()),
+                    partial: Some(SimulationResult {
+                        states: states.clone(),
+                        times: times.clone(),
+                        n_steps: step + 1,
+                        metadata: HashMap::new(),
+                    }),
+                });
+                return Err(e);
+            }
 
             if (step + 1) % save_every == 0 {
                 states.push(u.clone());
