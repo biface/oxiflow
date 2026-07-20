@@ -57,6 +57,20 @@ hdf5  = { package = "hdf5-metno", version = "0.10", optional = true }
 # dépendances transitives avec un MSRV bien supérieur à celui de ce crate,
 # sans bénéfice ici.
 faer  = { version = "0.24", optional = true, default-features = false, features = ["std", "sparse-linalg"] }
+# feature `serde`    — sérialisation JSON de `SimulationSnapshot` (DD-025 Option
+# B / DD-029, issue #71) — `write_snapshot()` au format lisible pour le debug.
+# Passée de dev-dependency (fixtures de test uniquement) à dépendance de
+# production optionnelle : `write_snapshot()` en a besoin dans le crate publié,
+# pas seulement dans ses tests. Pinnée `1.3` (pas `2.x`/`3.x`) : ces versions
+# récentes déclarent `rust-version = "1.85.0"`, au-dessus du MSRV de ce crate
+# (`1.80`) — vérifié sur l'index crates.io avant ajout, pas supposé.
+serde_json = { version = "1", optional = true }
+# feature `serde`    — sérialisation bincode de `SimulationSnapshot` (DD-025
+# Option B / DD-029, issue #71) — format binaire natif recommandé pour
+# `checkpoint()`/`on_divergence()` (fidélité + performance). Même contrainte de
+# MSRV que `serde_json` ci-dessus : `bincode 1.3` (API `serialize`/
+# `deserialize` classique), pas `2.x`/`3.x` (`rust-version = "1.85.0"`).
+bincode = { version = "1.3", optional = true }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Features
@@ -71,8 +85,10 @@ default  = []
 parallel = ["dep:rayon"]
 
 # Sérialisation des types publics via serde — DD-025 (issue #66, décision ;
-# issue #67, implémentation Option A).
-serde    = ["dep:serde", "nalgebra/serde-serialize"]
+# issue #67, implémentation Option A). Entraîne `serde_json`/`bincode` pour
+# `write_snapshot()` (DD-025 Option B / DD-029, issue #71) : JSON lisible pour
+# le debug, bincode natif pour `checkpoint()`/`on_divergence()`.
+serde    = ["dep:serde", "nalgebra/serde-serialize", "dep:serde_json", "dep:bincode"]
 
 # Support HDF5 pour les données expérimentales volumineuses — DD-027
 # (issue #75). Dépendance migrée vers `hdf5-metno` (chore #79) — voir le
@@ -91,9 +107,6 @@ sparse   = ["dep:faer"]
 # Benchmarks — suite prévue à v0.7.0/J5 (issue #53, encore ouverte : le
 # harness ci-dessous n'est pas encore activé, seul le crate est déclaré).
 criterion = { version = "0.8", features = ["html_reports"] }
-# Fixtures de test (JSON de référence) — pas de DD/issue dédiée, usage
-# interne aux tests uniquement.
-serde_json = { version = "1" }
 
 # [[bench]]
 # name    = "oxiflow_benchmarks"
