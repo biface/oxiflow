@@ -28,11 +28,13 @@ pub mod linear;
 pub mod methods;
 pub mod orchestrator;
 pub mod scenario;
+pub mod snapshot;
 #[cfg(feature = "sparse")]
 pub mod sparse;
 
 pub use config::{IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration};
 pub use scenario::{Domain, DomainId, Scenario};
+pub use snapshot::SimulationSnapshot;
 
 use crate::context::error::OxiflowError;
 
@@ -58,7 +60,7 @@ use crate::context::error::OxiflowError;
 /// assert_eq!(result.states.len(), result.times.len());
 /// ```
 #[non_exhaustive]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SimulationResult {
     /// Saved field states at each recorded time.
