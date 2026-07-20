@@ -68,6 +68,77 @@ pub struct ExternalTabulated {
 }
 
 impl ExternalTabulated {
+    /// Loads tabulated data from an HDF5 file (DD-027, issue #105).
+    ///
+    /// `variable` must be [`ContextVariable::External`] — its `name` is used
+    /// as the HDF5 group to read from. The group must contain two 1D `f64`
+    /// datasets, `t` and `value`, of equal length. Delegates to [`Self::new`]
+    /// for validation (≥ 2 points, strictly ascending `t`) — no duplicated
+    /// logic.
+    ///
+    /// Requires the `hdf5` feature.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(OxiflowError::ExternalData)` if `variable` is not
+    /// `ContextVariable::External`. Returns `Err(OxiflowError::Persistence)`
+    /// if the file/group/dataset cannot be opened or read, or if `t` and
+    /// `value` have different lengths. Returns `Err(OxiflowError::ExternalData)`
+    /// (via [`Self::new`]) if the loaded data has fewer than 2 points or is
+    /// not sorted by ascending `t`.
+    #[cfg(feature = "hdf5")]
+    pub fn from_hdf5(
+        path: &std::path::Path,
+        variable: ContextVariable,
+        interpolation: Interpolation,
+    ) -> Result<Self, OxiflowError> {
+        let group_name = match &variable {
+            ContextVariable::External { name } => name.as_ref(),
+            _ => {
+                return Err(OxiflowError::ExternalData(
+                    "ExternalTabulated::from_hdf5 requires a ContextVariable::External \
+                     (its `name` is used as the HDF5 group to read)"
+                        .to_string(),
+                ));
+            }
+        };
+
+        let file = hdf5::File::open(path)
+            .map_err(|e| OxiflowError::Persistence(format!("cannot open {path:?}: {e}")))?;
+        let group = file.group(group_name).map_err(|e| {
+            OxiflowError::Persistence(format!("no group {group_name:?} in {path:?}: {e}"))
+        })?;
+
+        let read_column = |name: &str| -> Result<Vec<f64>, OxiflowError> {
+            let ds = group.dataset(name).map_err(|e| {
+                OxiflowError::Persistence(format!(
+                    "no dataset {name:?} in group {group_name:?} ({path:?}): {e}"
+                ))
+            })?;
+            let arr = ds.read_1d::<f64>().map_err(|e| {
+                OxiflowError::Persistence(format!(
+                    "cannot read dataset {name:?} in group {group_name:?} ({path:?}): {e}"
+                ))
+            })?;
+            Ok(arr.iter().copied().collect())
+        };
+
+        let t = read_column("t")?;
+        let value = read_column("value")?;
+
+        if t.len() != value.len() {
+            return Err(OxiflowError::Persistence(format!(
+                "group {group_name:?} ({path:?}): 't' has {} points, 'value' has {} — \
+                 must match",
+                t.len(),
+                value.len()
+            )));
+        }
+
+        let data: Vec<(f64, f64)> = t.into_iter().zip(value).collect();
+        Self::new(variable, data, interpolation)
+    }
+
     /// Creates a new tabulated external calculator.
     ///
     /// # Arguments
@@ -314,5 +385,65 @@ mod tests {
     fn is_object_safe() {
         let c: Box<dyn ContextCalculator> = Box::new(calc(linear_data()));
         assert_eq!(c.provides(), var());
+    }
+
+    // ── from_hdf5 ─────────────────────────────────────────────────────────────
+
+    #[cfg(feature = "hdf5")]
+    #[test]
+    fn from_hdf5_round_trip() {
+        let path = std::env::temp_dir().join("oxiflow_test_from_hdf5_round_trip.h5");
+
+        // Write a fixture matching the schema from_hdf5 expects: one group
+        // named after the variable, two 1D f64 datasets "t"/"value".
+        {
+            let file = hdf5::File::create(&path).unwrap();
+            let group = file.create_group("feed_conc").unwrap();
+            group
+                .new_dataset::<f64>()
+                .shape(3)
+                .create("t")
+                .unwrap()
+                .write_raw(&[0.0, 1.0, 2.0])
+                .unwrap();
+            group
+                .new_dataset::<f64>()
+                .shape(3)
+                .create("value")
+                .unwrap()
+                .write_raw(&[1.0, 2.0, 1.5])
+                .unwrap();
+        }
+
+        let variable = ContextVariable::External {
+            name: "feed_conc".into(),
+        };
+        let calc = ExternalTabulated::from_hdf5(&path, variable, Interpolation::Linear).unwrap();
+
+        // Same fixture as the module-level rustdoc example (t=0.5 -> 1.5).
+        let val = calc.compute(&ContextValue::Scalar(0.0), &ctx(0.5)).unwrap();
+        assert!((val.as_scalar().unwrap() - 1.5).abs() < 1e-10);
+
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[cfg(feature = "hdf5")]
+    #[test]
+    fn from_hdf5_rejects_non_external_variable() {
+        let path = std::env::temp_dir().join("oxiflow_test_from_hdf5_wrong_variant.h5");
+        let result =
+            ExternalTabulated::from_hdf5(&path, ContextVariable::Time, Interpolation::Linear);
+        assert!(matches!(result, Err(OxiflowError::ExternalData(_))));
+    }
+
+    #[cfg(feature = "hdf5")]
+    #[test]
+    fn from_hdf5_missing_file_is_persistence_error() {
+        let path = std::path::PathBuf::from("/nonexistent/path/data.h5");
+        let variable = ContextVariable::External {
+            name: "feed_conc".into(),
+        };
+        let result = ExternalTabulated::from_hdf5(&path, variable, Interpolation::Linear);
+        assert!(matches!(result, Err(OxiflowError::Persistence(_))));
     }
 }
