@@ -213,7 +213,23 @@ impl Solver for DoPri45Solver {
                     accepted_steps += 1;
                     accepted_since_save += 1;
 
-                    check_finite(&u, t)?;
+                    if let Err(e) = check_finite(&u, t) {
+                        self.on_divergence(&crate::solver::snapshot::SimulationSnapshot {
+                            time_config: config.time.clone(),
+                            integrator: config.integrator.clone(),
+                            state: u.clone(),
+                            t,
+                            n_steps: accepted_steps,
+                            error: Some(e.to_string()),
+                            partial: Some(SimulationResult {
+                                states: states.clone(),
+                                times: times.clone(),
+                                n_steps: accepted_steps,
+                                metadata: HashMap::new(),
+                            }),
+                        });
+                        return Err(e);
+                    }
 
                     dt = controller.next_dt(local_dt, error_norm);
 
@@ -232,14 +248,26 @@ impl Solver for DoPri45Solver {
                 if rejections_this_step >= MAX_REJECTIONS_PER_STEP
                     || suggested <= controller.dt_min()
                 {
-                    return Err(OxiflowError::SolverDivergence {
-                        time: t,
-                        reason: format!(
-                            "step rejected {rejections_this_step} times in a row; cannot \
-                             satisfy rtol/atol even at dt_min={}",
-                            controller.dt_min()
-                        ),
+                    let reason = format!(
+                        "step rejected {rejections_this_step} times in a row; cannot \
+                         satisfy rtol/atol even at dt_min={}",
+                        controller.dt_min()
+                    );
+                    self.on_divergence(&crate::solver::snapshot::SimulationSnapshot {
+                        time_config: config.time.clone(),
+                        integrator: config.integrator.clone(),
+                        state: u.clone(),
+                        t,
+                        n_steps: accepted_steps,
+                        error: Some(reason.clone()),
+                        partial: Some(SimulationResult {
+                            states: states.clone(),
+                            times: times.clone(),
+                            n_steps: accepted_steps,
+                            metadata: HashMap::new(),
+                        }),
                     });
+                    return Err(OxiflowError::SolverDivergence { time: t, reason });
                 }
 
                 local_dt = suggested;
