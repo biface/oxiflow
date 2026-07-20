@@ -100,6 +100,12 @@ pub enum OxiflowError {
     /// The solver produced a non-finite state and cannot continue.
     #[error("solver divergence at t={time:.4e}: {reason}")]
     SolverDivergence { time: f64, reason: String },
+
+    /// A `SimulationSnapshot` read/write operation failed — file I/O or
+    /// (de)serialisation (JSON or bincode). See
+    /// [`crate::solver::snapshot`] (DD-025 Option B / DD-029, issue #71).
+    #[error("snapshot persistence error: {0}")]
+    Persistence(String),
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
