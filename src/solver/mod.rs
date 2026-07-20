@@ -123,6 +123,18 @@ pub trait Solver: Send + Sync {
         scenario: &Scenario,
         config: &SolverConfiguration,
     ) -> Result<SimulationResult, OxiflowError>;
+
+    /// Called automatically right before a [`OxiflowError::SolverDivergence`]
+    /// is returned, with a [`SimulationSnapshot`] capturing the physical
+    /// state at the point of divergence (DD-025 Option B, issue #71).
+    ///
+    /// Default implementation is a no-op — override to persist (e.g. via
+    /// [`snapshot::write_snapshot`]) or log. There is no `checkpoint()`
+    /// counterpart on this trait; see the [`snapshot`] module docs for why
+    /// explicit checkpoints are constructed directly by caller code instead.
+    fn on_divergence(&self, snapshot: &snapshot::SimulationSnapshot) {
+        let _ = snapshot;
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
