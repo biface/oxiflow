@@ -9,6 +9,18 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `SimulationSnapshot`, `SnapshotFormat`, `write_snapshot()`/`read_snapshot()`
+  (JSON/bincode) — `src/solver/snapshot.rs` (DD-025 Option B / DD-029, #71)
+- `Solver::on_divergence()` — default no-op hook, called automatically before
+  `OxiflowError::SolverDivergence` is returned (#71)
+- `OxiflowError::Persistence` — snapshot I/O/(de)serialisation failures
+
+### Changed
+
+- `SimulationResult` now derives `Clone`
+
 ## [0.5.0] — 2026-07-17
 
 ### Added
