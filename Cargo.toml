@@ -47,6 +47,10 @@ serde = { version = "1", features = ["derive"], optional = true }
 # maintenu (Institut météorologique norvégien), même auteur original en
 # co-mainteneur.
 hdf5  = { package = "hdf5-metno", version = "0.10", optional = true }
+# feature `vtk`      — export XML (.vtu) de SimulationResult::write_vtk()
+# (DD-027, issue #78). Pure Rust, aucune dépendance système (contrairement à
+# `hdf5`) — voir DD-027 : choisi comme pivot d'interop pour ParaView/VisIt.
+vtkio = { version = "0.6", optional = true }
 # feature `sparse`   — solveur linéaire creux pour les intégrateurs implicites
 # sur grandes grilles. DD-013 (issue #13, décision faer pour le volet creux) ;
 # DD-043 (issue #50, v0.6.0) : trait frère de LinearSolver, pas une extension
@@ -94,6 +98,7 @@ serde    = ["dep:serde", "nalgebra/serde-serialize", "dep:serde_json", "dep:binc
 # (issue #75). Dépendance migrée vers `hdf5-metno` (chore #79) — voir le
 # commentaire sur la dépendance ci-dessus.
 hdf5     = ["dep:hdf5"]
+vtk      = ["dep:vtkio"]
 
 # Solveur linéaire creux (faer) — DD-013 (issue #13) / DD-043 (issue #50,
 # v0.6.0). Trait frère de LinearSolver (solver::sparse), pas une extension.
