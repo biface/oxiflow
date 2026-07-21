@@ -12,13 +12,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `SimulationSnapshot`, `SnapshotFormat`, `write_snapshot()`/`read_snapshot()`
-  (JSON/bincode) — `src/solver/snapshot.rs` (DD-025 Option B / DD-029, #71)
+  (JSON/bincode) — `src/solver/snapshot.rs` (#66 Option B / #77, #71)
 - `Solver::on_divergence()` — default no-op hook, called automatically before
   `OxiflowError::SolverDivergence` is returned (#71)
 - `OxiflowError::Persistence` — snapshot I/O/(de)serialisation failures
 - `ExternalTabulated::from_hdf5()` — loads tabulated data from an HDF5 file
     (one group per variable, `t`/`value` datasets), feature-gated `hdf5`
-    (DD-027, #105)
+    (#75, #105)
 
 ### Changed
 
