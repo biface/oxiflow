@@ -4,10 +4,9 @@ Ce document est la référence architecturale d'oxiflow. Il couvre les principes
 les spécifications de jalons, les invariants de conception, la stratégie d'écosystème et le
 journal de décisions qui guident l'ensemble du travail d'implémentation de v0.1 à v3.0.
 
-> **Version actuelle :** v0.4.0 — Integrators (clos)
-> **Développement actif :** v0.5.0 — Discretisation (J5) — DiscreteOperator (DD-012/#46), FD (#47),
-> FV (#48), WENO/limiteurs (#49), FluxDivergenceOperator & DiscretizedModel (DD-039/DD-038)
-> **Version du document :** 2.2 — Juillet 2026
+> **Version actuelle :** v0.6.0 — Algèbre creuse & persistance (clos)
+> **Développement actif :** v0.7.0 — Intégration temporelle non linéaire (J7), pas encore démarré
+> **Version du document :** 2.3 — Juillet 2026
 
 ---
 
@@ -90,8 +89,8 @@ scientifiques spécifiques avec un minimum de code de plomberie.
 | J2 — Contexte complet | v0.2.0 | ✅ Acquis | BCs requirantes · ordonnancement topologique · calculateurs built-in |
 | J3 — Multi-composants | v0.3.0 | ✅ Acquis | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3) |
 | J4a — Intégrateurs | v0.4.0 | ✅ Acquis | Euler, RK4, DoPri45, Euler implicite, Crank-Nicolson, BDF2, IMEX |
-| J5 — Discrétisation | v0.5.0 | 🔄 en cours | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
-| J6 — Algèbre creuse & persistance | v0.6.0 | ⏳ Planifié | faer-sparse · export VTK/HDF5 · SimulationSnapshot |
+| J5 — Discrétisation | v0.5.0 | ✅ Atteint | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
+| J6 — Algèbre creuse & persistance | v0.6.0 | ✅ Atteint | faer-sparse · export VTK/HDF5 · SimulationSnapshot |
 | J7 — Intégration temporelle non linéaire | v0.7.0 | ⏳ Planifié | Newton et méthodes apparentées pour intégrateurs implicites |
 | J8 — Optimisation computationnelle | v0.8.0 | ⏳ Planifié | Profilage, optimisation algorithmique/mémoire, GPU (`wgpu`) |
 | J9 — Parallélisme & benchmarking | v0.9.0 | ⏳ Planifié | Rayon · cache dirty-flag · benchmarks Criterion |
@@ -285,9 +284,17 @@ livrée.
 
 Solveur linéaire creux `faer-sparse` pour les systèmes implicites (#50, DD-013 phase 2).
 Export des résultats : VTK (`vtkio`) comme pivot interop pour `SimulationResult` (#78,
-DD-027), HDF5 (`hdf5-metno`, migration de dépendance #79) pour les données volumineuses.
+DD-027), HDF5 (`hdf5-metno`, migration de dépendance #79) pour les données volumineuses,
+incluant le chargement HDF5 pour `ExternalTabulated` (#105, scindée de #75).
 `SimulationSnapshot` généralisé au-delà de la reprise sur crash vers un checkpoint/reprise
-normal (DD-029, étend #71, #77).
+normal (DD-029, étend #71, #77) — pas de méthode `Solver::checkpoint()` : l'appelant
+construit le snapshot directement, voir la documentation de module de `snapshot.rs`.
+
+L'amendement 1 de DD-027 ajoute le premier DTO de configuration côté HOW,
+`IntegratorSpec` (#104) — `TryFrom<IntegratorSpec> for Box<dyn Solver>`, seule la
+variante `BackwardEuler` pour cet incrément (le chemin de dispatch creux, #50). Les
+autres intégrateurs et l'axe WHAT (`ModelConfig`/`MeshConfig`/`BoundaryConditionConfig`)
+restent à faire, hors périmètre de J6.
 
 C'est également au moment de cette étape que le calculateur privé `FluxDivergenceCalculator`
 (DD-038, J5) est candidat à un branchement dans le pipeline de `ContextCalculator`, si l'export
@@ -566,8 +573,8 @@ relatifs — remplace l'ancien schéma M+N, devenu incohérent avec les échéan
 | J2 | v0.2.0 | Clos (2026-05) | BCs requirantes · topologie · calculateurs built-in |
 | J3 | v0.3.0 | Clos (2026-06) | PhysicalQuantity · CouplingOperator (INV-3) · proto lahar–lac |
 | J4a | v0.4.0 | Clos (2026-06) | Intégrateurs temporels, IMEX inclus |
-| J5 | v0.5.0 | 2026-08-06 | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
-| J6 | v0.6.0 | 2026-09-16 | faer-sparse · export VTK/HDF5 · SimulationSnapshot |
+| J5 | v0.5.0 | Clos (2026-07-17) | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
+| J6 | v0.6.0 | Clos (2026-07-21) | faer-sparse · export VTK/HDF5 · SimulationSnapshot · IntegratorSpec |
 | J7 | v0.7.0 | 2026-10-07 | Intégration temporelle non linéaire (Newton) |
 | J8 | v0.8.0 | 2026-11-18 | Optimisation computationnelle, GPU-readiness |
 | J9 | v0.9.0 | 2026-12-30 | Rayon · cache dirty-flag · benchmarks Criterion |

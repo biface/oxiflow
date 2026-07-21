@@ -65,7 +65,7 @@ object-safe précisément dans ce but.
 
 ```toml
 [dependencies]
-oxiflow = "0.3"
+oxiflow = "0.6"
 # oxiflow-chrom = "3.0"    # framework chromatographie (disponible dès v3.0)
 ```
 
@@ -149,18 +149,21 @@ assurent la compatibilité des frameworks tiers entre les versions du moteur :
 
 ## État de Développement
 
-| Jalon                  | Version  | Statut      | Thème                                                            |
-|------------------------|----------|-------------|------------------------------------------------------------------|
-| J0 — Fondations        | v0.0.5   | ✅ Publié    | Placeholder · CI · structure projet                              |
-| J1 — Architecture cœur | v0.1.0   | ✅ Publié    | ContextValue · OxiflowError · Mesh (INV-1)                       |
-| J2 — Contexte complet  | v0.2.0   | ✅ Publié    | BCs requirantes · ordonnancement topologique · calculateurs      |
-| J3 — Multi-composants  | v0.3.0   | ✅ Publié    | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3)   |
-| J4a — Intégrateurs     | v0.4.0   | ✅ Publié    | Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson, BDF2, IMEX |
-| J4b — Discrétisation   | v0.5.0   | ✅ Publié    | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · limiteurs de flux + sélection adaptative |
-| J5 — Performance       | v0.6.0   | ⏳ Planifié  | Rayon · cache dirty-flag · benchmarks Criterion                  |
-| J6 — Écosystème v1.0   | v1.0.0   | ⏳ Planifié  | 7 exemples · audit FEM · API stable                              |
-| J7 — FEM               | v2.0.0   | 🔭 Horizon  | Maillages non structurés · ALE · INV-4 plugin-safe               |
-| J8 — Frameworks        | v3.0.0   | 🔭 Horizon  | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run`                  |
+| Jalon                                    | Version | Statut     | Thème                                                                                                              |
+|------------------------------------------|--------|------------|--------------------------------------------------------------------------------------------------------------------|
+| J0 — Fondations                          | v0.0.5 | ✅ Publié   | Placeholder · CI · structure projet                                                                                |
+| J1 — Architecture cœur                   | v0.1.0 | ✅ Publié   | ContextValue · OxiflowError · Mesh (INV-1)                                                                         |
+| J2 — Contexte complet                    | v0.2.0 | ✅ Publié   | BCs requirantes · ordonnancement topologique · calculateurs                                                        |
+| J3 — Multi-composants                    | v0.3.0 | ✅ Publié   | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3)                                                     |
+| J4a — Intégrateurs                       | v0.4.0 | ✅ Publié   | Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson, BDF2, IMEX                                                   |
+| J5 — Discrétisation                      | v0.5.0 | ✅ Publié   | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · limiteurs de flux + sélection adaptative                              |
+| J6 — Algèbre creuse & persistance        | v0.6.0 | ✅ Publié   | solveur creux faer · SimulationSnapshot (checkpoint/on_divergence) · chargement HDF5 · export VTK · IntegratorSpec |
+| J7 — Intégration temporelle non linéaire | v0.7.0 | ⏳ Planifié | Itération de Newton complète pour les intégrateurs implicites                                                      |
+| J8 — Optimisation des calculs            | v0.8.0 | ⏳ Planifié | Profilage · optimisation algorithmique/mémoire · GPU-readiness (DD-026)                                            |
+| J9 — Parallélisme & Benchmarking         | v0.9.0 | ⏳ Planifié | Rayon · cache dirty-flag · benchmarks Criterion                                                                    |
+| J10 — Écosystème v1.0                    | v1.0.0 | ⏳ Planifié | 7 exemples · audit FEM · API stable                                                                                |
+| J20 — FEM                                | v2.0.0 | 🔭 Horizon | Maillages non structurés · ALE · INV-4 plugin-safe                                                                 |
+| J30 — Frameworks                         | v3.0.0 | 🔭 Horizon | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run`                                                                    |
 
 Les sous-invariants INV-GPU-1 à INV-GPU-5 (DD-026) gouvernent la GPU-readiness des
 structures de données numériques dès v0.3.0 — pas de code GPU pour l'instant, mais tous
@@ -172,13 +175,15 @@ Voir [DEVELOPPEMENT.md](DEVELOPPEMENT.md) pour la spécification architecturale 
 
 ## Feature Flags
 
-| Flag       | Description                                           | Disponible dès |
-|------------|-------------------------------------------------------|----------------|
-| *(défaut)* | Moteur cœur, exécution séquentielle                   | v0.2           |
-| `parallel` | Parallélisme Rayon pour les calculateurs indépendants | v0.6           |
-| `serde`    | Sérialisation des états et scénarios                  | v0.6           |
-| `hdf5`     | Import/export HDF5 pour données tabulées externes     | v0.6           |
-| `gpu`      | Accélération GPU via `wgpu` (Vulkan/Metal/DX12)       | post-v0.5.0 (planifié) |
+| Flag       | Description                                                | Disponible dès  |
+|------------|------------------------------------------------------------|-----------------|
+| *(défaut)* | Moteur cœur, exécution séquentielle                        | v0.2            |
+| `serde`    | Sérialisation des états et scénarios                       | v0.6            |
+| `hdf5`     | Import/export HDF5 pour données tabulées externes          | v0.6            |
+| `vtk`      | Export VTK (`.vtu`) de `SimulationResult`                  | v0.6            |
+| `sparse`   | Solveur linéaire creux `faer` pour intégrateurs implicites | v0.6            |
+| `parallel` | Parallélisme Rayon pour les calculateurs indépendants      | v0.9 (planifié) |
+| `gpu`      | Accélération GPU via `wgpu` (Vulkan/Metal/DX12)            | v0.8 (planifié) |
 
 ---
 

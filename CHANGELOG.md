@@ -9,22 +9,47 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-21
+
+### Highlights
+
+Sparse linear algebra and persistence: a `faer`-backed sparse solver path for
+implicit integrators (`BackwardEulerSolver`, `CrankNicolsonSolver`), a
+crash/checkpoint snapshot mechanism, HDF5-backed loading of experimental
+tabulated data, XML VTK export for ParaView/VisIt, and the first
+config-driven integrator selection DTO (`IntegratorSpec`).
+
 ### Added
 
-- `SimulationSnapshot`, `SnapshotFormat`, `write_snapshot()`/`read_snapshot()` (JSON/bincode) — `src/solver/snapshot.rs`
-  (#66 Option B / #77, #71)
+- `faer`-backed sparse linear solver path (`SparseLinearSolver`,
+  `FaerSparseSolver`) for `BackwardEulerSolver`/`CrankNicolsonSolver`,
+  feature-gated `sparse` (DD-013, DD-043, #50)
+- `SimulationSnapshot`, `SnapshotFormat`, `write_snapshot()`/`read_snapshot()`
+  (JSON/bincode) — `src/solver/snapshot.rs` (DD-025 Option B / DD-029, #71)
 - `Solver::on_divergence()` — default no-op hook, called automatically before
   `OxiflowError::SolverDivergence` is returned (#71)
-- `OxiflowError::Persistence` — snapshot I/O/(de)serialisation failures
-- `ExternalTabulated::from_hdf5()` — loads tabulated data from an HDF5 file (one group per variable, `t`/`value`
-  datasets), feature-gated `hdf5` (#75, #105)
-- `SimulationResult::write_vtk()` — XML `.vtu` export for ParaView/VisIt,   feature-gated `vtk` (#75, #78)
+- `OxiflowError::Persistence` — snapshot/HDF5/VTK I/O and (de)serialisation
+  failures
+- `ExternalTabulated::from_hdf5()` — loads tabulated data from an HDF5 file,
+  feature-gated `hdf5` (DD-027, #105)
+- `SimulationResult::write_vtk()` — XML `.vtu` export for ParaView/VisIt,
+  feature-gated `vtk` (DD-027, #78)
 - `IntegratorSpec` — external config DTO for `BackwardEulerSolver` +
-  `TryFrom<IntegratorSpec> for Box<dyn Solver>`, feature-gated `sparse` (#75 amendment 1, #104)
+  `TryFrom<IntegratorSpec> for Box<dyn Solver>`, feature-gated `sparse`
+  (DD-027 amendment 1, #104)
 
 ### Changed
 
 - `SimulationResult` now derives `Clone`
+- `hdf5` feature migrated from the unmaintained `hdf5` crate (0.8, aldanor)
+  to the actively-maintained `hdf5-metno` fork (chore, #79)
+
+### Design Decisions
+
+- DD-027 — Results export: VTK as interop pivot, HDF5 for bulk datasets (#75)
+- DD-027 amendment 1 — config-driven WHAT/HOW construction from JSON/YAML
+- DD-029 — Generalised `SimulationSnapshot`: normal checkpoint/resume (#77)
+- DD-043 — `SparseLinearSolver`: sibling trait to `DiscreteOperator` (faer)
 
 ## [0.5.0] — 2026-07-17
 
