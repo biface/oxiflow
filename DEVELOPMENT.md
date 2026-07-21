@@ -4,10 +4,9 @@ This document is the architectural reference for oxiflow. It covers the design p
 milestone specifications, design invariants, ecosystem strategy, and decision log that guide
 all implementation work from v0.1 to v3.0.
 
-> **Current version:** v0.4.0 — Integrators (closed)
-> **Active development:** v0.5.0 — Discretisation (J5) — DiscreteOperator (DD-012/#46), FD (#47),
-> FV (#48), WENO/limiters (#49), FluxDivergenceOperator & DiscretizedModel (DD-039/DD-038)
-> **Document version:** 2.2 — July 2026
+> **Current version:** v0.6.0 — Sparse Algebra & Persistence (closed)
+> **Active development:** v0.7.0 — Nonlinear Time Integration (J7), not yet started
+> **Document version:** 2.3 — July 2026
 
 ---
 
@@ -88,8 +87,8 @@ boilerplate.
 | J2 — Complete Context | v0.2.0 | ✅ Achieved | Requiring BCs · topological ordering · built-in calculators |
 | J3 — Multi-Component | v0.3.0 | ✅ Achieved | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3) |
 | J4a — Integrators | v0.4.0 | ✅ Achieved | Euler, RK4, DoPri45, Backward Euler, Crank-Nicolson, BDF2, IMEX |
-| J5 — Discretisation | v0.5.0 | 🔄 In progress | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
-| J6 — Sparse Algebra & Persistence | v0.6.0 | ⏳ Planned | faer-sparse · VTK/HDF5 export · SimulationSnapshot |
+| J5 — Discretisation | v0.5.0 | ✅ Achieved | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
+| J6 — Sparse Algebra & Persistence | v0.6.0 | ✅ Achieved | faer-sparse · VTK/HDF5 export · SimulationSnapshot |
 | J7 — Nonlinear Time Integration | v0.7.0 | ⏳ Planned | Newton and related methods for implicit integrators |
 | J8 — Computational Optimisation | v0.8.0 | ⏳ Planned | Profiling, algorithmic/memory optimisation, GPU (`wgpu`) |
 | J9 — Parallelism & Benchmarking | v0.9.0 | ⏳ Planned | Rayon · dirty-flag cache · Criterion benchmarks |
@@ -281,8 +280,15 @@ delivered.
 
 Sparse `faer-sparse` linear solver for implicit systems (#50, DD-013 phase 2). Results export:
 VTK (`vtkio`) as the interop pivot for `SimulationResult` (#78, DD-027), HDF5 (`hdf5-metno`,
-dependency migration #79) for bulk datasets. `SimulationSnapshot` generalised beyond crash
-recovery to normal checkpoint/resume (DD-029, extends #71, #77).
+dependency migration #79) for bulk datasets, including HDF5-backed loading for
+`ExternalTabulated` (#105, split from #75). `SimulationSnapshot` generalised beyond crash
+recovery to normal checkpoint/resume (DD-029, extends #71, #77) — no `Solver::checkpoint()`
+method; callers construct the snapshot directly, see `snapshot.rs` module docs.
+
+DD-027 amendment 1 adds the first config-driven HOW-axis DTO, `IntegratorSpec` (#104) —
+`TryFrom<IntegratorSpec> for Box<dyn Solver>`, `BackwardEuler` variant only for this
+increment (the sparse dispatch path, #50). Remaining integrators and the WHAT axis
+(`ModelConfig`/`MeshConfig`/`BoundaryConditionConfig`) are follow-up, not part of J6.
 
 This is also the milestone at which the private `FluxDivergenceCalculator` (DD-038, J5) becomes
 a candidate for registration in the `ContextCalculator` pipeline, if generic flux-field export
@@ -558,8 +564,8 @@ replaces the old M+N scheme, which had drifted from the real due dates.
 | J2 | v0.2.0 | Closed (2026-05) | Requiring BCs · topology · built-in calculators |
 | J3 | v0.3.0 | Closed (2026-06) | PhysicalQuantity · CouplingOperator (INV-3) · proto lahar–lake |
 | J4a | v0.4.0 | Closed (2026-06) | Temporal integrators, IMEX included |
-| J5 | v0.5.0 | 2026-08-06 | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
-| J6 | v0.6.0 | 2026-09-16 | faer-sparse · VTK/HDF5 export · SimulationSnapshot |
+| J5 | v0.5.0 | Closed (2026-07-17) | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
+| J6 | v0.6.0 | Closed (2026-07-21) | faer-sparse · VTK/HDF5 export · SimulationSnapshot · IntegratorSpec |
 | J7 | v0.7.0 | 2026-10-07 | Nonlinear time integration (Newton) |
 | J8 | v0.8.0 | 2026-11-18 | Computational optimisation, GPU readiness |
 | J9 | v0.9.0 | 2026-12-30 | Rayon · dirty-flag cache · Criterion benchmarks |
