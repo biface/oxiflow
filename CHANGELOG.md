@@ -11,14 +11,16 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `SimulationSnapshot`, `SnapshotFormat`, `write_snapshot()`/`read_snapshot()`
-  (JSON/bincode) — `src/solver/snapshot.rs` (#66 Option B / #77, #71)
+- `SimulationSnapshot`, `SnapshotFormat`, `write_snapshot()`/`read_snapshot()` (JSON/bincode) — `src/solver/snapshot.rs`
+  (#66 Option B / #77, #71)
 - `Solver::on_divergence()` — default no-op hook, called automatically before
   `OxiflowError::SolverDivergence` is returned (#71)
 - `OxiflowError::Persistence` — snapshot I/O/(de)serialisation failures
-- `ExternalTabulated::from_hdf5()` — loads tabulated data from an HDF5 file
-    (one group per variable, `t`/`value` datasets), feature-gated `hdf5`
-    (#75, #105)
+- `ExternalTabulated::from_hdf5()` — loads tabulated data from an HDF5 file (one group per variable, `t`/`value`
+  datasets), feature-gated `hdf5` (#75, #105)
+- `SimulationResult::write_vtk()` — XML `.vtu` export for ParaView/VisIt,   feature-gated `vtk` (#75, #78)
+- `IntegratorSpec` — external config DTO for `BackwardEulerSolver` +
+  `TryFrom<IntegratorSpec> for Box<dyn Solver>`, feature-gated `sparse` (#75 amendment 1, #104)
 
 ### Changed
 
