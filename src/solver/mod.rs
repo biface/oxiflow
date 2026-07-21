@@ -31,10 +31,14 @@ pub mod scenario;
 pub mod snapshot;
 #[cfg(feature = "sparse")]
 pub mod sparse;
+#[cfg(feature = "sparse")]
+pub mod spec;
 
 pub use config::{IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration};
 pub use scenario::{Domain, DomainId, Scenario};
 pub use snapshot::SimulationSnapshot;
+#[cfg(feature = "sparse")]
+pub use spec::IntegratorSpec;
 
 use crate::context::error::OxiflowError;
 
