@@ -106,6 +106,25 @@ pub enum OxiflowError {
     /// [`crate::solver::snapshot`] (DD-025 Option B / DD-029, issue #71).
     #[error("snapshot persistence error: {0}")]
     Persistence(String),
+
+    /// The iterated Newton solver ([`crate::solver::methods::newton`])
+    /// did not reach its convergence criterion within `iterations` steps.
+    ///
+    /// Distinct from [`SolverDivergence`]: this is a failure of the
+    /// *nonlinear correction* to converge, not a non-finite field value —
+    /// though both are routed through [`crate::solver::Solver::on_divergence`]
+    /// before being returned (DD-044, issue #109).
+    ///
+    /// [`SolverDivergence`]: OxiflowError::SolverDivergence
+    #[error("Newton iteration did not converge after {iterations} iterations (residual = {residual:.4e})")]
+    NewtonNotConverged {
+        /// Number of iterations actually performed (equals the configured
+        /// `max_iterations` — the loop only reaches this variant once its
+        /// budget is exhausted).
+        iterations: usize,
+        /// Norm of the residual at the last iterate.
+        residual: f64,
+    },
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -285,9 +304,34 @@ mod tests {
                 time: 0.0,
                 reason: "test".into(),
             }),
+            Box::new(OxiflowError::NewtonNotConverged {
+                iterations: 20,
+                residual: 1.0e-3,
+            }),
         ];
         for v in &variants {
             assert!(!format!("{:?}", v).is_empty());
         }
+    }
+
+    #[test]
+    fn newton_not_converged_is_matchable() {
+        let err = OxiflowError::NewtonNotConverged {
+            iterations: 20,
+            residual: 1.0e-3,
+        };
+        assert!(matches!(err, OxiflowError::NewtonNotConverged { .. }));
+    }
+
+    #[test]
+    fn newton_not_converged_display_contains_iterations_and_residual() {
+        let err = OxiflowError::NewtonNotConverged {
+            iterations: 20,
+            residual: 1.0e-3,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("20"));
+        assert!(msg.contains("1.0"));
+        assert!(msg.contains("e-"));
     }
 }
