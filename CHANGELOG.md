@@ -11,14 +11,40 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `BackwardEulerSolver`/`CrankNicolsonSolver` gain `with_newton_convergence()`,
+  `with_jacobian_strategy()`, `with_max_newton_iterations()` builders;
+  `theta_method_step_newton()` (`solver::methods::implicit`) routes through
+  the generic Newton loop with caller-supplied configuration — defaults
+  reproduce the pre-DD-044 single-correction behaviour exactly on affine
+  problems (DD-044, #109, #111)
 - Iterated Newton solver core (`solver::methods::newton`): `NewtonConvergence`
   (`ResidualOnly`/`CombinedOr`/`CombinedAnd`), `JacobianStrategy`
   (`ModifiedFrozen`/`FullNewton`/`ModifiedWithStagnationCheck`), and the
   generic convergence loop shared by theta-method and BDF2 — not yet wired
-  into `BackwardEulerSolver`/`CrankNicolsonSolver`/`BDF2Solver` (DD-044, #109,
-  #110)
+  into `BDF2Solver` (DD-044, #109, #110)
 - `OxiflowError::NewtonNotConverged { iterations, residual }` — routed
   through `Solver::on_divergence()` once wired (#110)
+
+### Changed
+
+- Introduced `stiff_jacobian_convergence()` (`solver::methods::implicit`,
+  `tol_abs = 1e-5`), used by `theta_method_step()` and by
+  `BackwardEulerSolver`/`CrankNicolsonSolver`'s zero-config constructors —
+  distinct from `NewtonConvergence::default()` (unchanged, `tol_abs =
+  1e-8`). The existing very-stiff (`λ = 1e4`) affine regression tests'
+  single Newton correction is exact, but its finite-difference Jacobian
+  carries catastrophic-cancellation error of that order — a precision
+  floor, not a nonlinearity signal; zero-config solver construction needs
+  the looser value to keep reproducing history exactly, without loosening
+  what `NewtonConvergence::default()` means for callers configuring the
+  loop themselves (#111)
+
+### Known gaps
+
+- `theta_method_step_adaptive` (sparse/banded dispatch, DD-043) is not yet
+  Newton-aware: configuring both a sparse backend and a non-default Newton
+  budget on `BackwardEulerSolver`/`CrankNicolsonSolver` silently keeps the
+  sparse path single-shot (#111)
 
 ## [0.6.0] — 2026-07-21
 
