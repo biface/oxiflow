@@ -24,8 +24,8 @@
 //! ## Scope at J4a
 //!
 //! Same restrictions as `BackwardEulerSolver`: single-domain,
-//! `StepControl::Fixed` only, BC interaction with the frozen Jacobian not
-//! yet covered by a dedicated test (see [`super::implicit`]).
+//! `StepControl::Fixed` only. BC interaction with the perturbed Jacobian
+//! is covered by a dedicated test since #113 (see [`super::implicit`]).
 
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
