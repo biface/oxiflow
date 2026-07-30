@@ -87,6 +87,7 @@ use crate::solver::linear::LinearSolver;
 /// floor.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum NewtonConvergence {
     /// Converged once `||g(u)|| < tol_abs + tol_rel * ||u||`.
     ///
@@ -131,6 +132,7 @@ impl NewtonConvergence {
 /// separate code path.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum JacobianStrategy {
     /// Evaluate the Jacobian once, at the initial guess, and reuse it for
     /// every correction (modified Newton).
