@@ -313,6 +313,72 @@ en `u`, approximation de premier ordre sinon. J7 lève cette limitation : solveu
 (Newton itéré à convergence, ou méthode apparentée) branché derrière le même point d'extension
 que DD-033 anticipait déjà, sans réécriture des solveurs J4a.
 
+### Pourquoi c'est nécessaire : le résidu discrétisé n'est pas toujours linéaire
+
+La forme canonique (§1) est `∂u/∂t + ∇·F(u, ∇u) = S(u, x, t)`. En notant
+`f(u) = -∇·F(u, ∇u) + S(u, x, t)` le second membre, la discrétisation par méthode theta
+(Backward Euler : θ=1, Crank-Nicolson : θ=0,5) transforme l'EDP en, à chaque pas de temps, un
+problème de recherche de racine sur l'inconnue `u^{n+1}` :
+
+```
+g(u^{n+1}) = u^{n+1} - u^n - Δt · [(1-θ)·f(u^n) + θ·f(u^{n+1})] = 0
+```
+
+(BDF2 a son propre résidu, `g(u) = (3/2)u - 2u^n + (1/2)u^{n-1} - Δt·f(u)`, mais le
+raisonnement est identique.) `g` est **linéaire** en `u^{n+1}` exactement lorsque `f` est
+affine en `u` — c'est-à-dire lorsque `F` et `S` sont tous deux affines. C'est précisément le
+cas que la correction unique à Jacobien gelé de J4a (DD-033, Option B) résout déjà de façon
+exacte : pour `f` affine, le Jacobien `∂g/∂u` est constant, indépendant de `u^{n+1}` — un
+unique pas de Newton depuis `u^n` tombe donc exactement sur la racine, sans itération
+nécessaire. Ce n'est pas un choix d'approximation, c'est une propriété d'algèbre linéaire.
+
+Toute non-linéarité **physique** de `F` ou `S` brise cette propriété : `g` devient une
+équation algébrique non linéaire, et la correction unique de J4a n'en donne alors qu'une
+approximation de premier ordre de la racine — suffisant pour des problèmes faiblement non
+linéaires et un `Δt` petit, pas exact en général. Cas physiques concrets qu'oxiflow doit
+traiter correctement, issus des domaines cibles du projet lui-même :
+
+- **Flux non linéaire `F(u)`** — ex. advection non linéaire de type Burgers
+  (`F(u) = u²/2`), ou un coefficient de diffusion dépendant du champ lui-même
+  (`F = -D(u)∇u`, diffusion non linéaire/dégénérée).
+- **Terme source non linéaire `S(u)`** — ex. isothermes d'adsorption de type Langmuir en
+  chromatographie (`q(c) = q_max·K·c / (1 + K·c)`, le domaine d'origine d'oxiflow via
+  chrom-rs), ou cinétique de réaction de type Arrhenius (`S ∝ exp(-E_a / R·T)`).
+
+Newton résout `g(u) = 0` en linéarisant autour de l'itéré courant `u^k` et en corrigeant :
+
+```
+J^k · Δu^k = -g(u^k),    J^k = ∂g/∂u |_{u=u^k} = I - Δt·θ · ∂f/∂u |_{u=u^k}
+u^{k+1} = u^k + Δu^k
+```
+
+`∂f/∂u` est exactement ce que `finite_difference_jacobian` (DD-013, déjà en place depuis J4a)
+approxime par différences finies — Newton la réutilise inchangée. Ce que DD-044 change, c'est
+*combien de fois* ce Jacobien est réévalué par pas de temps et *quand la boucle s'arrête* —
+voir ci-dessous — pas le résidu, l'assemblage du Jacobien, ni la forme canonique elle-même.
+
+### DD-044 — activer cela correctement
+
+DD-044 formalise cette activation : `NewtonConvergence` (basé résidu, par défaut) et
+`JacobianStrategy` (Newton modifié/gelé, par défaut) comme énumérations HOW configurables ;
+`OxiflowError::NewtonNotConverged` routée via `Solver::on_divergence()` élargi ; une boucle
+Newton générique unique partagée par la méthode theta (Backward Euler/Crank-Nicolson) et BDF2,
+au lieu de la duplication par famille que J4a utilisait quand Newton n'avait qu'un seul
+consommateur ; `IntegratorSpec` étendu à `BackwardEuler` (champs Newton ajoutés) plus nouveaux
+variants `CrankNicolson` et `BDF2` (ce dernier sans champs sparse — `BDF2Solver` n'a pas de
+dispatch sparse, un écart DD-043 laissé ouvert ici, pas une préoccupation de J7).
+
+Découpage opérationnel (DD-044, `oxiflow-issues-v0.7.0.yml`) :
+
+1. Cœur de la boucle Newton (`NewtonConvergence`, `JacobianStrategy`, `NewtonNotConverged`,
+   `newton_residual`/`newton_linear_correction`, boucle générique) — prérequis pour 2–3.
+2. Branchement Backward Euler/Crank-Nicolson.
+3. Branchement BDF2.
+4. `IntegratorSpec::BackwardEuler` étendu, variants `CrankNicolson` et `BDF2` ajoutés —
+   dépendent respectivement de 2/3.
+5. Test de régression pour la limitation connue et non testée de DD-033 (interaction
+   Jacobien perturbé × condition Dirichlet) — indépendant de 1–4.
+
 **Critère de sortie :** un problème non affine en `u` converge à l'ordre attendu sous
 Backward Euler/Crank-Nicolson/BDF2 avec le solveur non linéaire, là où la correction gelée
 de J4a ne donnait qu'une approximation de premier ordre.
@@ -530,7 +596,7 @@ Conditions pour un framework tiers :
 | Accès contexte des opérateurs | `FluxDivergenceOperator` : trait frère de `DiscreteOperator`, porte `ctx`/`RequiresContext` | Ajout de `ctx` directement sur `DiscreteOperator` ; sous-trait de `DiscreteOperator` | J5 | INV-2 |
 | Solveurs linéaires (creux) | Délégation `faer-sparse` | Implémentation maison | J6 | |
 | Export de résultats | VTK pivot interop + HDF5 données volumineuses | Format maison | J6 | |
-| Intégration non linéaire | Newton itéré, point d'extension DD-033 | Réécriture des solveurs J4a | J7 | |
+| Intégration non linéaire | Newton itéré, point d'extension DD-033 activé par DD-044 (boucle générique, pas de duplication par famille) | Réécriture des solveurs J4a ; boucle dupliquée par famille | J7 | |
 | GPU-readiness | Invariants structurels formalisés avant feature `gpu` | `wgpu` sans contrainte préalable | J8 | |
 | Parallélisme | Rayon, opt-in feature flag | Obligatoire ou absent | J9 | |
 | Cache | Dirty flag + invalidation temporelle | Recalcul systématique | J9 | |
