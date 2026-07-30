@@ -118,6 +118,13 @@ criterion = { version = "0.8", features = ["html_reports"] }
 # harness = false
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Définition du package / Package specification
+# ──────────────────────────────────────────────────────────────────────────────
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "docs/katex-header.html"]
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Profils / Build profiles
 # ──────────────────────────────────────────────────────────────────────────────
 
