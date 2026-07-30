@@ -11,6 +11,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `BDF2Solver` gains `with_newton_convergence()`, `with_jacobian_strategy()`,
+  `with_max_newton_iterations()` builders; `bdf2_step_newton()`
+  (`solver::methods::bdf2`) routes through the generic Newton loop with
+  caller-supplied configuration — defaults reproduce the pre-DD-044
+  single-correction behaviour exactly on affine problems. The
+  startup/bootstrap step is unaffected: it always uses
+  `theta_method_step()`'s non-configurable path (DD-044, #109, #112)
 - `BackwardEulerSolver`/`CrankNicolsonSolver` gain `with_newton_convergence()`,
   `with_jacobian_strategy()`, `with_max_newton_iterations()` builders;
   `theta_method_step_newton()` (`solver::methods::implicit`) routes through
@@ -20,24 +27,24 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Iterated Newton solver core (`solver::methods::newton`): `NewtonConvergence`
   (`ResidualOnly`/`CombinedOr`/`CombinedAnd`), `JacobianStrategy`
   (`ModifiedFrozen`/`FullNewton`/`ModifiedWithStagnationCheck`), and the
-  generic convergence loop shared by theta-method and BDF2 — not yet wired
-  into `BDF2Solver` (DD-044, #109, #110)
+  generic convergence loop shared by theta-method and BDF2 (DD-044, #109,
+  #110)
 - `OxiflowError::NewtonNotConverged { iterations, residual }` — routed
   through `Solver::on_divergence()` once wired (#110)
 
 ### Changed
 
 - Introduced `stiff_jacobian_convergence()` (`solver::methods::implicit`,
-  `tol_abs = 1e-5`), used by `theta_method_step()` and by
-  `BackwardEulerSolver`/`CrankNicolsonSolver`'s zero-config constructors —
-  distinct from `NewtonConvergence::default()` (unchanged, `tol_abs =
-  1e-8`). The existing very-stiff (`λ = 1e4`) affine regression tests'
-  single Newton correction is exact, but its finite-difference Jacobian
-  carries catastrophic-cancellation error of that order — a precision
-  floor, not a nonlinearity signal; zero-config solver construction needs
-  the looser value to keep reproducing history exactly, without loosening
-  what `NewtonConvergence::default()` means for callers configuring the
-  loop themselves (#111)
+  `tol_abs = 1e-5`), used by `theta_method_step()`/`bdf2_step()` and by
+  `BackwardEulerSolver`/`CrankNicolsonSolver`/`BDF2Solver`'s zero-config
+  constructors — distinct from `NewtonConvergence::default()` (unchanged,
+  `tol_abs = 1e-8`). The existing very-stiff (`λ = 1e4`) affine regression
+  tests' single Newton correction is exact, but its finite-difference
+  Jacobian carries catastrophic-cancellation error of that order — a
+  precision floor, not a nonlinearity signal; zero-config solver
+  construction needs the looser value to keep reproducing history exactly,
+  without loosening what `NewtonConvergence::default()` means for callers
+  configuring the loop themselves (#111, #112)
 
 ### Known gaps
 
