@@ -7,9 +7,10 @@
 //! $$u^{n+1} = u^n + \Delta t \cdot f(u^{n+1}, t^{n+1})$$
 //!
 //! A thin wrapper around the shared generalised theta method
-//! ([`super::implicit::theta_method_step`], θ=1) — see that module's docs
-//! for the frozen-Jacobian v1 scope and the path to a future iterated
-//! Newton solver (DD-033).
+//! ([`super::implicit::theta_method_step_newton`], θ=1, DD-044, #111) —
+//! see that module's docs for the frozen-Jacobian default and the
+//! iterated Newton path configurable via [`BackwardEulerSolver`]'s
+//! builders.
 //!
 //! ## Stability
 //!
@@ -30,9 +31,10 @@ use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
-use crate::solver::methods::implicit::theta_method_step;
 #[cfg(feature = "sparse")]
 use crate::solver::methods::implicit::theta_method_step_adaptive;
+use crate::solver::methods::implicit::{stiff_jacobian_convergence, theta_method_step_newton};
+use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence};
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
 #[cfg(feature = "sparse")]
@@ -56,9 +58,26 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// ```
 pub struct BackwardEulerSolver {
     linear_solver: Box<dyn LinearSolver>,
+    /// Newton convergence criterion (DD-044, #111) — default
+    /// [`stiff_jacobian_convergence`] (deliberately looser than
+    /// [`NewtonConvergence::default`] — see that function's docs for why
+    /// zero-config construction needs it).
+    newton_convergence: NewtonConvergence,
+    /// Jacobian refresh strategy (DD-044, #111) — default
+    /// [`JacobianStrategy::default`] (`ModifiedFrozen`).
+    jacobian_strategy: JacobianStrategy,
+    /// Newton iteration budget (DD-044, #111). Default `1`: exactly the
+    /// pre-DD-044 single frozen-Jacobian correction — see
+    /// [`super::implicit`]'s module docs for why this reproduces the
+    /// historical behaviour exactly, not approximately, on affine
+    /// problems. Raise this (and typically pair with
+    /// [`JacobianStrategy::FullNewton`]) for genuinely nonlinear models.
+    max_newton_iterations: usize,
     /// Sparse backend (DD-043) — `None` by default: the dense path
-    /// ([`theta_method_step`]) is unconditionally used unless this is
-    /// explicitly configured via [`Self::with_sparse_solver`].
+    /// ([`theta_method_step_newton`]) is unconditionally used unless this is
+    /// explicitly configured via [`Self::with_sparse_solver`]. Not yet
+    /// Newton-aware when configured — see [`super::implicit`]'s module
+    /// docs for the known gap.
     #[cfg(feature = "sparse")]
     sparse_solver: Option<Box<dyn SparseLinearSolver>>,
     /// System size above which the sparse path is used, once a
@@ -78,6 +97,9 @@ impl Default for BackwardEulerSolver {
     fn default() -> Self {
         Self {
             linear_solver: Box::new(NalgebraDenseSolver),
+            newton_convergence: stiff_jacobian_convergence(),
+            jacobian_strategy: JacobianStrategy::default(),
+            max_newton_iterations: 1,
             #[cfg(feature = "sparse")]
             sparse_solver: None,
             #[cfg(feature = "sparse")]
@@ -97,6 +119,26 @@ impl BackwardEulerSolver {
     /// Substitutes the linear solver backend (DD-013).
     pub fn with_linear_solver(mut self, linear_solver: Box<dyn LinearSolver>) -> Self {
         self.linear_solver = linear_solver;
+        self
+    }
+
+    /// Configures the Newton convergence criterion (DD-044, #111).
+    pub fn with_newton_convergence(mut self, newton_convergence: NewtonConvergence) -> Self {
+        self.newton_convergence = newton_convergence;
+        self
+    }
+
+    /// Configures the Jacobian refresh strategy (DD-044, #111).
+    pub fn with_jacobian_strategy(mut self, jacobian_strategy: JacobianStrategy) -> Self {
+        self.jacobian_strategy = jacobian_strategy;
+        self
+    }
+
+    /// Configures the Newton iteration budget (DD-044, #111) — see the
+    /// field's own docs for why the default (`1`) reproduces the
+    /// pre-DD-044 behaviour exactly on affine problems.
+    pub fn with_max_newton_iterations(mut self, max_newton_iterations: usize) -> Self {
+        self.max_newton_iterations = max_newton_iterations;
         self
     }
 
@@ -170,7 +212,7 @@ impl SteppableSolver for BackwardEulerSolver {
                 self.sparse_threshold,
                 self.jacobian_bandwidth,
             ),
-            None => theta_method_step(
+            None => theta_method_step_newton(
                 domain,
                 chain,
                 state,
@@ -178,6 +220,9 @@ impl SteppableSolver for BackwardEulerSolver {
                 dt,
                 1.0,
                 self.linear_solver.as_ref(),
+                self.newton_convergence,
+                self.jacobian_strategy,
+                self.max_newton_iterations,
             ),
         }
     }
@@ -196,7 +241,7 @@ impl SteppableSolver for BackwardEulerSolver {
     ) -> Result<ContextValue, OxiflowError> {
         // history_depth() defaults to 0 -- Backward Euler is a one-step
         // method, `_history` is always empty here and intentionally unused.
-        theta_method_step(
+        theta_method_step_newton(
             domain,
             chain,
             state,
@@ -204,6 +249,9 @@ impl SteppableSolver for BackwardEulerSolver {
             dt,
             1.0,
             self.linear_solver.as_ref(),
+            self.newton_convergence,
+            self.jacobian_strategy,
+            self.max_newton_iterations,
         )
     }
 }
@@ -484,5 +532,95 @@ mod tests {
             .solve(&scenario, &config)
             .unwrap_err();
         assert!(matches!(err, OxiflowError::MissingCalculator(_)));
+    }
+
+    // ── Iterated Newton (DD-044, #111) ─────────────────────────────────────────
+
+    #[derive(Debug)]
+    struct CubicDecay;
+
+    impl RequiresContext for CubicDecay {
+        fn required_variables(&self) -> Vec<ContextVariable> {
+            vec![]
+        }
+    }
+
+    impl PhysicalModel for CubicDecay {
+        fn compute_physics(
+            &self,
+            state: &ContextValue,
+            _ctx: &ComputeContext,
+        ) -> Result<ContextValue, OxiflowError> {
+            let u = state.as_scalar_field()?;
+            Ok(ContextValue::ScalarField(u.map(|v| -v * v * v)))
+        }
+
+        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+        }
+
+        fn name(&self) -> &str {
+            "cubic_decay_test"
+        }
+    }
+
+    #[test]
+    fn full_newton_resolves_nonaffine_correction_beyond_frozen_jacobian() {
+        // f(u) = -u^3 -- genuinely nonlinear. Backward Euler's own
+        // discrete equation for one step is u_next + dt*u_next^3 = u_n;
+        // the default single frozen correction (max_newton_iterations=1,
+        // the pre-DD-044 behaviour) is only a first-order approximation
+        // of that equation's solution, not the solution itself -- under
+        // the default tolerance this surfaces as an honest convergence
+        // failure rather than a silently inaccurate "success" (nothing
+        // about affine-ness is special-cased, see
+        // `solver::methods::newton`'s docs). Configuring FullNewton with
+        // enough iterations reaches the converged solution -- the J7
+        // exit criterion (#111).
+        let dt = 0.5; // deliberately large so the gap is clearly visible
+        let config = make_config(dt, dt); // exactly one step
+
+        let scenario_default = Scenario::single(Box::new(CubicDecay), make_mesh(2));
+        let default_err = BackwardEulerSolver::new()
+            .solve(&scenario_default, &config)
+            .unwrap_err();
+        assert!(
+            matches!(default_err, OxiflowError::NewtonNotConverged { .. }),
+            "default single correction should fail to converge on a genuinely \
+             nonlinear model: got {default_err:?}"
+        );
+
+        let scenario_full = Scenario::single(Box::new(CubicDecay), make_mesh(2));
+        // Explicit `NewtonConvergence::default()` (tol_abs=1e-8): the
+        // solver's zero-config value is `stiff_jacobian_convergence()`
+        // (tol_abs=1e-5, tuned for backward compatibility on stiff
+        // affine problems, see that function's docs) -- this test wants
+        // the tighter, general-purpose criterion to demonstrate genuine
+        // convergence, not the loose one.
+        let full_result = BackwardEulerSolver::new()
+            .with_newton_convergence(NewtonConvergence::default())
+            .with_jacobian_strategy(JacobianStrategy::FullNewton)
+            .with_max_newton_iterations(50)
+            .solve(&scenario_full, &config)
+            .unwrap();
+        let full_value = full_result
+            .states
+            .last()
+            .unwrap()
+            .as_scalar_field()
+            .unwrap()[0];
+
+        // Independently solved scalar equation: u_next + dt*u_next^3 = 1.0.
+        let mut u_scalar = 1.0_f64;
+        for _ in 0..100 {
+            let g = u_scalar + dt * u_scalar.powi(3) - 1.0;
+            let dg = 1.0 + 3.0 * dt * u_scalar.powi(2);
+            u_scalar -= g / dg;
+        }
+
+        assert!(
+            (full_value - u_scalar).abs() < 1e-6,
+            "FullNewton should reach the converged discrete solution: got {full_value}, expected {u_scalar}"
+        );
     }
 }
