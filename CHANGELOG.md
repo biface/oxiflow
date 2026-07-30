@@ -11,6 +11,11 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Dedicated test for the perturbed-Jacobian × Dirichlet boundary-condition
+  interaction, closing a known-untested gap documented since DD-033
+  (v0.4.0): the constrained node's column in `finite_difference_jacobian`
+  is exactly zero, while its row keeps genuine physics-based coupling to
+  unconstrained neighbours (#113)
 - `IntegratorSpec::BDF2` variant — Newton fields only, deliberately no
   sparse fields (`BDF2Solver` has no sparse builders to map, a DD-043 gap
   distinct from this DTO increment) (DD-044, #116)
