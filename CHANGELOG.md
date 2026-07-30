@@ -9,6 +9,17 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Iterated Newton solver core (`solver::methods::newton`): `NewtonConvergence`
+  (`ResidualOnly`/`CombinedOr`/`CombinedAnd`), `JacobianStrategy`
+  (`ModifiedFrozen`/`FullNewton`/`ModifiedWithStagnationCheck`), and the
+  generic convergence loop shared by theta-method and BDF2 — not yet wired
+  into `BackwardEulerSolver`/`CrankNicolsonSolver`/`BDF2Solver` (DD-044, #109,
+  #110)
+- `OxiflowError::NewtonNotConverged { iterations, residual }` — routed
+  through `Solver::on_divergence()` once wired (#110)
+
 ## [0.6.0] — 2026-07-21
 
 ### Highlights
