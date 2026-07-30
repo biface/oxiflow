@@ -45,13 +45,15 @@
 //! module: composing the two is [`super::implicit`]'s concern (chantier
 //! 2), not this one's.
 //!
-//! ## Scope of this increment (issue #110)
+//! ## Wiring status
 //!
-//! This module is the shared core only — it is not yet called from
-//! [`super::implicit::theta_method_step`] or [`super::bdf2::bdf2_step`].
-//! That wiring, and the `with_newton_convergence`/`with_jacobian_strategy`/
-//! `with_max_newton_iterations` builders on the three implicit solvers,
-//! land in the follow-up issues (#111, #112).
+//! [`solve`] is called from
+//! [`super::implicit::theta_method_step_newton`] (DD-044, #111), itself
+//! used by
+//! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)/
+//! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver).
+//! [`super::bdf2::bdf2_step`] does not yet route through this module —
+//! that wiring is #112.
 
 use nalgebra::{DMatrix, DVector};
 
@@ -68,9 +70,24 @@ use crate::solver::linear::LinearSolver;
 /// `max_iterations = 1` with an exactly affine `f` succeeds immediately —
 /// the single correction is already exact up to floating-point rounding).
 ///
-/// Default: [`ResidualOnly`](Self::ResidualOnly) with `tol_abs = 1e-8`,
+/// Default: [`ResidualOnly`](Self::ResidualOnly) with `tol_abs = 1e-5`,
 /// `tol_rel = 1e-6` — starting points, not fixed constants; tune via the
 /// solver builders once this lands (#111/#112).
+///
+/// `tol_abs`'s default is calibrated against
+/// [`finite_difference_jacobian`](super::implicit::finite_difference_jacobian)'s
+/// fixed step size, not chosen for near-machine-precision: on affine
+/// problems with large coefficients (e.g. `λ = 1e4` in the stiff-decay
+/// regression tests), computing `(f(u+ε) − f(u)) / ε` suffers
+/// catastrophic cancellation whose absolute error scales roughly as
+/// `λ · ε_machine / ε` — empirically up to ~1e-6 for the stiffest cases
+/// this crate currently tests. A single Newton correction on such a
+/// problem is still mathematically exact; the residual floor above
+/// reflects finite-difference precision, not nonlinearity. `1e-5` leaves
+/// comfortable margin over that floor while still catching genuine
+/// nonlinear non-convergence (which typically leaves residuals many
+/// orders of magnitude larger — see
+/// [`super::implicit`]'s and this module's own tests).
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NewtonConvergence {
@@ -91,7 +108,7 @@ pub enum NewtonConvergence {
 impl Default for NewtonConvergence {
     fn default() -> Self {
         NewtonConvergence::ResidualOnly {
-            tol_abs: 1e-8,
+            tol_abs: 1e-5,
             tol_rel: 1e-6,
         }
     }
@@ -100,9 +117,6 @@ impl Default for NewtonConvergence {
 impl NewtonConvergence {
     /// Extracts the common `(tol_abs, tol_rel)` pair, regardless of
     /// variant.
-    // TODO(#111/#112): called from `solve` below, itself unwired until
-    // then — see that function's own TODO.
-    #[allow(dead_code)]
     fn tolerances(&self) -> (f64, f64) {
         match *self {
             NewtonConvergence::ResidualOnly { tol_abs, tol_rel }
@@ -148,10 +162,6 @@ pub enum JacobianStrategy {
 /// `f_u` is `f(u)`, already evaluated by the caller (it is also needed
 /// to decide, e.g., whether to refresh the Jacobian — evaluating it here
 /// again would be redundant).
-// TODO(#111/#112): wire in once BackwardEulerSolver/CrankNicolsonSolver/
-// BDF2Solver route theta_method_step/bdf2_step through the generic loop —
-// currently only exercised by this module's own unit tests.
-#[allow(dead_code)]
 pub(crate) fn residual(
     u: &DVector<f64>,
     u_star: &DVector<f64>,
@@ -171,10 +181,9 @@ pub(crate) fn residual(
 /// [`finite_difference_jacobian`](super::implicit::finite_difference_jacobian),
 /// unchanged) rather than computed here, so this function stays
 /// dense/sparse-agnostic in principle; only the dense path
-/// (`&dyn LinearSolver`) is wired at this increment (#110) — banded/sparse
-/// composition is verified, not redecided, in #111.
-// TODO(#111/#112): wire in alongside `residual` above.
-#[allow(dead_code)]
+/// (`&dyn LinearSolver`) is wired at this increment (#110/#111) —
+/// banded/sparse composition remains a known gap, see
+/// [`super::implicit`]'s module docs.
 pub(crate) fn linear_correction(
     jacobian: &DMatrix<f64>,
     alpha: f64,
@@ -195,10 +204,6 @@ pub(crate) fn linear_correction(
 /// into one struct so the loop's own argument list stays manageable
 /// alongside the residual-shape parameters (`u_star`/`alpha`/`coeff`)
 /// and the two evaluation closures.
-// TODO(#111/#112): constructed by BackwardEulerSolver/CrankNicolsonSolver/
-// BDF2Solver once they gain `with_newton_convergence`/`with_jacobian_strategy`/
-// `with_max_newton_iterations` builders.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct NewtonParams {
     pub convergence: NewtonConvergence,
@@ -247,10 +252,6 @@ pub(crate) struct NewtonParams {
 /// Returns [`OxiflowError::NewtonNotConverged`] if `max_iterations` is
 /// exhausted without satisfying `params.convergence`. Propagates any
 /// error from `f_eval`, `jac_eval`, or the linear solve unchanged.
-// TODO(#111/#112): called from BackwardEulerSolver/CrankNicolsonSolver/
-// BDF2Solver's step() once wired — currently only exercised by this
-// module's own unit tests (see the `tests` module below).
-#[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn solve(
     u0: DVector<f64>,
@@ -420,7 +421,7 @@ mod tests {
             u_scalar -= g / dg;
         }
         for v in u_next.iter() {
-            assert!((v - u_scalar).abs() < 1e-5, "got {v}, expected {u_scalar}");
+            assert!((v - u_scalar).abs() < 1e-4, "got {v}, expected {u_scalar}");
         }
     }
 
