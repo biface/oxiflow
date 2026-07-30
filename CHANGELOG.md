@@ -11,6 +11,10 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `IntegratorSpec::CrankNicolson` variant, symmetric to `BackwardEuler` in
+  every field (sparse dispatch + Newton configuration); `theta = 0.5`
+  stays implicit to the variant, matching `BackwardEuler`'s own
+  `theta = 1.0` (DD-044, #115)
 - `IntegratorSpec::BackwardEuler` gains `newton_convergence`,
   `jacobian_strategy`, `max_iterations` fields (`serde` feature), mapped to
   `BackwardEulerSolver`'s three Newton builders via `TryFrom`; defaults
