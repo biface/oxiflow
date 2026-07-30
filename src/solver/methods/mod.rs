@@ -28,11 +28,10 @@
 //!
 //! Implicit methods ([`backward_euler`], [`crank_nicolson`], [`bdf2`]) build
 //! on the same [`evaluate_derivative`] for their explicit-derivative
-//! evaluation, plus the shared machinery in [`implicit`] (frozen-Jacobian
-//! single correction, DD-033) for the implicit part. [`newton`] adds the
-//! genuinely iterated alternative DD-033 anticipated (DD-044, v0.7.0) —
-//! not yet wired into [`backward_euler`]/[`crank_nicolson`]/[`bdf2`] at
-//! this increment (see [`newton`]'s own module docs for scope).
+//! evaluation, plus the shared machinery in [`implicit`] for the implicit
+//! part. [`newton`] provides the iterated Newton alternative DD-033
+//! anticipated (DD-044, v0.7.0), wired into [`backward_euler`]/
+//! [`crank_nicolson`] (#111) — not yet into [`bdf2`] (#112).
 //!
 //! ## Per-step primitive, with history (DD-031, DD-034)
 //!

@@ -4,8 +4,10 @@
 //!
 //! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver) (θ=1)
 //! and [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
-//! (θ=0.5) are thin wrappers around [`theta_method_step`], which itself
-//! relies on [`finite_difference_jacobian`].
+//! (θ=0.5) are thin wrappers around [`theta_method_step_newton`] (DD-044,
+//! #111), which itself relies on [`finite_difference_jacobian`] and the
+//! shared [`super::newton`] loop. [`theta_method_step`] keeps the
+//! original, non-configurable entry point for direct callers — see below.
 //!
 //! ## Why a single shared function for two methods
 //!
@@ -19,18 +21,39 @@
 //! depend on θ at all. Only the system matrix does
 //! ($I - \theta \Delta t J_f$). One function, one parameter.
 //!
-//! ## v1 scope — frozen Jacobian, single correction (DD-033)
+//! ## v1 scope — frozen Jacobian, single correction (DD-033) by default
 //!
 //! [`theta_method_step`] performs exactly **one** Newton-style correction,
-//! with the Jacobian frozen at $u^n$. This is exact when `compute_physics`
-//! is affine in `u` — the stiff *linear* test problems these methods
-//! target (`λΔt ≫ 1`) — and a first-order approximation otherwise.
+//! with the Jacobian frozen at $u^n$ — this is exact when `compute_physics`
+//! is affine in `u` and a first-order approximation otherwise, and stays
+//! the behaviour of [`theta_method_step`] itself (used directly by
+//! callers that don't need more) and of
+//! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)/
+//! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
+//! when left unconfigured.
 //!
-//! A future nonlinear solver (Newton iterated to convergence, v0.6.0–v1.0.0,
-//! DD-033) would call this same function repeatedly, re-evaluating
-//! [`finite_difference_jacobian`] at each updated guess if the frozen
-//! approximation is dropped — neither function needs rewriting, only the
-//! calling loop changes.
+//! [`theta_method_step_newton`] (DD-044, #111) is the genuinely iterated
+//! alternative DD-033 anticipated: it routes through the shared
+//! [`super::newton`] loop with caller-supplied convergence/Jacobian-
+//! strategy/iteration-budget configuration.
+//! `BackwardEulerSolver`/`CrankNicolsonSolver` call it directly (with
+//! `with_newton_convergence`/`with_jacobian_strategy`/
+//! `with_max_newton_iterations` builders); [`theta_method_step`] itself
+//! stays at its original signature by delegating to it with
+//! `k_max = 1`/[`JacobianStrategy::ModifiedFrozen`](super::newton::JacobianStrategy::ModifiedFrozen)
+//! baked in, reproducing its historical output exactly (see
+//! [`super::newton`]'s own docs for why no special-casing is needed for
+//! this to hold on affine problems).
+//!
+//! ## Known gap — sparse path not yet Newton-aware
+//!
+//! [`theta_method_step_adaptive`] (the sparse/banded dispatch, DD-043)
+//! still performs a single frozen-Jacobian correction unconditionally —
+//! it is not wired through [`super::newton`] at this increment. Composing
+//! the two was verified, not implemented, per #111's stated scope:
+//! configuring both a sparse backend *and* a non-default Newton budget on
+//! the same solver silently keeps the sparse path single-shot. Tracked as
+//! a follow-up, mirroring the existing BDF2/sparse gap.
 //!
 //! ## Known untested limitation — boundary conditions
 //!
@@ -45,6 +68,7 @@
 use nalgebra::{DMatrix, DVector};
 
 use super::evaluate_derivative;
+use super::newton::{self, JacobianStrategy, NewtonConvergence};
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
@@ -100,6 +124,34 @@ pub(crate) fn finite_difference_jacobian(
     Ok(jacobian)
 }
 
+/// Convergence criterion guaranteeing [`theta_method_step`]'s
+/// single-correction contract succeeds on the stiffest affine problems
+/// this crate currently tests (`λ = 1e4`-scale exponential decay).
+///
+/// Deliberately distinct from [`NewtonConvergence::default`] (`tol_abs =
+/// 1e-8`): on such problems, [`finite_difference_jacobian`]'s fixed step
+/// size suffers catastrophic-cancellation error whose absolute magnitude
+/// scales roughly as `λ · ε_machine / FD_EPSILON` — empirically up to
+/// ~1e-6 for the stiffest cases tested. The single correction itself is
+/// still mathematically exact for affine `f`; this is a
+/// finite-difference precision floor, not a nonlinearity signal, and
+/// [`NewtonConvergence::default`] remains the right general-purpose
+/// starting point for callers configuring the loop themselves — it just
+/// isn't loose enough to guarantee success on this specific,
+/// already-tested edge of the stiffness range. Used here and by
+/// [`BackwardEulerSolver::default`](super::backward_euler::BackwardEulerSolver)/
+/// [`CrankNicolsonSolver::default`](super::crank_nicolson::CrankNicolsonSolver)
+/// — not by `NewtonConvergence`'s own `Default` impl — precisely so that
+/// zero-config solver construction keeps reproducing history exactly,
+/// without changing what a fresh, explicitly-configured
+/// `NewtonConvergence::default()` means elsewhere.
+pub(crate) fn stiff_jacobian_convergence() -> NewtonConvergence {
+    NewtonConvergence::ResidualOnly {
+        tol_abs: 1e-5,
+        tol_rel: 1e-6,
+    }
+}
+
 /// Performs one step of the generalised theta method, with the Jacobian
 /// frozen at `state` (one Newton-style correction, not iterated — see
 /// [module docs](self)).
@@ -110,6 +162,12 @@ pub(crate) fn finite_difference_jacobian(
 /// contract as the explicit solvers (see
 /// [`crate::solver::methods::evaluate_derivative`]): callers should not
 /// assume `state` is left unchanged after this call.
+///
+/// Delegates to [`theta_method_step_newton`] with the pre-DD-044 defaults
+/// (`k_max = 1`, [`JacobianStrategy::ModifiedFrozen`],
+/// [`stiff_jacobian_convergence`]) baked in — kept at its original
+/// signature (DD-044, #110) for direct callers that don't need the
+/// configurable path.
 pub(crate) fn theta_method_step(
     domain: &Domain,
     chain: &[&dyn ContextCalculator],
@@ -119,29 +177,80 @@ pub(crate) fn theta_method_step(
     theta: f64,
     linear_solver: &dyn LinearSolver,
 ) -> Result<ContextValue, OxiflowError> {
+    theta_method_step_newton(
+        domain,
+        chain,
+        state,
+        t,
+        dt,
+        theta,
+        linear_solver,
+        stiff_jacobian_convergence(),
+        JacobianStrategy::default(),
+        1,
+    )
+}
+
+/// Same contract as [`theta_method_step`], routed through the generic
+/// iterated Newton loop ([`newton::solve`]) with caller-supplied
+/// convergence/Jacobian-strategy/iteration-budget configuration (DD-044,
+/// #111) — [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)
+/// and [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
+/// call this directly, passing their own configured fields; their
+/// defaults reproduce [`theta_method_step`]'s call above exactly.
+///
+/// Follows [`newton`]'s residual convention with $\alpha = 1$, $c = \theta
+/// \Delta t$, $u^{*} = u^n + \Delta t(1-\theta)f(u^n)$ — see that
+/// module's docs. `f(u^n)` is evaluated once, at time `t` (the known
+/// term); every subsequent candidate `f`/Jacobian evaluation inside the
+/// Newton loop is at time `t + dt` (the implicit/target time), matching
+/// [`theta_method_step`]'s original convention.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn theta_method_step_newton(
+    domain: &Domain,
+    chain: &[&dyn ContextCalculator],
+    state: &mut ContextValue,
+    t: f64,
+    dt: f64,
+    theta: f64,
+    linear_solver: &dyn LinearSolver,
+    newton_convergence: NewtonConvergence,
+    jacobian_strategy: JacobianStrategy,
+    max_iterations: usize,
+) -> Result<ContextValue, OxiflowError> {
     // f(u^n, t) -- BCs applied in-place to `state` itself, consistent with
-    // the explicit solvers' contract. Everything below reads the
-    // now-BC-corrected `state`, not a separate untouched clone.
+    // the explicit solvers' contract (same as `theta_method_step`).
     let f_n = evaluate_derivative(domain, chain, state, t, dt)?;
     let u_n_field = state.as_scalar_field()?.clone();
     let f_n_field = f_n.as_scalar_field()?.clone();
 
-    let n = u_n_field.len();
+    let u0 = u_n_field.clone();
+    let u_star: DVector<f64> = u_n_field + f_n_field * (dt * (1.0 - theta));
+    let coeff = theta * dt;
+    let t_target = t + dt;
 
-    // Jacobian frozen at the (now BC-corrected) u^n, evaluated at the
-    // *target* time t + dt (the point the implicit equation is actually
-    // stated at).
-    let jacobian = finite_difference_jacobian(domain, chain, state, t + dt, dt)?;
+    let u_next = newton::solve(
+        u0,
+        &u_star,
+        1.0,
+        coeff,
+        move |candidate: &DVector<f64>| {
+            let mut candidate_state = ContextValue::ScalarField(candidate.clone());
+            let f = evaluate_derivative(domain, chain, &mut candidate_state, t_target, dt)?;
+            Ok(f.as_scalar_field()?.clone())
+        },
+        move |candidate: &DVector<f64>| {
+            let candidate_state = ContextValue::ScalarField(candidate.clone());
+            finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt)
+        },
+        linear_solver,
+        &newton::NewtonParams {
+            convergence: newton_convergence,
+            jacobian_strategy,
+            max_iterations,
+        },
+    )?;
 
-    // System matrix: I - theta * dt * J_f. RHS: dt * f(u^n) -- identical
-    // for any theta, see module docs.
-    let identity = DMatrix::<f64>::identity(n, n);
-    let system_matrix = identity - jacobian * (theta * dt);
-    let rhs = f_n_field * dt;
-
-    let delta_u = linear_solver.solve(&system_matrix, &rhs)?;
-
-    let u_next: DVector<f64> = u_n_field + delta_u;
     Ok(ContextValue::ScalarField(u_next))
 }
 
