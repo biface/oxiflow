@@ -44,6 +44,7 @@
 use super::methods::backward_euler::BackwardEulerSolver;
 use super::methods::bdf2::BDF2Solver;
 use super::methods::crank_nicolson::CrankNicolsonSolver;
+#[cfg(feature = "serde")]
 use super::methods::implicit::stiff_jacobian_convergence;
 use super::methods::newton::{JacobianStrategy, NewtonConvergence};
 use super::sparse::FaerSparseSolver;
