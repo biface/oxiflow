@@ -11,6 +11,12 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `IntegratorSpec::BackwardEuler` gains `newton_convergence`,
+  `jacobian_strategy`, `max_iterations` fields (`serde` feature), mapped to
+  `BackwardEulerSolver`'s three Newton builders via `TryFrom`; defaults
+  match the solver's own zero-config values (DD-044, #114)
+- `NewtonConvergence`/`JacobianStrategy` gain `serde::Deserialize` under
+  the `serde` feature (#114)
 - `BDF2Solver` gains `with_newton_convergence()`, `with_jacobian_strategy()`,
   `with_max_newton_iterations()` builders; `bdf2_step_newton()`
   (`solver::methods::bdf2`) routes through the generic Newton loop with
