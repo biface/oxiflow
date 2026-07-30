@@ -55,15 +55,19 @@
 //! the same solver silently keeps the sparse path single-shot. Tracked as
 //! a follow-up, mirroring the existing BDF2/sparse gap.
 //!
-//! ## Known untested limitation — boundary conditions
+//! ## Boundary conditions × the perturbed Jacobian
 //!
 //! [`finite_difference_jacobian`] perturbs each component of the state and
 //! re-evaluates [`evaluate_derivative`], which re-applies boundary
 //! conditions on every call. A Dirichlet-constrained node will have its
 //! perturbation overwritten before `compute_physics` sees it — physically
-//! correct (a BC-constrained node isn't a free unknown), but **no test
-//! case exercises this yet**. Validate explicitly before using an implicit
-//! solver on a domain with boundary conditions.
+//! correct (a BC-constrained node isn't a free unknown): the constrained
+//! node's own *column* in the assembled Jacobian is exactly zero, while
+//! its *row* still reflects genuine physics-based coupling to
+//! unconstrained neighbours. Verified by
+//! `tests::dirichlet_constrained_column_is_exactly_zero_row_keeps_real_coupling`
+//! (#113) — previously documented as a known untested limitation (DD-033,
+//! v0.4.0).
 
 use nalgebra::{DMatrix, DVector};
 
@@ -91,7 +95,7 @@ const FD_EPSILON: f64 = 1e-7;
 /// against), forward differences are exact regardless of step size — no
 /// truncation error from the linear approximation itself.
 ///
-/// See the [known limitation on boundary conditions](self#known-untested-limitation--boundary-conditions).
+/// See [boundary conditions × the perturbed Jacobian](self#boundary-conditions--the-perturbed-jacobian).
 pub(crate) fn finite_difference_jacobian(
     domain: &Domain,
     chain: &[&dyn ContextCalculator],
@@ -608,6 +612,153 @@ mod tests {
             assert!(v.abs() < 1.0, "expected strong damping, got {v}");
         }
     }
+
+    // ── Dirichlet BC × perturbed Jacobian (#113) ───────────────────────────────
+
+    use crate::boundary::{BoundaryCondition, BoundaryType};
+
+    /// Discrete tridiagonal diffusion with a spike initial condition —
+    /// genuine spatial coupling to neighbours, needed to distinguish
+    /// "legitimate physics coupling" from "spurious coupling introduced by
+    /// BC re-application" in the test below. A local copy rather than
+    /// reusing `sparse_tests::TridiagonalDiffusion`: that fixture only
+    /// exists under `feature = "sparse"`, and this test needs no sparse
+    /// machinery.
+    #[derive(Debug)]
+    struct TridiagonalDiffusion {
+        diffusion: f64,
+    }
+
+    impl RequiresContext for TridiagonalDiffusion {
+        fn required_variables(&self) -> Vec<ContextVariable> {
+            vec![]
+        }
+    }
+
+    impl PhysicalModel for TridiagonalDiffusion {
+        fn compute_physics(
+            &self,
+            state: &ContextValue,
+            _ctx: &ComputeContext,
+        ) -> Result<ContextValue, OxiflowError> {
+            let u = state.as_scalar_field()?;
+            let n = u.len();
+            let d = self.diffusion;
+            let out = DVector::from_fn(n, |i, _| {
+                let left = if i > 0 { u[i - 1] } else { 0.0 };
+                let right = if i + 1 < n { u[i + 1] } else { 0.0 };
+                d * (left - 2.0 * u[i] + right)
+            });
+            Ok(ContextValue::ScalarField(out))
+        }
+
+        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+            let n = mesh.n_dof();
+            ContextValue::ScalarField(DVector::from_fn(
+                n,
+                |i, _| if i == n / 2 { 1.0 } else { 0.0 },
+            ))
+        }
+
+        fn name(&self) -> &str {
+            "tridiagonal_diffusion_dirichlet_test"
+        }
+    }
+
+    /// Fixes a single node to a constant value — a minimal Dirichlet BC.
+    /// No built-in `BoundaryCondition` implementation in `crate::boundary`
+    /// enforces a plain Dirichlet constraint today (only `DanckwertsInlet`/
+    /// `DanckwertsOutlet`, Robin/Neumann), so this test defines its own.
+    #[derive(Debug)]
+    struct FixedDirichlet {
+        node_index: usize,
+        value: f64,
+    }
+
+    impl RequiresContext for FixedDirichlet {
+        fn required_variables(&self) -> Vec<ContextVariable> {
+            vec![]
+        }
+    }
+
+    impl BoundaryCondition for FixedDirichlet {
+        fn boundary_type(&self) -> BoundaryType {
+            BoundaryType::Dirichlet
+        }
+
+        fn apply(
+            &self,
+            state: &mut DVector<f64>,
+            _ctx: &ComputeContext,
+            _mesh: &dyn Mesh,
+        ) -> Result<(), OxiflowError> {
+            state[self.node_index] = self.value;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn dirichlet_constrained_column_is_exactly_zero_row_keeps_real_coupling() {
+        // DD-033's known limitation, closed by #113: `finite_difference_jacobian`
+        // perturbs each state component and re-evaluates `evaluate_derivative`,
+        // which re-applies boundary conditions on every call. A
+        // Dirichlet-constrained node's perturbation is therefore overwritten
+        // before `compute_physics` ever sees it -- physically correct (a
+        // BC-constrained node isn't a free unknown), verified here rather
+        // than merely documented.
+        let n = 5;
+        let constrained = n / 2; // the model's initial spike location
+        let diffusion = 0.7;
+
+        let domain = Domain::new(
+            "dirichlet_test",
+            Box::new(TridiagonalDiffusion { diffusion }),
+            make_mesh(n),
+        )
+        .with_boundary_conditions(vec![Box::new(FixedDirichlet {
+            node_index: constrained,
+            value: 0.0,
+        })]);
+        let scenario = Scenario::multi(vec![domain]).unwrap();
+        let domain = scenario.single_domain().unwrap();
+        let requirements = scenario.context_requirements();
+        let chain = build_calculator_chain(&requirements, &[]).unwrap();
+
+        let state = domain.model.initial_state(domain.mesh.as_ref());
+        let jac = finite_difference_jacobian(domain, &chain, &state, 0.0, 0.01).unwrap();
+
+        // Column: perturbing the constrained node itself must leave every
+        // row's output exactly unchanged -- the perturbation never
+        // survives BC re-application, so both the base and perturbed
+        // evaluations see bit-identical states, giving f_j - f0 = 0
+        // exactly, not merely small.
+        for i in 0..n {
+            assert_eq!(
+                jac[(i, constrained)],
+                0.0,
+                "column {constrained} (the constrained node) must be exactly \
+                 zero at row {i} -- got {}",
+                jac[(i, constrained)]
+            );
+        }
+
+        // Row: the constrained node's own output still genuinely depends
+        // on its unconstrained neighbours through the model's real spatial
+        // coupling -- legitimate physics, not spurious coupling, and must
+        // not be zeroed out by the fix the column check above verifies.
+        let left = constrained - 1;
+        let right = constrained + 1;
+        assert!(
+            (jac[(constrained, left)] - diffusion).abs() < 1e-6,
+            "expected left-neighbour coupling ~{diffusion}, got {}",
+            jac[(constrained, left)]
+        );
+        assert!(
+            (jac[(constrained, right)] - diffusion).abs() < 1e-6,
+            "expected right-neighbour coupling ~{diffusion}, got {}",
+            jac[(constrained, right)]
+        );
+    }
 }
 
 #[cfg(all(test, feature = "sparse"))]
@@ -626,8 +777,10 @@ mod sparse_tests {
     /// u[i+1])`, zero outside the domain. Not a real `BoundaryCondition` —
     /// this fixture exists only to exercise the banded path with a
     /// genuinely local, bandwidth-1 coupling (real Dirichlet/Neumann
-    /// boundary handling is out of scope here, see the module's own
-    /// known-untested-limitation note).
+    /// boundary handling is covered separately, see the module's own docs
+    /// on boundary conditions × the perturbed Jacobian, and
+    /// `tests::dirichlet_constrained_column_is_exactly_zero_row_keeps_real_coupling`,
+    /// #113).
     #[derive(Debug)]
     struct TridiagonalDiffusion {
         diffusion: f64,

@@ -24,8 +24,8 @@
 //! - Single-domain scenarios only — same restriction as the explicit
 //!   solvers; see #40 for the dedicated multi-domain path.
 //! - `StepControl::Fixed { dt }` only.
-//! - See [`super::implicit`] for the boundary-condition interaction
-//!   caveat — not yet covered by a dedicated test.
+//! - See [`super::implicit`] for the boundary-condition interaction with
+//!   the perturbed Jacobian — covered by a dedicated test since #113.
 
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
