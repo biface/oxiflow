@@ -11,6 +11,9 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `IntegratorSpec::BDF2` variant — Newton fields only, deliberately no
+  sparse fields (`BDF2Solver` has no sparse builders to map, a DD-043 gap
+  distinct from this DTO increment) (DD-044, #116)
 - `IntegratorSpec::CrankNicolson` variant, symmetric to `BackwardEuler` in
   every field (sparse dispatch + Newton configuration); `theta = 0.5`
   stays implicit to the variant, matching `BackwardEuler`'s own
