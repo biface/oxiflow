@@ -29,7 +29,10 @@
 //! Implicit methods ([`backward_euler`], [`crank_nicolson`], [`bdf2`]) build
 //! on the same [`evaluate_derivative`] for their explicit-derivative
 //! evaluation, plus the shared machinery in [`implicit`] (frozen-Jacobian
-//! Newton correction, DD-033) for the implicit part.
+//! single correction, DD-033) for the implicit part. [`newton`] adds the
+//! genuinely iterated alternative DD-033 anticipated (DD-044, v0.7.0) —
+//! not yet wired into [`backward_euler`]/[`crank_nicolson`]/[`bdf2`] at
+//! this increment (see [`newton`]'s own module docs for scope).
 //!
 //! ## Per-step primitive, with history (DD-031, DD-034)
 //!
@@ -66,6 +69,7 @@ pub mod dopri45;
 pub mod euler;
 pub mod imex;
 pub mod implicit;
+pub mod newton;
 pub mod rk4;
 pub mod step_control;
 
@@ -75,6 +79,7 @@ pub use crank_nicolson::CrankNicolsonSolver;
 pub use dopri45::DoPri45Solver;
 pub use euler::ForwardEulerSolver;
 pub use imex::{OperatorSplittingSolver, SplitOperator, SplittingScheme};
+pub use newton::{JacobianStrategy, NewtonConvergence};
 pub use rk4::RK4Solver;
 pub use step_control::StepSizeController;
 
