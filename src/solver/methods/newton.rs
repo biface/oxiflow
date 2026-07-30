@@ -48,12 +48,14 @@
 //! ## Wiring status
 //!
 //! [`solve`] is called from
-//! [`super::implicit::theta_method_step_newton`] (DD-044, #111), itself
-//! used by
+//! [`super::implicit::theta_method_step_newton`] (DD-044, #111) and
+//! [`super::bdf2::bdf2_step_newton`] (DD-044, #112) — used respectively by
 //! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)/
-//! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver).
-//! [`super::bdf2::bdf2_step`] does not yet route through this module —
-//! that wiring is #112.
+//! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver) and
+//! [`BDF2Solver`](super::bdf2::BDF2Solver). [`super::bdf2`]'s
+//! startup/bootstrap step is the one exception, unconditionally using
+//! [`super::implicit::theta_method_step`]'s non-configurable path — see
+//! that module's docs.
 
 use nalgebra::{DMatrix, DVector};
 
@@ -70,24 +72,19 @@ use crate::solver::linear::LinearSolver;
 /// `max_iterations = 1` with an exactly affine `f` succeeds immediately —
 /// the single correction is already exact up to floating-point rounding).
 ///
-/// Default: [`ResidualOnly`](Self::ResidualOnly) with `tol_abs = 1e-5`,
+/// Default: [`ResidualOnly`](Self::ResidualOnly) with `tol_abs = 1e-8`,
 /// `tol_rel = 1e-6` — starting points, not fixed constants; tune via the
 /// solver builders once this lands (#111/#112).
 ///
-/// `tol_abs`'s default is calibrated against
-/// [`finite_difference_jacobian`](super::implicit::finite_difference_jacobian)'s
-/// fixed step size, not chosen for near-machine-precision: on affine
-/// problems with large coefficients (e.g. `λ = 1e4` in the stiff-decay
-/// regression tests), computing `(f(u+ε) − f(u)) / ε` suffers
-/// catastrophic cancellation whose absolute error scales roughly as
-/// `λ · ε_machine / ε` — empirically up to ~1e-6 for the stiffest cases
-/// this crate currently tests. A single Newton correction on such a
-/// problem is still mathematically exact; the residual floor above
-/// reflects finite-difference precision, not nonlinearity. `1e-5` leaves
-/// comfortable margin over that floor while still catching genuine
-/// nonlinear non-convergence (which typically leaves residuals many
-/// orders of magnitude larger — see
-/// [`super::implicit`]'s and this module's own tests).
+/// Note: this default is *not* what
+/// [`theta_method_step`](super::implicit::theta_method_step) or the
+/// implicit solvers' own zero-config constructors use internally — those
+/// need a looser, explicitly named tolerance to guarantee the pre-DD-044
+/// single-correction contract on very stiff affine problems (see
+/// [`super::implicit`]'s module docs for why). This `Default` impl is a
+/// general starting point for callers configuring the loop themselves,
+/// not a guarantee that it tolerates every finite-difference precision
+/// floor.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NewtonConvergence {
@@ -108,7 +105,7 @@ pub enum NewtonConvergence {
 impl Default for NewtonConvergence {
     fn default() -> Self {
         NewtonConvergence::ResidualOnly {
-            tol_abs: 1e-5,
+            tol_abs: 1e-8,
             tol_rel: 1e-6,
         }
     }
@@ -421,7 +418,7 @@ mod tests {
             u_scalar -= g / dg;
         }
         for v in u_next.iter() {
-            assert!((v - u_scalar).abs() < 1e-4, "got {v}, expected {u_scalar}");
+            assert!((v - u_scalar).abs() < 1e-5, "got {v}, expected {u_scalar}");
         }
     }
 

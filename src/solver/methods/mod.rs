@@ -31,7 +31,9 @@
 //! evaluation, plus the shared machinery in [`implicit`] for the implicit
 //! part. [`newton`] provides the iterated Newton alternative DD-033
 //! anticipated (DD-044, v0.7.0), wired into [`backward_euler`]/
-//! [`crank_nicolson`] (#111) — not yet into [`bdf2`] (#112).
+//! [`crank_nicolson`] (#111) and [`bdf2`] (#112) — [`bdf2`]'s
+//! startup/bootstrap step is the one exception, unconditionally using
+//! the non-configurable single-correction path (see that module's docs).
 //!
 //! ## Per-step primitive, with history (DD-031, DD-034)
 //!
