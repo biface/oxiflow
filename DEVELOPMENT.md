@@ -306,6 +306,70 @@ a first-order approximation otherwise. J7 lifts this limitation: a nonlinear sol
 iterated to convergence, or a related method) plugged in behind the same extension point
 DD-033 already anticipated, with no rewrite of the J4a solvers.
 
+### Why this is needed: the discretised residual is not always linear
+
+The canonical form (§1) is `∂u/∂t + ∇·F(u, ∇u) = S(u, x, t)`. Write the right-hand side as a
+single function of the state, `f(u) = -∇·F(u, ∇u) + S(u, x, t)`. Discretising with the
+theta-method (Backward Euler: θ=1, Crank-Nicolson: θ=0.5) turns the PDE into, at every time
+step, a root-finding problem in the unknown `u^{n+1}`:
+
+```
+g(u^{n+1}) = u^{n+1} - u^n - Δt · [(1-θ)·f(u^n) + θ·f(u^{n+1})] = 0
+```
+
+(BDF2 has its own residual, `g(u) = (3/2)u - 2u^n + (1/2)u^{n-1} - Δt·f(u)`, but the same
+argument applies.) `g` is **linear** in `u^{n+1}` exactly when `f` is affine in `u` — i.e. when
+both `F` and `S` are affine. That is the case J4a's single frozen-Jacobian correction (DD-033,
+Option B) already solves exactly: for affine `f`, the Jacobian `∂g/∂u` is constant, independent
+of `u^{n+1}`, so a single Newton step from `u^n` lands exactly on the root — no iteration
+needed. This is not an approximation choice, it's a property of linear algebra.
+
+Any **physically nonlinear** `F` or `S` breaks this: `g` becomes a nonlinear algebraic equation,
+and J4a's single correction is only a first-order approximation to its root — good enough for
+mildly nonlinear problems and small `Δt`, not exact in general. Concrete cases oxiflow needs to
+handle correctly, drawn from the project's own target domains:
+
+- **Nonlinear flux `F(u)`** — e.g. Burgers-type nonlinear advection (`F(u) = u²/2`), or a
+  diffusion coefficient that depends on the field itself (`F = -D(u)∇u`, degenerate/nonlinear
+  diffusion).
+- **Nonlinear source `S(u)`** — e.g. Langmuir-type adsorption isotherms in chromatography
+  (`q(c) = q_max·K·c / (1 + K·c)`, oxiflow's own originating domain via chrom-rs), or
+  Arrhenius-type reaction-rate kinetics (`S ∝ exp(-E_a / R·T)`).
+
+Newton solves `g(u) = 0` by linearising it around the current iterate `u^k` and correcting:
+
+```
+J^k · Δu^k = -g(u^k),    J^k = ∂g/∂u |_{u=u^k} = I - Δt·θ · ∂f/∂u |_{u=u^k}
+u^{k+1} = u^k + Δu^k
+```
+
+`∂f/∂u` is exactly what `finite_difference_jacobian` (DD-013, already in place since J4a)
+approximates by finite differences — Newton reuses it unchanged. What DD-044 changes is *how
+many times* this Jacobian is (re-)evaluated per time step and *when the loop stops* — see
+below — not the residual, the Jacobian assembly, or the canonical form itself.
+
+### DD-044 — activating this correctly
+
+DD-044 formalises this activation: `NewtonConvergence` (residual-based, default) and
+`JacobianStrategy` (modified/frozen, default) as configurable HOW-axis enums;
+`OxiflowError::NewtonNotConverged` routed through `Solver::on_divergence()`; a single generic
+Newton loop shared by theta-method (Backward Euler/Crank-Nicolson) and BDF2, rather than the
+per-family duplication J4a used when Newton had only one consumer; `IntegratorSpec` extended
+to `BackwardEuler` (Newton fields added) plus new `CrankNicolson` and `BDF2` variants (the
+latter without sparse fields — `BDF2Solver` has no sparse dispatch, a DD-043 gap left open
+here, not a J7 concern).
+
+Operational breakdown (DD-044, `oxiflow-issues-v0.7.0.yml`):
+
+1. Newton core loop (`NewtonConvergence`, `JacobianStrategy`, `NewtonNotConverged`,
+   `newton_residual`/`newton_linear_correction`, generic loop) — prerequisite for 2–3.
+2. Wire into Backward Euler/Crank-Nicolson.
+3. Wire into BDF2.
+4. `IntegratorSpec::BackwardEuler` extended, `CrankNicolson` and `BDF2` variants added —
+   depend on 2/3 respectively.
+5. Regression test for the DD-033 known-untested limitation (perturbed-Jacobian ×
+   Dirichlet BC interaction) — independent of 1–4.
+
 **Exit criterion:** a problem nonlinear in `u` converges at the expected order under
 Backward Euler/Crank-Nicolson/BDF2 with the nonlinear solver, where the frozen J4a
 correction only gave a first-order approximation.
@@ -521,7 +585,7 @@ Requirements for a third-party framework:
 | Operator context access | `FluxDivergenceOperator`: sibling trait to `DiscreteOperator`, carries `ctx`/`RequiresContext` | Adding `ctx` directly to `DiscreteOperator`; subtrait of `DiscreteOperator` | J5 | INV-2 |
 | Linear solvers (sparse) | `faer-sparse` delegation | Custom implementation | J6 | |
 | Results export | VTK interop pivot + HDF5 for bulk data | Custom format | J6 | |
-| Nonlinear integration | Iterated Newton, DD-033 extension point | Rewrite of J4a solvers | J7 | |
+| Nonlinear integration | Iterated Newton, DD-033 extension point activated by DD-044 (generic loop, no per-family duplication) | Rewrite of J4a solvers; per-family duplicated loop | J7 | |
 | GPU readiness | Structural invariants formalised before `gpu` feature | `wgpu` without prior constraints | J8 | |
 | Parallelism | Rayon, opt-in feature flag | Mandatory or absent | J9 | |
 | Caching | Dirty flag + temporal invalidation | Systematic recomputation | J9 | |
