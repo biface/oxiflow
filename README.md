@@ -50,7 +50,9 @@ plugin API — the engine exposes stable, object-safe extension points for exact
 - **Abstract mesh** — `Mesh` trait keeps `PhysicalState` free of grid assumptions;
   `UniformGrid1D` in v1.0, unstructured triangular meshes in v2.0
 - **Rich integrator library** — Forward Euler, RK4, Dormand–Prince 4/5, Backward Euler,
-  Crank–Nicolson, BDF2/3, IMEX (Strang splitting)
+  Crank–Nicolson, BDF2/3, IMEX (Strang splitting) — with iterated Newton correction (DD-044,
+  v0.7.0) for the implicit methods, configurable per solver (convergence criterion,
+  Jacobian refresh strategy, iteration budget)
 - **Spatial schemes** — upwind/centred FD, WENO3/5, conservative FV, Lax–Wendroff,
   flux limiters (MinMod, Van Leer, Superbee)
 - **Plugin-safe API** — all public traits are object-safe, enabling third-party niche
@@ -64,7 +66,7 @@ plugin API — the engine exposes stable, object-safe extension points for exact
 
 ```toml
 [dependencies]
-oxiflow = "0.6"
+oxiflow = "0.7"
 # oxiflow-chrom = "3.0"    # chromatography framework (available from v3.0)
 ```
 
@@ -156,7 +158,7 @@ third-party frameworks remain compatible across engine versions:
 | J4a — Integrators      | v0.4.0   | ✅ Published  | Euler, RK4, DoPri45, Backward Euler, Crank–Nicolson, BDF2, IMEX |
 | J5 — Discretisation    | v0.5.0   | ✅ Published  | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · flux limiters + adaptive selection |
 | J6 — Sparse Algebra & Persistence | v0.6.0 | ✅ Published | faer sparse solver · SimulationSnapshot (checkpoint/on_divergence) · HDF5 loading · VTK export · IntegratorSpec |
-| J7 — Nonlinear Time Integration | v0.7.0 | ⏳ Planned | Full Newton iteration for implicit integrators |
+| J7 — Nonlinear Time Integration | v0.7.0 | ✅ Published | Iterated Newton for implicit integrators (DD-044) · `IntegratorSpec` extended to BE/CN/BDF2 |
 | J8 — Computational Optimisation | v0.8.0 | ⏳ Planned | Profiling · algorithmic/memory optimisation · GPU-readiness (DD-026) |
 | J9 — Parallelism & Benchmarking | v0.9.0 | ⏳ Planned | Rayon · dirty-flag cache · Criterion benchmarks |
 | J10 — Ecosystem v1.0   | v1.0.0   | ⏳ Planned    | 7 examples · FEM audit · stable API             |
@@ -202,7 +204,7 @@ target ≥ 85% overall, ≥ 90% on INV components.
 
 ## License
 
-Copyright 2026 [ton nom]
+Copyright 2026 [biface](https://github.com/biface)
 
 Licensed under the [Apache License, Version 2.0](LICENSE.txt).
 

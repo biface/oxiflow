@@ -51,7 +51,9 @@ object-safe précisément dans ce but.
   de discrétisation ; FD, FV et FEM (v2.0) s'enfichent sans réécrire les intégrateurs
 - **Maillage abstrait** — le trait `Mesh` libère `PhysicalState` de toute hypothèse de grille
 - **Bibliothèque d'intégrateurs** — Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson,
-  BDF2/3, IMEX (splitting de Strang)
+  BDF2/3, IMEX (splitting de Strang) — avec correction de Newton itérée (DD-044, v0.7.0)
+  pour les méthodes implicites, configurable par solveur (critère de convergence, stratégie
+  de rafraîchissement du jacobien, budget d'itérations)
 - **Schémas spatiaux** — FD décentrées/centrées, WENO3/5, FV conservatifs, Lax–Wendroff,
   limiteurs de flux (MinMod, Van Leer, Superbee)
 - **API plugin-safe** — tous les traits publics sont object-safe, permettant à des crates
@@ -65,7 +67,7 @@ object-safe précisément dans ce but.
 
 ```toml
 [dependencies]
-oxiflow = "0.6"
+oxiflow = "0.7"
 # oxiflow-chrom = "3.0"    # framework chromatographie (disponible dès v3.0)
 ```
 
@@ -158,7 +160,7 @@ assurent la compatibilité des frameworks tiers entre les versions du moteur :
 | J4a — Intégrateurs                       | v0.4.0 | ✅ Publié   | Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson, BDF2, IMEX                                                   |
 | J5 — Discrétisation                      | v0.5.0 | ✅ Publié   | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · limiteurs de flux + sélection adaptative                              |
 | J6 — Algèbre creuse & persistance        | v0.6.0 | ✅ Publié   | solveur creux faer · SimulationSnapshot (checkpoint/on_divergence) · chargement HDF5 · export VTK · IntegratorSpec |
-| J7 — Intégration temporelle non linéaire | v0.7.0 | ⏳ Planifié | Itération de Newton complète pour les intégrateurs implicites                                                      |
+| J7 — Intégration temporelle non linéaire | v0.7.0 | ✅ Publié   | Itération de Newton pour les intégrateurs implicites (DD-044) · `IntegratorSpec` étendu à BE/CN/BDF2                |
 | J8 — Optimisation des calculs            | v0.8.0 | ⏳ Planifié | Profilage · optimisation algorithmique/mémoire · GPU-readiness (DD-026)                                            |
 | J9 — Parallélisme & Benchmarking         | v0.9.0 | ⏳ Planifié | Rayon · cache dirty-flag · benchmarks Criterion                                                                    |
 | J10 — Écosystème v1.0                    | v1.0.0 | ⏳ Planifié | 7 exemples · audit FEM · API stable                                                                                |
@@ -206,7 +208,7 @@ objectif ≥ 85% global, ≥ 90% sur les composants INV.
 
 ## Licence
 
-Copyright 2026 [ton nom]
+Copyright 2026 [biface](https://github.com/biface)
 
 Distribué sous la [Licence Apache, Version 2.0](LICENSE.txt).
 
