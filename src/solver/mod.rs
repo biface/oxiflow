@@ -245,9 +245,25 @@ pub trait Solver: Send + Sync {
         config: &SolverConfiguration,
     ) -> Result<SimulationResult, OxiflowError>;
 
-    /// Called automatically right before a [`OxiflowError::SolverDivergence`]
-    /// is returned, with a [`SimulationSnapshot`] capturing the physical
-    /// state at the point of divergence (DD-025 Option B, issue #71).
+    /// Called automatically right before a divergence-class error is
+    /// returned, with a [`SimulationSnapshot`] capturing the state at the
+    /// point of failure (DD-025 Option B, issue #71). Two distinct
+    /// failure modes are routed through this hook:
+    ///
+    /// - [`OxiflowError::SolverDivergence`] — a non-finite value appeared
+    ///   in the field itself (checked after every step by
+    ///   [`methods`]'s internal finiteness check).
+    /// - [`OxiflowError::NewtonNotConverged`] — the iterated Newton
+    ///   solver ([`methods::newton`]) exhausted its iteration budget
+    ///   without satisfying its convergence criterion (DD-044, v0.7.0).
+    ///   This is a failure of the *nonlinear correction* to converge, not
+    ///   necessarily a non-finite state — the last iterate may still be
+    ///   finite, just not accepted as converged.
+    ///
+    /// Both cases reuse the same [`SimulationSnapshot`] checkpoint
+    /// infrastructure; implementations that override this hook to
+    /// persist or log should not assume the snapshot's `error` field
+    /// always describes a non-finite value.
     ///
     /// Default implementation is a no-op — override to persist (e.g. via
     /// [`snapshot::write_snapshot`]) or log. There is no `checkpoint()`
