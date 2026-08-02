@@ -37,9 +37,12 @@
 //!
 //! Field values are stored as [`ContextValue::ScalarField`] (`DVector<f64>`,
 //! column-major) or [`ContextValue::VectorField`] (`DMatrix<f64>`, column-major
-//! — nalgebra default). This satisfies DD-026 INV-GPU-1 and INV-GPU-4.
-//!
-// GPU-READY: bytemuck::Pod candidate (DD-026 INV-GPU-5) — pending v0.5.0 (DD-013)
+//! — nalgebra default). It is these stored *values* that satisfy DD-026
+//! INV-GPU-1/INV-GPU-4 (see [`ContextValue`]'s own rustdoc) — `MultiDomainState`
+//! itself is an indexed/orchestration container (`HashMap`), not a contiguous
+//! buffer, and is out of INV-GPU-1's scope for the same reason
+//! `Vec<Box<dyn PhysicalModel>>` is (DD-026): it holds numerical payloads
+//! without being one.
 
 use std::collections::HashMap;
 
@@ -84,7 +87,9 @@ use crate::solver::scenario::DomainId;
 pub struct MultiDomainState {
     /// Internal map: (domain, quantity) → field value.
     ///
-    /// Column-major memory layout for all field payloads (DD-026 INV-GPU-4).
+    /// The map itself is not contiguous memory; the [`ContextValue`] payloads
+    /// it stores are (DD-026 INV-GPU-1/INV-GPU-4 — see [`ContextValue`]'s
+    /// own rustdoc for the layout note and the `GPU-READY` annotation).
     states: HashMap<(DomainId, PhysicalQuantity), ContextValue>,
 }
 
