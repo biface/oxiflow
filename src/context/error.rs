@@ -125,6 +125,17 @@ pub enum OxiflowError {
         /// Norm of the residual at the last iterate.
         residual: f64,
     },
+
+    /// No compatible GPU adapter was found (DD-045, `gpu` feature).
+    ///
+    /// Returned by [`crate::solver::gpu::GpuContext::new`] — never a silent
+    /// CPU fallback (DD-045's explicit-error policy). The caller decides
+    /// which CPU solver to fall back to. Present unconditionally (not
+    /// `#[cfg(feature = "gpu")]`), consistent with `Persistence` above,
+    /// which is likewise feature-agnostic in the enum's shape even though
+    /// only produced under specific features.
+    #[error("no GPU adapter available (gpu feature enabled but no compatible device found)")]
+    GpuUnavailable,
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
