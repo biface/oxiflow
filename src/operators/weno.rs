@@ -16,7 +16,7 @@
 //! formulas and ideal weights follow Jiang & Shu (1996); the nonlinear
 //! weighting formula itself uses WENO-Z (Borges, Carmona, Costa & Don,
 //! 2008) rather than the original Jiang-Shu weighting — see
-//! [`weno_combine2`] for why (critical-point accuracy).
+//! `weno_combine2` for why (critical-point accuracy).
 //!
 //! Like `operators::fv`: `F(u, ∇u) = v·u − D·∂u/∂x` (advection, Fick's law
 //! diffusion) — only the advective face value is WENO-reconstructed; the
@@ -58,7 +58,7 @@
 //! ## `FluxBoundary` and CFL
 //!
 //! Both reuse [`crate::operators::FluxBoundary`] and
-//! [`crate::operators::check_cfl`], shared with `operators::fv` — same
+//! `crate::operators::check_cfl`, shared with `operators::fv` — same
 //! boundary-treatment question, same advective stability condition. See
 //! their documentation for rationale.
 //!
@@ -107,7 +107,7 @@ const WENO_EPSILON: f64 = 1e-6;
 /// Exponent `p=1` on `τ/(ε+β_k)`, matching the original Borges et al. (2008)
 /// formulation (some later variants, e.g. "WENO-Z+", use `p=2` for a
 /// stronger correction — not adopted here, no concrete need for it yet).
-fn weno_combine2(q0: f64, q1: f64, beta0: f64, beta1: f64, d0: f64, d1: f64) -> f64 {
+pub(crate) fn weno_combine2(q0: f64, q1: f64, beta0: f64, beta1: f64, d0: f64, d1: f64) -> f64 {
     let tau = (beta0 - beta1).abs();
     let a0 = d0 * (1.0 + tau / (WENO_EPSILON + beta0));
     let a1 = d1 * (1.0 + tau / (WENO_EPSILON + beta1));
@@ -191,7 +191,7 @@ fn weno3_right(b: f64, c: f64, d: f64) -> f64 {
 /// `{a, b, c, d, e} = {u[i−2], u[i−1], u[i], u[i+1], u[i+2]}`
 /// (Jiang & Shu, 1996) — see the correction history above `weno3_left` for
 /// why these are cell-average coefficients, not a nodal reinterpretation.
-fn weno5_left(a: f64, b: f64, c: f64, d: f64, e: f64) -> f64 {
+pub(crate) fn weno5_left(a: f64, b: f64, c: f64, d: f64, e: f64) -> f64 {
     let q0 = (2.0 * a - 7.0 * b + 11.0 * c) / 6.0;
     let q1 = (-b + 5.0 * c + 2.0 * d) / 6.0;
     let q2 = (2.0 * c + 5.0 * d - e) / 6.0;

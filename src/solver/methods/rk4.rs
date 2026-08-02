@@ -21,13 +21,13 @@
 //!
 //! where $f = \text{compute\_physics}(u, \text{ctx})$, evaluated on a state
 //! that has had boundary conditions enforced for *that* stage — see
-//! [`super::evaluate_derivative`].
+//! `super::evaluate_derivative`.
 //!
 //! ## Boundary conditions across stages
 //!
 //! Each of the four stages is a separate derivative evaluation, so each one
 //! gets its own boundary-condition application via
-//! [`super::apply_boundary_conditions`] — on `u` itself for stage 1, and on
+//! `super::apply_boundary_conditions` — on `u` itself for stage 1, and on
 //! the transient intermediate states (`u + scale * k_i`) for stages 2-4. A
 //! Dirichlet value enforced only once per outer step would otherwise drift
 //! across the intermediate evaluations.

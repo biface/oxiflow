@@ -51,6 +51,20 @@ Toute pull request doit satisfaire l'ensemble des points suivants avant d'être 
 - Utiliser `### Added`, `### Changed`, `### Fixed`, ou `### Breaking`.
 - Une ligne par changement logique.
 
+**Documentation (locale, pour contributeurs)**
+- La documentation publique déployée sur GitHub Pages (générée par le CI,
+  `cargo doc --no-deps --all-features`) ne couvre volontairement que la surface
+  d'API publique — les éléments internes `pub(crate)` (mécanique Newton, dispatch
+  bande/creux, etc.) sont abondamment référencés entre eux en rustdoc, mais ne
+  font pas partie de ce site public.
+- Pour parcourir localement le graphe complet des références croisées internes
+  (recommandé avant de relire une PR touchant `solver::methods` ou `operators`) :
+  ```
+  cargo doc --no-deps --all-features --document-private-items --open
+  ```
+- Cette commande n'est jamais exécutée en CI et son résultat n'est jamais publié —
+  usage local uniquement.
+
 ## Invariants de conception
 
 Toute contribution touchant `src/mesh/`, `src/coupling/`, `src/solver/spatial/`, ou

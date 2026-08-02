@@ -23,11 +23,11 @@
 //! Every integrator — single-stage (Euler) or multi-stage (RK4 and beyond) —
 //! follows the same per-evaluation order documented in
 //! [`crate::solver`]: calculators, then boundary conditions, then
-//! `compute_physics`. [`evaluate_derivative`] implements this contract once
+//! `compute_physics`. `evaluate_derivative` implements this contract once
 //! so each solver doesn't reimplement it per stage.
 //!
 //! Implicit methods ([`backward_euler`], [`crank_nicolson`], [`bdf2`]) build
-//! on the same [`evaluate_derivative`] for their explicit-derivative
+//! on the same `evaluate_derivative` for their explicit-derivative
 //! evaluation, plus the shared machinery in [`implicit`] for the implicit
 //! part. [`newton`] provides the iterated Newton alternative DD-033
 //! anticipated (DD-044, v0.7.0), wired into [`backward_euler`]/
@@ -210,7 +210,7 @@ pub trait SteppableSolver: Solver {
     /// with `history_depth() == 0` ignore this parameter entirely.
     ///
     /// `state` may be mutated in-place by boundary condition application
-    /// (see [`evaluate_derivative`]); the returned value is the state at
+    /// (see `evaluate_derivative`); the returned value is the state at
     /// `t + dt`.
     fn step(
         &self,

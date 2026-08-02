@@ -23,7 +23,7 @@
 //!
 //! ## Step-size control (DD-036)
 //!
-//! Delegates entirely to [`StepSizeController`](super::step_control::StepSizeController)
+//! Delegates entirely to [`StepSizeController`]
 //! for the accept/reject decision and the next `dt` — this file only
 //! supplies the error norm input (the RK4/5 difference) and the rejection
 //! retry loop. See [`super::step_control`] for the controller itself.
