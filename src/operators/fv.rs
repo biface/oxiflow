@@ -30,7 +30,7 @@
 //! ## CFL check
 //!
 //! Both schemes check the explicit advective stability condition
-//! `|v|·dt/dx ≤ 1` via the shared [`crate::operators::check_cfl`] (the
+//! `|v|·dt/dx ≤ 1` via the shared `crate::operators::check_cfl` (the
 //! condition documented for Lax–Wendroff-type explicit advection schemes)
 //! inside `apply()`, using `ctx.time_step()` — failing explicitly via
 //! [`OxiflowError::PreconditionFailed`] rather than silently returning an
@@ -62,7 +62,7 @@ use crate::operators::{check_cfl, FluxBoundary, FluxDivergenceOperator};
 /// two neighboring cells, given their (cell-average) state values. The
 /// divergence at cell `i` is `(F_{i+1/2} − F_{i−1/2}) / dx`, with periodic
 /// wrap-around indexing (`FluxBoundary::Periodic`, see module documentation).
-fn periodic_divergence(
+pub(crate) fn periodic_divergence(
     u: &DVector<f64>,
     dx: f64,
     face_flux: impl Fn(f64, f64) -> f64,
@@ -96,7 +96,7 @@ fn periodic_divergence(
 /// documentation for why this mirrors `operators::fd`'s existing boundary
 /// posture. Requires at least 3 cells: 2 boundary cells plus 1 interior cell
 /// to borrow from.
-fn truncated_divergence(
+pub(crate) fn truncated_divergence(
     u: &DVector<f64>,
     dx: f64,
     face_flux: impl Fn(f64, f64) -> f64,

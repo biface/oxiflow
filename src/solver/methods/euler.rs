@@ -10,7 +10,7 @@
 //!
 //! where $f = \text{compute\_physics}(u, \text{ctx})$ is the time derivative
 //! returned by the physical model, evaluated on `u` *after* boundary
-//! conditions have been enforced (see [`super::evaluate_derivative`]).
+//! conditions have been enforced (see `super::evaluate_derivative`).
 //!
 //! ## Scope at J4a
 //!

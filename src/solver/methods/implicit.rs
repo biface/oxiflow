@@ -1,12 +1,13 @@
 //! # Module `solver::methods::implicit`
 //!
-//! Shared machinery for implicit (theta-method) integrators — DD-033.
+//! Shared machinery for implicit (theta-method) integrators — DD-033
+//! ([#86](https://github.com/biface/oxiflow/issues/86)).
 //!
 //! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver) (θ=1)
 //! and [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
-//! (θ=0.5) are thin wrappers around [`theta_method_step_newton`] (DD-044,
-//! #111), which itself relies on [`finite_difference_jacobian`] and the
-//! shared [`super::newton`] loop. [`theta_method_step`] keeps the
+//! (θ=0.5) are thin wrappers around `theta_method_step_newton` (DD-044,
+//! [#111](https://github.com/biface/oxiflow/issues/111)), which itself relies on `finite_difference_jacobian` and the
+//! shared [`super::newton`] loop. `theta_method_step` keeps the
 //! original, non-configurable entry point for direct callers — see below.
 //!
 //! ## Why a single shared function for two methods
@@ -21,44 +22,45 @@
 //! depend on θ at all. Only the system matrix does
 //! ($I - \theta \Delta t J_f$). One function, one parameter.
 //!
-//! ## v1 scope — frozen Jacobian, single correction (DD-033) by default
+//! ## v1 scope — frozen Jacobian, single correction (DD-033,
+//! [#86](https://github.com/biface/oxiflow/issues/86)) by default
 //!
-//! [`theta_method_step`] performs exactly **one** Newton-style correction,
+//! `theta_method_step` performs exactly **one** Newton-style correction,
 //! with the Jacobian frozen at $u^n$ — this is exact when `compute_physics`
 //! is affine in `u` and a first-order approximation otherwise, and stays
-//! the behaviour of [`theta_method_step`] itself (used directly by
+//! the behaviour of `theta_method_step` itself (used directly by
 //! callers that don't need more) and of
 //! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)/
 //! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
 //! when left unconfigured.
 //!
-//! [`theta_method_step_newton`] (DD-044, #111) is the genuinely iterated
+//! `theta_method_step_newton` (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) is the genuinely iterated
 //! alternative DD-033 anticipated: it routes through the shared
 //! [`super::newton`] loop with caller-supplied convergence/Jacobian-
 //! strategy/iteration-budget configuration.
 //! `BackwardEulerSolver`/`CrankNicolsonSolver` call it directly (with
 //! `with_newton_convergence`/`with_jacobian_strategy`/
-//! `with_max_newton_iterations` builders); [`theta_method_step`] itself
+//! `with_max_newton_iterations` builders); `theta_method_step` itself
 //! stays at its original signature by delegating to it with
-//! `k_max = 1`/[`JacobianStrategy::ModifiedFrozen`](super::newton::JacobianStrategy::ModifiedFrozen)
+//! `k_max = 1`/[`JacobianStrategy::ModifiedFrozen`]
 //! baked in, reproducing its historical output exactly (see
 //! [`super::newton`]'s own docs for why no special-casing is needed for
 //! this to hold on affine problems).
 //!
 //! ## Known gap — sparse path not yet Newton-aware
 //!
-//! [`theta_method_step_adaptive`] (the sparse/banded dispatch, DD-043)
+//! `theta_method_step_adaptive` (the sparse/banded dispatch, DD-043)
 //! still performs a single frozen-Jacobian correction unconditionally —
 //! it is not wired through [`super::newton`] at this increment. Composing
-//! the two was verified, not implemented, per #111's stated scope:
+//! the two was verified, not implemented, per [#111](https://github.com/biface/oxiflow/issues/111)'s stated scope:
 //! configuring both a sparse backend *and* a non-default Newton budget on
 //! the same solver silently keeps the sparse path single-shot. Tracked as
 //! a follow-up, mirroring the existing BDF2/sparse gap.
 //!
 //! ## Boundary conditions × the perturbed Jacobian
 //!
-//! [`finite_difference_jacobian`] perturbs each component of the state and
-//! re-evaluates [`evaluate_derivative`], which re-applies boundary
+//! `finite_difference_jacobian` perturbs each component of the state and
+//! re-evaluates `evaluate_derivative`, which re-applies boundary
 //! conditions on every call. A Dirichlet-constrained node will have its
 //! perturbation overwritten before `compute_physics` sees it — physically
 //! correct (a BC-constrained node isn't a free unknown): the constrained
@@ -67,7 +69,7 @@
 //! unconstrained neighbours. Verified by
 //! `tests::dirichlet_constrained_column_is_exactly_zero_row_keeps_real_coupling`
 //! (#113) — previously documented as a known untested limitation (DD-033,
-//! v0.4.0).
+//! [#86](https://github.com/biface/oxiflow/issues/86), v0.4.0).
 
 use nalgebra::{DMatrix, DVector};
 
