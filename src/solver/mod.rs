@@ -24,6 +24,8 @@
 
 pub mod chain;
 pub mod config;
+#[cfg(feature = "gpu")]
+pub mod gpu;
 pub mod linear;
 pub mod methods;
 pub mod orchestrator;
