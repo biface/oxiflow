@@ -65,6 +65,11 @@ use crate::context::error::OxiflowError;
 /// assert_eq!(t.as_scalar().unwrap(), 1.5);
 /// assert!(!field.as_scalar_field().unwrap().is_empty());
 /// ```
+// GPU-READY: bytemuck::Pod candidate (DD-026 INV-GPU-5) — pending v0.8.0 (J8),
+// for the `Vector`/`Matrix`/`ScalarField`/`VectorField` variants specifically;
+// `Scalar`/`Boolean` are trivially Pod-compatible, the enum discriminant is
+// the actual blocker for a direct `derive(Pod)` and will need to be resolved
+// at upload-boundary design time (DD-045), not before.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -87,6 +92,11 @@ pub enum ContextValue {
     /// $$D'_{ij} = J_{ik}\,D_{kl}\,J_{jl}^{\top}$$
     ///
     /// This variant stores components in the current reference frame only.
+    ///
+    /// Memory layout: `DMatrix<f64>` is **column-major** (nalgebra default,
+    /// Fortran order) — DD-026 INV-GPU-4. WGSL (the `wgpu` shader language)
+    /// is row-major; any transposition is resolved at the future GPU upload
+    /// boundary, never in this type.
     Matrix(DMatrix<f64>),
 
     // ── Nodal fields ──────────────────────────────────────────────────────────
@@ -97,7 +107,14 @@ pub enum ContextValue {
 
     /// One vector per mesh node, stored as `n_nodes × spatial_dim` matrix.
     ///
-    /// Row `i` holds the vector at node `i`.
+    /// Row `i` holds the vector at node `i`. Dimensions (`n_nodes`,
+    /// `spatial_dim`) are available via `DMatrix::nrows()`/`ncols()`
+    /// (DD-026 INV-GPU-2).
+    ///
+    /// Memory layout: `DMatrix<f64>` is **column-major** (nalgebra default,
+    /// Fortran order) — DD-026 INV-GPU-4. WGSL (the `wgpu` shader language)
+    /// is row-major; any transposition is resolved at the future GPU upload
+    /// boundary, never in this type.
     VectorField(DMatrix<f64>),
     // Reserved for J7 — requires DiscreteOperator (INV-2):
     // Tensor4(ndarray::Array4<f64>)  — rank-4 tensor C_ijkl
