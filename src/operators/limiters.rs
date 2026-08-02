@@ -69,7 +69,7 @@
 //!
 //! ## `FluxBoundary` and CFL
 //!
-//! Reuses [`crate::operators::FluxBoundary`], [`crate::operators::check_cfl`],
+//! Reuses [`crate::operators::FluxBoundary`], `crate::operators::check_cfl`,
 //! and the same wide-stencil boundary helpers `operators::weno` uses
 //! (`periodic_wide_divergence`, `truncated_wide_divergence`,
 //! `ghost_cell_wide_divergence`, relocated to `operators` — see their

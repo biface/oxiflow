@@ -52,9 +52,9 @@ jobs:
         run: cargo clippy -- -D warnings
 
       # DD-043 (#50) — sparse linear algebra backend (faer). No system
-      # dependency needed, but requires rustc 1.84+ (faer 0.24's own MSRV,
-      # above this crate's own rust-version = "1.80") — @stable is expected
-      # to satisfy this; revisit if it ever regresses below 1.84.
+      # dependency needed. faer 0.24's own MSRV (1.84) now matches this
+      # crate's rust-version exactly (raised from 1.80 to 1.84 by DD-045,
+      # #127, for wgpu's sake) — no remaining tension to revisit here.
       - name: cargo clippy — feature sparse
         run: cargo clippy --features sparse -- -D warnings
 
@@ -69,6 +69,15 @@ jobs:
 
       - name: cargo clippy — feature hdf5
         run: cargo clippy --features hdf5 -- -D warnings
+
+      # DD-026 (#73) / DD-045 (#127) — no system dependency needed to
+      # compile: the vulkan/metal/dx12 wgpu backends only need a driver at
+      # runtime, not at build time. `gpu_context_acquires_adapter` is
+      # `#[ignore]`d (no GPU hardware on CI runners) — this step only
+      # guards against `wgpu`/`pollster`/`bytemuck` becoming unbuildable
+      # or the boundary-conversion code regressing.
+      - name: cargo clippy — feature gpu
+        run: cargo clippy --features gpu -- -D warnings
 
       # J5 (v0.7) — activate when consumed for real:
       # parallel/serde are already declared in Cargo.toml but not yet
@@ -114,6 +123,12 @@ jobs:
       - name: cargo test — feature hdf5
         run: cargo test --features hdf5
 
+      # DD-026 (#73) / DD-045 (#127) — see the clippy job for why no
+      # system dependency is needed. `gpu_context_acquires_adapter` stays
+      # `#[ignore]`d here (no GPU hardware on CI runners).
+      - name: cargo test — feature gpu
+        run: cargo test --features gpu
+
       # J5 (v0.7) — activate when consumed for real (see the clippy job).
       # - name: cargo test — feature parallel
       #   run: cargo test --features parallel
@@ -145,7 +160,7 @@ jobs:
           restore-keys: ${{ runner.os }}-doc-
 
       - name: cargo doc — build with KaTeX header
-        run: RUSTDOCFLAGS="--html-in-header docs/katex-header.html" cargo doc --no-deps
+        run: RUSTDOCFLAGS="--html-in-header docs/katex-header.html" cargo doc --no-deps --all-features
 
       - name: Add root redirect to oxiflow/index.html
         run: |

@@ -1,11 +1,12 @@
 //! # Module `solver::methods::newton`
 //!
 //! Iterated Newton solver — shared, integrator-agnostic core (DD-044,
-//! issue #109, activating DD-033's Option A).
+//! issue [#109](https://github.com/biface/oxiflow/issues/109), activating
+//! DD-033's ([#86](https://github.com/biface/oxiflow/issues/86)) Option A).
 //!
 //! ## Why this exists
 //!
-//! [`super::implicit::theta_method_step`] and [`super::bdf2::bdf2_step`]
+//! `super::implicit::theta_method_step` and `bdf2_step`
 //! (through v0.6.0) each performed exactly **one** Newton-style
 //! correction with a frozen Jacobian — exact when the underlying
 //! `compute_physics` is affine in `u`, a first-order approximation
@@ -30,15 +31,15 @@
 //!
 //! `u^{*}` folds in every term that doesn't depend on the unknown `u` —
 //! callers compute it once, outside the loop, from already-known past
-//! states. [`residual`] and [`linear_correction`] are the two building
-//! blocks operating on this shape; [`solve`] is the generic loop wiring
+//! states. `residual` and `linear_correction` are the two building
+//! blocks operating on this shape; `solve` is the generic loop wiring
 //! them together with a [`NewtonConvergence`] criterion and a
 //! [`JacobianStrategy`].
 //!
 //! ## Dense/sparse agnosticism
 //!
 //! This module knows nothing about `Domain`, `ContextCalculator`, or
-//! `faer` — [`solve`] is parameterised over caller-supplied closures for
+//! `faer` — `solve` is parameterised over caller-supplied closures for
 //! evaluating $f(u)$ and its Jacobian, and over `&dyn LinearSolver` for
 //! the correction step. The existing sparse/banded dispatch
 //! (DD-043, `theta_method_step_adaptive`) is therefore untouched by this
@@ -47,14 +48,14 @@
 //!
 //! ## Wiring status
 //!
-//! [`solve`] is called from
-//! [`super::implicit::theta_method_step_newton`] (DD-044, #111) and
-//! [`super::bdf2::bdf2_step_newton`] (DD-044, #112) — used respectively by
+//! `solve` is called from
+//! `super::implicit::theta_method_step_newton` (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) and
+//! `super::bdf2::bdf2_step_newton` (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — used respectively by
 //! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)/
 //! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver) and
 //! [`BDF2Solver`](super::bdf2::BDF2Solver). [`super::bdf2`]'s
 //! startup/bootstrap step is the one exception, unconditionally using
-//! [`super::implicit::theta_method_step`]'s non-configurable path — see
+//! `super::implicit::theta_method_step`'s non-configurable path — see
 //! that module's docs.
 
 use nalgebra::{DMatrix, DVector};
@@ -64,7 +65,7 @@ use crate::solver::linear::LinearSolver;
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
-/// Convergence criterion for the iterated Newton loop ([`solve`]).
+/// Convergence criterion for the iterated Newton loop (`solve`).
 ///
 /// Every variant carries the same `tol_abs`/`tol_rel` pair: convergence
 /// is tested against `tol_abs + tol_rel * ||u||`, evaluated on the
@@ -77,7 +78,7 @@ use crate::solver::linear::LinearSolver;
 /// solver builders once this lands (#111/#112).
 ///
 /// Note: this default is *not* what
-/// [`theta_method_step`](super::implicit::theta_method_step) or the
+/// `theta_method_step` or the
 /// implicit solvers' own zero-config constructors use internally — those
 /// need a looser, explicitly named tolerance to guarantee the pre-DD-044
 /// single-correction contract on very stiff affine problems (see
@@ -124,7 +125,7 @@ impl NewtonConvergence {
     }
 }
 
-/// Jacobian refresh strategy for the iterated Newton loop ([`solve`]).
+/// Jacobian refresh strategy for the iterated Newton loop (`solve`).
 ///
 /// Default: [`ModifiedFrozen`](Self::ModifiedFrozen) — matches the
 /// pre-DD-044 behaviour (Jacobian evaluated once, at the initial guess,
@@ -140,7 +141,7 @@ pub enum JacobianStrategy {
     ModifiedFrozen,
     /// Re-evaluate the Jacobian at every iterate (full Newton) — most
     /// robust on strongly nonlinear problems, at the cost of one
-    /// [`finite_difference_jacobian`](super::implicit::finite_difference_jacobian)
+    /// `finite_difference_jacobian`
     /// (or its banded equivalent) per iteration.
     FullNewton,
     /// Reuse the frozen Jacobian while convergence is proceeding

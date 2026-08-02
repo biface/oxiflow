@@ -50,6 +50,18 @@ Every pull request must satisfy all of the following before merging.
 - Use `### Added`, `### Changed`, `### Fixed`, or `### Breaking`.
 - One line per logical change.
 
+**Documentation (local, contributor-facing)**
+- The public docs published on GitHub Pages (built by CI, `cargo doc --no-deps
+  --all-features`) intentionally only cover the public API surface — internal
+  `pub(crate)` items (Newton loop internals, sparse/banded dispatch, etc.) are
+  cross-referenced extensively in rustdoc but are not part of that public site.
+- To browse the full internal cross-reference graph locally (recommended before
+  reviewing a PR that touches `solver::methods` or `operators`):
+  ```
+  cargo doc --no-deps --all-features --document-private-items --open
+  ```
+- This command is not run in CI and its output is never published — local use only.
+
 ## Design invariants
 
 Any contribution touching `src/mesh/`, `src/coupling/`, `src/solver/spatial/`, or any

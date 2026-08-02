@@ -32,7 +32,7 @@
 //! axis (`ModelConfig`/`MeshConfig`/`BoundaryConditionConfig`) are tracked
 //! as follow-up, not blocking this issue's closure (per #104's own stated
 //! scope). `newton_convergence`/`jacobian_strategy`/`max_iterations`
-//! (DD-044, #114/#115/#116) extend all three variants — the Newton
+//! (DD-044, [#114](https://github.com/biface/oxiflow/issues/114)/[#115](https://github.com/biface/oxiflow/issues/115)/[#116](https://github.com/biface/oxiflow/issues/116)) extend all three variants — the Newton
 //! configuration is orthogonal to which integrator carries it.
 //!
 //! The sparse backend itself is always [`FaerSparseSolver`] — a fixed,
@@ -72,18 +72,18 @@ pub enum IntegratorSpec {
         /// `None` keeps the dense path regardless of `sparse_threshold`.
         #[cfg_attr(feature = "serde", serde(default))]
         jacobian_bandwidth: Option<usize>,
-        /// Newton convergence criterion (DD-044, #114) — see
+        /// Newton convergence criterion (DD-044, [#114](https://github.com/biface/oxiflow/issues/114)) — see
         /// [`BackwardEulerSolver::with_newton_convergence`]. Defaults to
-        /// [`stiff_jacobian_convergence`], not [`NewtonConvergence::default`]
+        /// `stiff_jacobian_convergence`, not [`NewtonConvergence::default`]
         /// — matching `BackwardEulerSolver`'s own zero-config value (see
         /// that function's docs for why they differ).
         #[cfg_attr(feature = "serde", serde(default = "default_newton_convergence"))]
         newton_convergence: NewtonConvergence,
-        /// Jacobian refresh strategy (DD-044, #114) — see
+        /// Jacobian refresh strategy (DD-044, [#114](https://github.com/biface/oxiflow/issues/114)) — see
         /// [`BackwardEulerSolver::with_jacobian_strategy`].
         #[cfg_attr(feature = "serde", serde(default))]
         jacobian_strategy: JacobianStrategy,
-        /// Newton iteration budget (DD-044, #114) — see
+        /// Newton iteration budget (DD-044, [#114](https://github.com/biface/oxiflow/issues/114)) — see
         /// [`BackwardEulerSolver::with_max_newton_iterations`]. Defaults
         /// to `1`, matching `BackwardEulerSolver`'s own zero-config value
         /// (the pre-DD-044 single-correction contract).
@@ -92,7 +92,7 @@ pub enum IntegratorSpec {
     },
     /// Crank-Nicolson (semi-implicit, 2nd order), symmetric to
     /// [`BackwardEuler`](Self::BackwardEuler) in every field — sparse
-    /// dispatch (DD-043) and Newton configuration (DD-044, #115) both
+    /// dispatch (DD-043) and Newton configuration (DD-044, [#115](https://github.com/biface/oxiflow/issues/115)) both
     /// apply identically. `theta = 0.5` is not exposed as a field —
     /// implicit to the variant, consistent with `BackwardEuler`'s
     /// `theta = 1.0` never being exposed either.
@@ -114,10 +114,10 @@ pub enum IntegratorSpec {
         max_iterations: usize,
     },
     /// BDF2 (implicit multi-step, 2nd order) — Newton configuration only
-    /// (DD-044, #116), deliberately **no** `sparse_threshold`/
+    /// (DD-044, [#116](https://github.com/biface/oxiflow/issues/116)), deliberately **no** `sparse_threshold`/
     /// `jacobian_bandwidth`: `BDF2Solver` has no sparse builders to map
     /// (a DD-043 gap, not a DD-044 concern — see
-    /// [`BDF2Solver`](super::methods::bdf2::BDF2Solver)'s own docs).
+    /// [`BDF2Solver`]'s own docs).
     /// Adding sparse-shaped fields with no backing implementation would
     /// mislead a config author into thinking they take effect.
     BDF2 {

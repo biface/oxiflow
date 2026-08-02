@@ -7,7 +7,7 @@
 //! $$u^{n+1} = u^n + \frac{\Delta t}{2}\left[f(u^n, t^n) + f(u^{n+1}, t^{n+1})\right]$$
 //!
 //! A thin wrapper around the shared generalised theta method
-//! ([`super::implicit::theta_method_step_newton`], θ=0.5, DD-044, #111)
+//! (`theta_method_step_newton`, θ=0.5, DD-044, [#111](https://github.com/biface/oxiflow/issues/111))
 //! — see that module's docs for the frozen-Jacobian default and the
 //! iterated Newton path configurable via [`CrankNicolsonSolver`]'s
 //! builders. Identical structure to
@@ -44,16 +44,16 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// Crank-Nicolson solver — semi-implicit, 2nd order.
 pub struct CrankNicolsonSolver {
     linear_solver: Box<dyn LinearSolver>,
-    /// Newton convergence criterion (DD-044, #111) — default
+    /// Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — default
     /// [`stiff_jacobian_convergence`](super::implicit::stiff_jacobian_convergence)
     /// (deliberately looser than
     /// [`NewtonConvergence::default`] — see
     /// [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)'s
     /// field docs for the full rationale, identical here).
     newton_convergence: NewtonConvergence,
-    /// Jacobian refresh strategy (DD-044, #111).
+    /// Jacobian refresh strategy (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
     jacobian_strategy: JacobianStrategy,
-    /// Newton iteration budget (DD-044, #111). Default `1` — the
+    /// Newton iteration budget (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)). Default `1` — the
     /// pre-DD-044 single frozen-Jacobian correction.
     max_newton_iterations: usize,
     /// Sparse backend (DD-043) — see
@@ -96,19 +96,19 @@ impl CrankNicolsonSolver {
         self
     }
 
-    /// Configures the Newton convergence criterion (DD-044, #111).
+    /// Configures the Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_newton_convergence(mut self, newton_convergence: NewtonConvergence) -> Self {
         self.newton_convergence = newton_convergence;
         self
     }
 
-    /// Configures the Jacobian refresh strategy (DD-044, #111).
+    /// Configures the Jacobian refresh strategy (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_jacobian_strategy(mut self, jacobian_strategy: JacobianStrategy) -> Self {
         self.jacobian_strategy = jacobian_strategy;
         self
     }
 
-    /// Configures the Newton iteration budget (DD-044, #111) — see
+    /// Configures the Newton iteration budget (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — see
     /// [`BackwardEulerSolver::with_max_newton_iterations`](super::backward_euler::BackwardEulerSolver::with_max_newton_iterations).
     pub fn with_max_newton_iterations(mut self, max_newton_iterations: usize) -> Self {
         self.max_newton_iterations = max_newton_iterations;
