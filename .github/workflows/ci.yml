@@ -159,6 +159,15 @@ jobs:
           key: ${{ runner.os }}-doc-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-doc-
 
+      # DD-027 (#75, migrated to hdf5-metno per #79) — `--all-features` below
+      # enables `hdf5`, which needs libhdf5's C headers via pkg-config, same
+      # as the clippy/test jobs. Missing here was the actual cause of the
+      # doc job's CI failure.
+      - name: Install system dependencies (HDF5)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends libhdf5-dev pkg-config
+
       - name: cargo doc — build with KaTeX header
         run: RUSTDOCFLAGS="--html-in-header docs/katex-header.html" cargo doc --no-deps --all-features
 
