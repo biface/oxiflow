@@ -66,7 +66,7 @@ plugin API — the engine exposes stable, object-safe extension points for exact
 
 ```toml
 [dependencies]
-oxiflow = "0.7"
+oxiflow = "0.8"
 # oxiflow-chrom = "3.0"    # chromatography framework (available from v3.0)
 ```
 
@@ -159,15 +159,16 @@ third-party frameworks remain compatible across engine versions:
 | J5 — Discretisation    | v0.5.0   | ✅ Published  | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · flux limiters + adaptive selection |
 | J6 — Sparse Algebra & Persistence | v0.6.0 | ✅ Published | faer sparse solver · SimulationSnapshot (checkpoint/on_divergence) · HDF5 loading · VTK export · IntegratorSpec |
 | J7 — Nonlinear Time Integration | v0.7.0 | ✅ Published | Iterated Newton for implicit integrators (DD-044) · `IntegratorSpec` extended to BE/CN/BDF2 |
-| J8 — Computational Optimisation | v0.8.0 | ⏳ Planned | Profiling · algorithmic/memory optimisation · GPU-readiness (DD-026) |
+| J8 — Computational Optimisation | v0.8.0 | ✅ Published | GPU-readiness (DD-026, DD-045) · `gpu` feature (`wgpu`) · MSRV 1.84 |
 | J9 — Parallelism & Benchmarking | v0.9.0 | ⏳ Planned | Rayon · dirty-flag cache · Criterion benchmarks |
 | J10 — Ecosystem v1.0   | v1.0.0   | ⏳ Planned    | 7 examples · FEM audit · stable API             |
 | J20 — FEM              | v2.0.0   | 🔭 Horizon   | Unstructured meshes · ALE · INV-4 plugin-safe   |
 | J30 — Frameworks       | v3.0.0   | 🔭 Horizon   | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run` |
 
-The INV-GPU-1 to INV-GPU-5 sub-invariants (DD-026) govern GPU-readiness of numerical
-data structures from v0.3.0 — no GPU code yet, but all types are designed to admit a
-future `gpu` feature without breaking API changes.
+The INV-GPU-1 to INV-GPU-5 sub-invariants (DD-026) have governed GPU-readiness of numerical
+data structures since v0.3.0; the `gpu` feature itself (backend selection, adapter
+acquisition, CPU↔GPU boundary conversion) landed in v0.8.0 (DD-045) with no breaking API
+changes to any type designed against those invariants.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the full architectural specification.
 
@@ -183,7 +184,7 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for the full architectural specification.
 | `vtk`       | VTK (`.vtu`) export of `SimulationResult`      | v0.6           |
 | `sparse`    | `faer` sparse linear solver for implicit integrators | v0.6     |
 | `parallel`  | Rayon parallelism for independent calculators  | v0.9 (planned) |
-| `gpu`       | GPU acceleration via `wgpu` (Vulkan/Metal/DX12) | v0.8 (planned) |
+| `gpu`       | GPU acceleration via `wgpu` (Vulkan/Metal/DX12)| v0.8           |
 
 ---
 

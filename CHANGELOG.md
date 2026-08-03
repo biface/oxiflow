@@ -7,6 +7,55 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.8.0] - 2026-08-03
+
+### Added
+
+- `gpu` feature flag (`wgpu 26.0.1`, `pollster`, `bytemuck`, all optional) —
+  `solver::gpu::GpuContext::new()` acquires a GPU adapter/device/queue,
+  blocking via `pollster`; `to_gpu_bytes()` reinterprets `ContextValue`'s
+  contiguous `f64` payloads as raw bytes via `bytemuck::cast_slice`, without
+  requiring `ContextValue` itself to implement `bytemuck::Pod` (the enum
+  discriminant remains the blocker for that, deferred) (DD-026, DD-045,
+  #74)
+- `OxiflowError::GpuUnavailable` — returned when no compatible GPU adapter
+  or device is found; never a silent CPU fallback, the caller chooses its
+  own CPU solver (DD-045)
+- CI: `clippy --features gpu` and `test --features gpu` jobs added to
+  `ci.yml` (#122)
+
+### Changed
+
+- **MSRV raised `1.80` → `1.84`** — no stable `wgpu` release declares
+  compatibility with `1.80`; `1.84` is the lowest MSRV declared by `wgpu`
+  26.0.1, the version selected (DD-045)
+- `ContextValue`'s `GPU-READY` annotation (DD-026 INV-GPU-5) relocated onto
+  `ContextValue` itself (previously misapplied to `MultiDomainState`, which
+  can never be `bytemuck::Pod` — a `HashMap` has no fixed, Pod-compatible
+  layout); column-major layout (INV-GPU-4) documented directly on
+  `ContextValue::Matrix`/`ContextValue::VectorField` (#127)
+- `MultiDomainState` module docs corrected: requalified as an
+  indexed/orchestration container, out of INV-GPU-1's scope, rather than
+  claiming to satisfy it (#127)
+- Rustdoc intra-doc links and DD citation style normalised across the
+  crate; `cargo doc --no-deps --all-features` now emits **zero warnings**
+  (validated by a real run) (#122)
+
+### Known gaps
+
+- `derive(Pod, Zeroable)` on `ContextValue` remains blocked by its enum
+  discriminant — resolution deferred past this release, not part of the
+  `gpu` feature's initial scope (DD-045)
+- No real-GPU integration test runs in CI (no GPU hardware available);
+  the one that exists is `#[ignore]`d (#74)
+- `BDF2Solver` still has no sparse builders (`sparse_solver`,
+  `sparse_threshold`, `jacobian_bandwidth` absent) — a DD-043 gap,
+  unaddressed by this release, carried forward to v0.9.0
+- `OperatorSplittingSolver::solve` (IMEX) does not call
+  `self.on_divergence()` / build a `SimulationSnapshot` on divergence,
+  unlike every other solver in the crate — discovered this release,
+  carried forward to v0.9.0
+
 ## [0.7.0] - 2026-07-30
 
 ### Added

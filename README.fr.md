@@ -67,7 +67,7 @@ object-safe précisément dans ce but.
 
 ```toml
 [dependencies]
-oxiflow = "0.7"
+oxiflow = "0.8"
 # oxiflow-chrom = "3.0"    # framework chromatographie (disponible dès v3.0)
 ```
 
@@ -161,15 +161,16 @@ assurent la compatibilité des frameworks tiers entre les versions du moteur :
 | J5 — Discrétisation                      | v0.5.0 | ✅ Publié   | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · limiteurs de flux + sélection adaptative                              |
 | J6 — Algèbre creuse & persistance        | v0.6.0 | ✅ Publié   | solveur creux faer · SimulationSnapshot (checkpoint/on_divergence) · chargement HDF5 · export VTK · IntegratorSpec |
 | J7 — Intégration temporelle non linéaire | v0.7.0 | ✅ Publié   | Itération de Newton pour les intégrateurs implicites (DD-044) · `IntegratorSpec` étendu à BE/CN/BDF2                |
-| J8 — Optimisation des calculs            | v0.8.0 | ⏳ Planifié | Profilage · optimisation algorithmique/mémoire · GPU-readiness (DD-026)                                            |
+| J8 — Optimisation des calculs            | v0.8.0 | ✅ Publié   | GPU-readiness (DD-026, DD-045) · feature `gpu` (`wgpu`) · MSRV 1.84                                                 |
 | J9 — Parallélisme & Benchmarking         | v0.9.0 | ⏳ Planifié | Rayon · cache dirty-flag · benchmarks Criterion                                                                    |
 | J10 — Écosystème v1.0                    | v1.0.0 | ⏳ Planifié | 7 exemples · audit FEM · API stable                                                                                |
 | J20 — FEM                                | v2.0.0 | 🔭 Horizon | Maillages non structurés · ALE · INV-4 plugin-safe                                                                 |
 | J30 — Frameworks                         | v3.0.0 | 🔭 Horizon | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run`                                                                    |
 
 Les sous-invariants INV-GPU-1 à INV-GPU-5 (DD-026) gouvernent la GPU-readiness des
-structures de données numériques dès v0.3.0 — pas de code GPU pour l'instant, mais tous
-les types sont conçus pour admettre un future feature `gpu` sans breaking change.
+structures de données numériques depuis v0.3.0 ; la feature `gpu` elle-même (sélection de
+backend, acquisition d'adaptateur, conversion à la frontière CPU↔GPU) est arrivée en
+v0.8.0 (DD-045), sans aucun breaking change sur les types conçus contre ces invariants.
 
 Voir [DEVELOPPEMENT.md](DEVELOPPEMENT.md) pour la spécification architecturale complète.
 
@@ -185,7 +186,7 @@ Voir [DEVELOPPEMENT.md](DEVELOPPEMENT.md) pour la spécification architecturale 
 | `vtk`      | Export VTK (`.vtu`) de `SimulationResult`                  | v0.6            |
 | `sparse`   | Solveur linéaire creux `faer` pour intégrateurs implicites | v0.6            |
 | `parallel` | Parallélisme Rayon pour les calculateurs indépendants      | v0.9 (planifié) |
-| `gpu`      | Accélération GPU via `wgpu` (Vulkan/Metal/DX12)            | v0.8 (planifié) |
+| `gpu`      | Accélération GPU via `wgpu` (Vulkan/Metal/DX12)            | v0.8            |
 
 ---
 
