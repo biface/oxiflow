@@ -26,7 +26,7 @@
 <a href=#16 id=16 data-nosnippet>16</a>//! formulas and ideal weights follow Jiang &amp; Shu (1996); the nonlinear
 <a href=#17 id=17 data-nosnippet>17</a>//! weighting formula itself uses WENO-Z (Borges, Carmona, Costa &amp; Don,
 <a href=#18 id=18 data-nosnippet>18</a>//! 2008) rather than the original Jiang-Shu weighting — see
-<a href=#19 id=19 data-nosnippet>19</a>//! [`weno_combine2`] for why (critical-point accuracy).
+<a href=#19 id=19 data-nosnippet>19</a>//! `weno_combine2` for why (critical-point accuracy).
 <a href=#20 id=20 data-nosnippet>20</a>//!
 <a href=#21 id=21 data-nosnippet>21</a>//! Like `operators::fv`: `F(u, ∇u) = v·u − D·∂u/∂x` (advection, Fick's law
 <a href=#22 id=22 data-nosnippet>22</a>//! diffusion) — only the advective face value is WENO-reconstructed; the
@@ -68,7 +68,7 @@
 <a href=#58 id=58 data-nosnippet>58</a>//! ## `FluxBoundary` and CFL
 <a href=#59 id=59 data-nosnippet>59</a>//!
 <a href=#60 id=60 data-nosnippet>60</a>//! Both reuse [`crate::operators::FluxBoundary`] and
-<a href=#61 id=61 data-nosnippet>61</a>//! [`crate::operators::check_cfl`], shared with `operators::fv` — same
+<a href=#61 id=61 data-nosnippet>61</a>//! `crate::operators::check_cfl`, shared with `operators::fv` — same
 <a href=#62 id=62 data-nosnippet>62</a>//! boundary-treatment question, same advective stability condition. See
 <a href=#63 id=63 data-nosnippet>63</a>//! their documentation for rationale.
 <a href=#64 id=64 data-nosnippet>64</a>//!
@@ -117,7 +117,7 @@
 <a href=#107 id=107 data-nosnippet>107</a>/// Exponent `p=1` on `τ/(ε+β_k)`, matching the original Borges et al. (2008)
 <a href=#108 id=108 data-nosnippet>108</a>/// formulation (some later variants, e.g. "WENO-Z+", use `p=2` for a
 <a href=#109 id=109 data-nosnippet>109</a>/// stronger correction — not adopted here, no concrete need for it yet).
-<a href=#110 id=110 data-nosnippet>110</a></span><span class="kw">fn </span>weno_combine2(q0: f64, q1: f64, beta0: f64, beta1: f64, d0: f64, d1: f64) -&gt; f64 {
+<a href=#110 id=110 data-nosnippet>110</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>weno_combine2(q0: f64, q1: f64, beta0: f64, beta1: f64, d0: f64, d1: f64) -&gt; f64 {
 <a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">let </span>tau = (beta0 - beta1).abs();
 <a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">let </span>a0 = d0 * (<span class="number">1.0 </span>+ tau / (WENO_EPSILON + beta0));
 <a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">let </span>a1 = d1 * (<span class="number">1.0 </span>+ tau / (WENO_EPSILON + beta1));
@@ -201,7 +201,7 @@
 <a href=#191 id=191 data-nosnippet>191</a>/// `{a, b, c, d, e} = {u[i−2], u[i−1], u[i], u[i+1], u[i+2]}`
 <a href=#192 id=192 data-nosnippet>192</a>/// (Jiang &amp; Shu, 1996) — see the correction history above `weno3_left` for
 <a href=#193 id=193 data-nosnippet>193</a>/// why these are cell-average coefficients, not a nodal reinterpretation.
-<a href=#194 id=194 data-nosnippet>194</a></span><span class="kw">fn </span>weno5_left(a: f64, b: f64, c: f64, d: f64, e: f64) -&gt; f64 {
+<a href=#194 id=194 data-nosnippet>194</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>weno5_left(a: f64, b: f64, c: f64, d: f64, e: f64) -&gt; f64 {
 <a href=#195 id=195 data-nosnippet>195</a>    <span class="kw">let </span>q0 = (<span class="number">2.0 </span>* a - <span class="number">7.0 </span>* b + <span class="number">11.0 </span>* c) / <span class="number">6.0</span>;
 <a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">let </span>q1 = (-b + <span class="number">5.0 </span>* c + <span class="number">2.0 </span>* d) / <span class="number">6.0</span>;
 <a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">let </span>q2 = (<span class="number">2.0 </span>* c + <span class="number">5.0 </span>* d - e) / <span class="number">6.0</span>;

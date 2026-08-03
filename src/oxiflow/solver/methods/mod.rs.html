@@ -33,11 +33,11 @@
 <a href=#23 id=23 data-nosnippet>23</a>//! Every integrator — single-stage (Euler) or multi-stage (RK4 and beyond) —
 <a href=#24 id=24 data-nosnippet>24</a>//! follows the same per-evaluation order documented in
 <a href=#25 id=25 data-nosnippet>25</a>//! [`crate::solver`]: calculators, then boundary conditions, then
-<a href=#26 id=26 data-nosnippet>26</a>//! `compute_physics`. [`evaluate_derivative`] implements this contract once
+<a href=#26 id=26 data-nosnippet>26</a>//! `compute_physics`. `evaluate_derivative` implements this contract once
 <a href=#27 id=27 data-nosnippet>27</a>//! so each solver doesn't reimplement it per stage.
 <a href=#28 id=28 data-nosnippet>28</a>//!
 <a href=#29 id=29 data-nosnippet>29</a>//! Implicit methods ([`backward_euler`], [`crank_nicolson`], [`bdf2`]) build
-<a href=#30 id=30 data-nosnippet>30</a>//! on the same [`evaluate_derivative`] for their explicit-derivative
+<a href=#30 id=30 data-nosnippet>30</a>//! on the same `evaluate_derivative` for their explicit-derivative
 <a href=#31 id=31 data-nosnippet>31</a>//! evaluation, plus the shared machinery in [`implicit`] for the implicit
 <a href=#32 id=32 data-nosnippet>32</a>//! part. [`newton`] provides the iterated Newton alternative DD-033
 <a href=#33 id=33 data-nosnippet>33</a>//! anticipated (DD-044, v0.7.0), wired into [`backward_euler`]/
@@ -220,7 +220,7 @@
 <a href=#210 id=210 data-nosnippet>210</a>    /// with `history_depth() == 0` ignore this parameter entirely.
 <a href=#211 id=211 data-nosnippet>211</a>    ///
 <a href=#212 id=212 data-nosnippet>212</a>    /// `state` may be mutated in-place by boundary condition application
-<a href=#213 id=213 data-nosnippet>213</a>    /// (see [`evaluate_derivative`]); the returned value is the state at
+<a href=#213 id=213 data-nosnippet>213</a>    /// (see `evaluate_derivative`); the returned value is the state at
 <a href=#214 id=214 data-nosnippet>214</a>    /// `t + dt`.
 <a href=#215 id=215 data-nosnippet>215</a>    </span><span class="kw">fn </span>step(
 <a href=#216 id=216 data-nosnippet>216</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,

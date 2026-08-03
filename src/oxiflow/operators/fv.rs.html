@@ -40,7 +40,7 @@
 <a href=#30 id=30 data-nosnippet>30</a>//! ## CFL check
 <a href=#31 id=31 data-nosnippet>31</a>//!
 <a href=#32 id=32 data-nosnippet>32</a>//! Both schemes check the explicit advective stability condition
-<a href=#33 id=33 data-nosnippet>33</a>//! `|v|·dt/dx ≤ 1` via the shared [`crate::operators::check_cfl`] (the
+<a href=#33 id=33 data-nosnippet>33</a>//! `|v|·dt/dx ≤ 1` via the shared `crate::operators::check_cfl` (the
 <a href=#34 id=34 data-nosnippet>34</a>//! condition documented for Lax–Wendroff-type explicit advection schemes)
 <a href=#35 id=35 data-nosnippet>35</a>//! inside `apply()`, using `ctx.time_step()` — failing explicitly via
 <a href=#36 id=36 data-nosnippet>36</a>//! [`OxiflowError::PreconditionFailed`] rather than silently returning an
@@ -72,7 +72,7 @@
 <a href=#62 id=62 data-nosnippet>62</a>/// two neighboring cells, given their (cell-average) state values. The
 <a href=#63 id=63 data-nosnippet>63</a>/// divergence at cell `i` is `(F_{i+1/2} − F_{i−1/2}) / dx`, with periodic
 <a href=#64 id=64 data-nosnippet>64</a>/// wrap-around indexing (`FluxBoundary::Periodic`, see module documentation).
-<a href=#65 id=65 data-nosnippet>65</a></span><span class="kw">fn </span>periodic_divergence(
+<a href=#65 id=65 data-nosnippet>65</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>periodic_divergence(
 <a href=#66 id=66 data-nosnippet>66</a>    u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;,
 <a href=#67 id=67 data-nosnippet>67</a>    dx: f64,
 <a href=#68 id=68 data-nosnippet>68</a>    face_flux: <span class="kw">impl </span>Fn(f64, f64) -&gt; f64,
@@ -106,7 +106,7 @@
 <a href=#96 id=96 data-nosnippet>96</a>/// documentation for why this mirrors `operators::fd`'s existing boundary
 <a href=#97 id=97 data-nosnippet>97</a>/// posture. Requires at least 3 cells: 2 boundary cells plus 1 interior cell
 <a href=#98 id=98 data-nosnippet>98</a>/// to borrow from.
-<a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">fn </span>truncated_divergence(
+<a href=#99 id=99 data-nosnippet>99</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>truncated_divergence(
 <a href=#100 id=100 data-nosnippet>100</a>    u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;,
 <a href=#101 id=101 data-nosnippet>101</a>    dx: f64,
 <a href=#102 id=102 data-nosnippet>102</a>    face_flux: <span class="kw">impl </span>Fn(f64, f64) -&gt; f64,

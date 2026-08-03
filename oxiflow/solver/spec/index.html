@@ -1,0 +1,49 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::spec`"><title>oxiflow::solver::spec - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module spec</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.8.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module spec</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solverspec" title="Module `solver::spec`">Module <code>solver::spec</code></a><ul><li><a href="#not-integratorkind" title="Not `IntegratorKind`">Not <code>IntegratorKind</code></a></li><li><a href="#scope-of-this-first-increment" title="Scope of this first increment">Scope of this first increment</a></li></ul></li></ul><h3><a href="#enums">Module Items</a></h3><ul class="block"><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a></div><h1>Module <span>spec</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/spec.rs.html#1-533">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solverspec"><a class="doc-anchor" href="#module-solverspec">§</a>Module <code>solver::spec</code></h2>
+<p>External, serialisable DTO describing <em>which</em> integration method to
+build and with what parameters — the HOW-axis config-loading increment
+of DD-027 amendment 1 (issue #104).</p>
+<h3 id="not-integratorkind"><a class="doc-anchor" href="#not-integratorkind">§</a>Not <code>IntegratorKind</code></h3>
+<p><a href="enum.IntegratorSpec.html" title="enum oxiflow::solver::spec::IntegratorSpec"><code>IntegratorSpec</code></a> is deliberately a separate type from
+<a href="../config/enum.IntegratorKind.html" title="enum oxiflow::solver::config::IntegratorKind"><code>super::IntegratorKind</code></a>. The latter is a pure descriptive label,
+already carried by <a href="../config/struct.SolverConfiguration.html" title="struct oxiflow::solver::config::SolverConfiguration"><code>super::SolverConfiguration</code></a> and
+<a href="../snapshot/struct.SimulationSnapshot.html" title="struct oxiflow::solver::snapshot::SimulationSnapshot"><code>super::snapshot::SimulationSnapshot</code></a> — it is never consumed to
+<em>build</em> a solver. <code>IntegratorSpec</code> exists specifically to be consumed:
+<a href="https://doc.rust-lang.org/1.97.1/core/convert/trait.TryFrom.html" title="trait core::convert::TryFrom"><code>TryFrom&lt;IntegratorSpec&gt; for Box&lt;dyn Solver&gt;</code></a> bridges it to
+the existing <code>BackwardEulerSolver</code> builder, with no duplicated
+construction logic. Naming history: this type was called <code>SolverConfig</code>
+in issue #104’s original body — renamed before implementation to avoid
+colliding with <a href="../config/struct.SolverConfiguration.html" title="struct oxiflow::solver::config::SolverConfiguration"><code>super::SolverConfiguration</code></a>, which already covers the
+full HOW pole (<code>TimeConfiguration</code> + calculators); see #104’s closing
+comment for the rationale.</p>
+<h3 id="scope-of-this-first-increment"><a class="doc-anchor" href="#scope-of-this-first-increment">§</a>Scope of this first increment</h3>
+<p><a href="enum.IntegratorSpec.html#variant.BackwardEuler" title="variant oxiflow::solver::spec::IntegratorSpec::BackwardEuler"><code>IntegratorSpec::BackwardEuler</code></a>, <a href="enum.IntegratorSpec.html#variant.CrankNicolson" title="variant oxiflow::solver::spec::IntegratorSpec::CrankNicolson"><code>IntegratorSpec::CrankNicolson</code></a>
+(#115), and <a href="enum.IntegratorSpec.html#variant.BDF2" title="variant oxiflow::solver::spec::IntegratorSpec::BDF2"><code>IntegratorSpec::BDF2</code></a> (#116, Newton fields only — see
+that variant’s own docs for why it deliberately carries no sparse
+fields), covering the DD-043 (#50) sparse dispatch path where
+applicable — this whole module is gated behind the <code>sparse</code> feature:
+without it, a config DTO for these integrators adds nothing over the
+existing <a href="../config/enum.IntegratorKind.html" title="enum oxiflow::solver::config::IntegratorKind"><code>super::IntegratorKind</code></a> labels, since the dense path takes
+no parameters. Remaining integrators (<code>RK4</code>, <code>DoPri45</code>) and the WHAT
+axis (<code>ModelConfig</code>/<code>MeshConfig</code>/<code>BoundaryConditionConfig</code>) are tracked
+as follow-up, not blocking this issue’s closure (per #104’s own stated
+scope). <code>newton_convergence</code>/<code>jacobian_strategy</code>/<code>max_iterations</code>
+(DD-044, <a href="https://github.com/biface/oxiflow/issues/114">#114</a>/<a href="https://github.com/biface/oxiflow/issues/115">#115</a>/<a href="https://github.com/biface/oxiflow/issues/116">#116</a>) extend all three variants — the Newton
+configuration is orthogonal to which integrator carries it.</p>
+<p>The sparse backend itself is always <a href="../sparse/struct.FaerSparseSolver.html" title="struct oxiflow::solver::sparse::FaerSparseSolver"><code>FaerSparseSolver</code></a> — a fixed,
+non-configurable choice: <code>Box&lt;dyn SparseLinearSolver&gt;</code> is a trait
+object and cannot be deserialised, so there is no way for a config file
+to name an arbitrary backend (see #104’s discussion of this
+constraint).</p>
+</div></details><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.IntegratorSpec.html" title="enum oxiflow::solver::spec::IntegratorSpec">Integrator<wbr>Spec</a></dt><dd>External DTO describing which integrator to build and with what
+parameters. See the <a href="index.html" title="mod oxiflow::solver::spec">module docs</a> for why this is not
+<code>IntegratorKind</code>, and for this increment’s deliberately narrow scope.</dd></dl></section></div></main></body></html>

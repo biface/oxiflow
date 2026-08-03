@@ -1,0 +1,39 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::gpu`"><title>oxiflow::solver::gpu - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module gpu</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.8.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module gpu</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvergpu" title="Module `solver::gpu`">Module <code>solver::gpu</code></a><ul><li><a href="#scope" title="Scope">Scope</a></li><li><a href="#what-this-module-does-not-do" title="What this module does not do">What this module does not do</a></li><li><a href="#dispatch-model-dd-045" title="Dispatch model (DD-045)">Dispatch model (DD-045)</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a></div><h1>Module <span>gpu</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/gpu/mod.rs.html#1-194">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvergpu"><a class="doc-anchor" href="#module-solvergpu">§</a>Module <code>solver::gpu</code></h2>
+<p>GPU architecture layer (DD-026, issue #73; DD-045, issue #127).</p>
+<h3 id="scope"><a class="doc-anchor" href="#scope">§</a>Scope</h3>
+<p>This module owns exactly two things, both HOW-side (never surfacing into
+<code>PhysicalModel</code>/<code>Domain</code>/<code>Scenario</code>, per DD-045):</p>
+<ol>
+<li><strong>Adapter/device acquisition</strong> (<a href="struct.GpuContext.html#method.new" title="associated function oxiflow::solver::gpu::GpuContext::new"><code>GpuContext::new</code></a>) — blocking, via
+<code>pollster</code>, with an automatic <code>HighPerformance</code> adapter preference and
+an explicit <a href="../../context/error/enum.OxiflowError.html#variant.GpuUnavailable" title="variant oxiflow::context::error::OxiflowError::GpuUnavailable"><code>OxiflowError::GpuUnavailable</code></a> on failure (never a silent
+CPU fallback — the caller decides).</li>
+<li><strong>CPU↔GPU boundary conversion</strong> (<a href="fn.to_gpu_bytes.html" title="fn oxiflow::solver::gpu::to_gpu_bytes"><code>to_gpu_bytes</code></a>) — reinterprets the
+contiguous <code>f64</code> payloads already inside <a href="../../context/value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue"><code>ContextValue</code></a> (DD-026
+INV-GPU-1) as raw bytes via <code>bytemuck::cast_slice</code>, without requiring
+<code>ContextValue</code> itself to implement <code>bytemuck::Pod</code> (its enum
+discriminant never can). Only the numeric payload is cast, not the
+enum wrapper.</li>
+</ol>
+<h3 id="what-this-module-does-not-do"><a class="doc-anchor" href="#what-this-module-does-not-do">§</a>What this module does <em>not</em> do</h3>
+<p>No compute shader (WGSL), no buffer upload/dispatch, no <code>wgpu::Device</code>
+usage beyond acquisition. Actual GPU-accelerated computation is future
+work, not part of #74/DD-045 — this module is the boundary layer those
+future kernels will sit behind.</p>
+<h3 id="dispatch-model-dd-045"><a class="doc-anchor" href="#dispatch-model-dd-045">§</a>Dispatch model (DD-045)</h3>
+<p>No configurable runtime threshold (contrast with <code>parallel</code>/DD-014): the
+<code>gpu</code> feature flag is itself the opt-in. Once compiled with <code>--features gpu</code>, <a href="struct.GpuContext.html#method.new" title="associated function oxiflow::solver::gpu::GpuContext::new"><code>GpuContext::new</code></a> is always the path taken — there is no
+CPU/GPU switch left to flip at runtime by this module.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.GpuContext.html" title="struct oxiflow::solver::gpu::GpuContext">GpuContext</a></dt><dd>Acquired GPU adapter, device and queue — the entry point of the <code>gpu</code>
+feature.</dd></dl><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.to_gpu_bytes.html" title="fn oxiflow::solver::gpu::to_gpu_bytes">to_<wbr>gpu_<wbr>bytes</a></dt><dd>Reinterprets a numeric <a href="../../context/value/enum.ContextValue.html" title="enum oxiflow::context::value::ContextValue"><code>ContextValue</code></a> payload as raw bytes, ready for
+GPU buffer upload (DD-026 INV-GPU-5).</dd></dl></section></div></main></body></html>

@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["SnapshotFormat"],"struct":["SimulationSnapshot"]};
+window.SIDEBAR_ITEMS = {"enum":["SnapshotFormat"],"fn":["read_snapshot","write_snapshot"],"struct":["SimulationSnapshot"]};

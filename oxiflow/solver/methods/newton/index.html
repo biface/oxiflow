@@ -8,11 +8,12 @@
         ]
     });">
 </script>
-</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module newton</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.7.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module newton</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodsnewton" title="Module `solver::methods::newton`">Module <code>solver::methods::newton</code></a><ul><li><a href="#why-this-exists" title="Why this exists">Why this exists</a></li><li><a href="#residual-convention" title="Residual convention">Residual convention</a></li><li><a href="#densesparse-agnosticism" title="Dense/sparse agnosticism">Dense/sparse agnosticism</a></li><li><a href="#wiring-status" title="Wiring status">Wiring status</a></li></ul></li></ul><h3><a href="#enums">Module Items</a></h3><ul class="block"><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>newton</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/newton.rs.html#1-526">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodsnewton"><a class="doc-anchor" href="#module-solvermethodsnewton">§</a>Module <code>solver::methods::newton</code></h2>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module newton</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.8.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module newton</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodsnewton" title="Module `solver::methods::newton`">Module <code>solver::methods::newton</code></a><ul><li><a href="#why-this-exists" title="Why this exists">Why this exists</a></li><li><a href="#residual-convention" title="Residual convention">Residual convention</a></li><li><a href="#densesparse-agnosticism" title="Dense/sparse agnosticism">Dense/sparse agnosticism</a></li><li><a href="#wiring-status" title="Wiring status">Wiring status</a></li></ul></li></ul><h3><a href="#enums">Module Items</a></h3><ul class="block"><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>newton</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/newton.rs.html#1-527">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodsnewton"><a class="doc-anchor" href="#module-solvermethodsnewton">§</a>Module <code>solver::methods::newton</code></h2>
 <p>Iterated Newton solver — shared, integrator-agnostic core (DD-044,
-issue #109, activating DD-033’s Option A).</p>
+issue <a href="https://github.com/biface/oxiflow/issues/109">#109</a>, activating
+DD-033’s (<a href="https://github.com/biface/oxiflow/issues/86">#86</a>) Option A).</p>
 <h3 id="why-this-exists"><a class="doc-anchor" href="#why-this-exists">§</a>Why this exists</h3>
-<p>[<code>super::implicit::theta_method_step</code>] and [<code>super::bdf2::bdf2_step</code>]
+<p><code>super::implicit::theta_method_step</code> and <code>bdf2_step</code>
 (through v0.6.0) each performed exactly <strong>one</strong> Newton-style
 correction with a frozen Jacobian — exact when the underlying
 <code>compute_physics</code> is affine in <code>u</code>, a first-order approximation
@@ -34,26 +35,26 @@ u^{n-1}}{3}$.</li>
 </ul>
 <p><code>u^{*}</code> folds in every term that doesn’t depend on the unknown <code>u</code> —
 callers compute it once, outside the loop, from already-known past
-states. [<code>residual</code>] and [<code>linear_correction</code>] are the two building
-blocks operating on this shape; [<code>solve</code>] is the generic loop wiring
+states. <code>residual</code> and <code>linear_correction</code> are the two building
+blocks operating on this shape; <code>solve</code> is the generic loop wiring
 them together with a <a href="enum.NewtonConvergence.html" title="enum oxiflow::solver::methods::newton::NewtonConvergence"><code>NewtonConvergence</code></a> criterion and a
 <a href="enum.JacobianStrategy.html" title="enum oxiflow::solver::methods::newton::JacobianStrategy"><code>JacobianStrategy</code></a>.</p>
 <h3 id="densesparse-agnosticism"><a class="doc-anchor" href="#densesparse-agnosticism">§</a>Dense/sparse agnosticism</h3>
 <p>This module knows nothing about <code>Domain</code>, <code>ContextCalculator</code>, or
-<code>faer</code> — [<code>solve</code>] is parameterised over caller-supplied closures for
+<code>faer</code> — <code>solve</code> is parameterised over caller-supplied closures for
 evaluating $f(u)$ and its Jacobian, and over <code>&amp;dyn LinearSolver</code> for
 the correction step. The existing sparse/banded dispatch
 (DD-043, <code>theta_method_step_adaptive</code>) is therefore untouched by this
 module: composing the two is <a href="../implicit/index.html" title="mod oxiflow::solver::methods::implicit"><code>super::implicit</code></a>’s concern (chantier
 2), not this one’s.</p>
 <h3 id="wiring-status"><a class="doc-anchor" href="#wiring-status">§</a>Wiring status</h3>
-<p>[<code>solve</code>] is called from
-[<code>super::implicit::theta_method_step_newton</code>] (DD-044, #111) and
-[<code>super::bdf2::bdf2_step_newton</code>] (DD-044, #112) — used respectively by
+<p><code>solve</code> is called from
+<code>super::implicit::theta_method_step_newton</code> (DD-044, <a href="https://github.com/biface/oxiflow/issues/111">#111</a>) and
+<code>super::bdf2::bdf2_step_newton</code> (DD-044, <a href="https://github.com/biface/oxiflow/issues/112">#112</a>) — used respectively by
 <a href="../backward_euler/struct.BackwardEulerSolver.html" title="struct oxiflow::solver::methods::backward_euler::BackwardEulerSolver"><code>BackwardEulerSolver</code></a>/
 <a href="../crank_nicolson/struct.CrankNicolsonSolver.html" title="struct oxiflow::solver::methods::crank_nicolson::CrankNicolsonSolver"><code>CrankNicolsonSolver</code></a> and
 <a href="../bdf2/struct.BDF2Solver.html" title="struct oxiflow::solver::methods::bdf2::BDF2Solver"><code>BDF2Solver</code></a>. <a href="../bdf2/index.html" title="mod oxiflow::solver::methods::bdf2"><code>super::bdf2</code></a>’s
 startup/bootstrap step is the one exception, unconditionally using
-[<code>super::implicit::theta_method_step</code>]’s non-configurable path — see
+<code>super::implicit::theta_method_step</code>’s non-configurable path — see
 that module’s docs.</p>
-</div></details><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.JacobianStrategy.html" title="enum oxiflow::solver::methods::newton::JacobianStrategy">Jacobian<wbr>Strategy</a></dt><dd>Jacobian refresh strategy for the iterated Newton loop ([<code>solve</code>]).</dd><dt><a class="enum" href="enum.NewtonConvergence.html" title="enum oxiflow::solver::methods::newton::NewtonConvergence">Newton<wbr>Convergence</a></dt><dd>Convergence criterion for the iterated Newton loop ([<code>solve</code>]).</dd></dl></section></div></main></body></html>
+</div></details><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.JacobianStrategy.html" title="enum oxiflow::solver::methods::newton::JacobianStrategy">Jacobian<wbr>Strategy</a></dt><dd>Jacobian refresh strategy for the iterated Newton loop (<code>solve</code>).</dd><dt><a class="enum" href="enum.NewtonConvergence.html" title="enum oxiflow::solver::methods::newton::NewtonConvergence">Newton<wbr>Convergence</a></dt><dd>Convergence criterion for the iterated Newton loop (<code>solve</code>).</dd></dl></section></div></main></body></html>

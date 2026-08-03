@@ -25,10 +25,10 @@
 <a href=#15 id=15 data-nosnippet>15</a>//! rather than [`super::implicit`]: unlike `theta_method_step_newton`,
 <a href=#16 id=16 data-nosnippet>16</a>//! which serves two solvers (Backward Euler, Crank-Nicolson), this
 <a href=#17 id=17 data-nosnippet>17</a>//! formula has exactly one consumer. It still reuses
-<a href=#18 id=18 data-nosnippet>18</a>//! [`super::implicit::finite_difference_jacobian`],
-<a href=#19 id=19 data-nosnippet>19</a>//! [`super::evaluate_derivative`], and the shared [`super::newton`] loop
-<a href=#20 id=20 data-nosnippet>20</a>//! (DD-044, #112) — the genuinely shared pieces. Unlike
-<a href=#21 id=21 data-nosnippet>21</a>//! [`super::implicit::theta_method_step`] (kept as a separate,
+<a href=#18 id=18 data-nosnippet>18</a>//! `super::implicit::finite_difference_jacobian`,
+<a href=#19 id=19 data-nosnippet>19</a>//! `super::evaluate_derivative`, and the shared [`super::newton`] loop
+<a href=#20 id=20 data-nosnippet>20</a>//! (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — the genuinely shared pieces. Unlike
+<a href=#21 id=21 data-nosnippet>21</a>//! `super::implicit::theta_method_step` (kept as a separate,
 <a href=#22 id=22 data-nosnippet>22</a>//! non-configurable wrapper for BE/CN because *production* code — this
 <a href=#23 id=23 data-nosnippet>23</a>//! module's own bootstrap step, below — calls it directly), BDF2 has no
 <a href=#24 id=24 data-nosnippet>24</a>//! such production caller for the unconfigured form: `bdf2_step_newton`
@@ -41,7 +41,7 @@
 <a href=#31 id=31 data-nosnippet>31</a>//!
 <a href=#32 id=32 data-nosnippet>32</a>//! BDF2 needs `u^{n-1}`, which doesn't exist at the very first step. When
 <a href=#33 id=33 data-nosnippet>33</a>//! `history` is empty, [`BDF2Solver::step`] falls back to a single
-<a href=#34 id=34 data-nosnippet>34</a>//! Backward Euler step (θ=1, via [`super::implicit::theta_method_step`])
+<a href=#34 id=34 data-nosnippet>34</a>//! Backward Euler step (θ=1, via `super::implicit::theta_method_step`)
 <a href=#35 id=35 data-nosnippet>35</a>//! to produce `u^1` from `u^0` — the standard bootstrap for 2-step methods.
 <a href=#36 id=36 data-nosnippet>36</a>//! From the second step onward, the real BDF2 update runs.
 <a href=#37 id=37 data-nosnippet>37</a>//!
@@ -82,7 +82,7 @@
 <a href=#72 id=72 data-nosnippet>72</a>/// scope at J4a.
 <a href=#73 id=73 data-nosnippet>73</a></span><span class="kw">pub struct </span>BDF2Solver {
 <a href=#74 id=74 data-nosnippet>74</a>    linear_solver: Box&lt;<span class="kw">dyn </span>LinearSolver&gt;,
-<a href=#75 id=75 data-nosnippet>75</a>    <span class="doccomment">/// Newton convergence criterion (DD-044, #112) — default
+<a href=#75 id=75 data-nosnippet>75</a>    <span class="doccomment">/// Newton convergence criterion (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — default
 <a href=#76 id=76 data-nosnippet>76</a>    /// [`stiff_jacobian_convergence`](super::implicit::stiff_jacobian_convergence)
 <a href=#77 id=77 data-nosnippet>77</a>    /// (deliberately looser than [`NewtonConvergence::default`] — see
 <a href=#78 id=78 data-nosnippet>78</a>    /// that function's docs for why zero-config construction needs it).
@@ -91,10 +91,10 @@
 <a href=#81 id=81 data-nosnippet>81</a>    /// [`theta_method_step`](super::implicit::theta_method_step)
 <a href=#82 id=82 data-nosnippet>82</a>    /// unconditionally, per [module docs](self).
 <a href=#83 id=83 data-nosnippet>83</a>    </span>newton_convergence: NewtonConvergence,
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="doccomment">/// Jacobian refresh strategy (DD-044, #112) — default
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="doccomment">/// Jacobian refresh strategy (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — default
 <a href=#85 id=85 data-nosnippet>85</a>    /// [`JacobianStrategy::default`] (`ModifiedFrozen`).
 <a href=#86 id=86 data-nosnippet>86</a>    </span>jacobian_strategy: JacobianStrategy,
-<a href=#87 id=87 data-nosnippet>87</a>    <span class="doccomment">/// Newton iteration budget (DD-044, #112). Default `1`: exactly the
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="doccomment">/// Newton iteration budget (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)). Default `1`: exactly the
 <a href=#88 id=88 data-nosnippet>88</a>    /// pre-DD-044 single frozen-Jacobian correction.
 <a href=#89 id=89 data-nosnippet>89</a>    </span>max_newton_iterations: usize,
 <a href=#90 id=90 data-nosnippet>90</a>}
@@ -122,7 +122,7 @@
 <a href=#112 id=112 data-nosnippet>112</a>        <span class="self">self
 <a href=#113 id=113 data-nosnippet>113</a>    </span>}
 <a href=#114 id=114 data-nosnippet>114</a>
-<a href=#115 id=115 data-nosnippet>115</a>    <span class="doccomment">/// Configures the Newton convergence criterion (DD-044, #112) — only
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="doccomment">/// Configures the Newton convergence criterion (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — only
 <a href=#116 id=116 data-nosnippet>116</a>    /// affects the real BDF2 update, not the startup/bootstrap step (see
 <a href=#117 id=117 data-nosnippet>117</a>    /// [module docs](self)).
 <a href=#118 id=118 data-nosnippet>118</a>    </span><span class="kw">pub fn </span>with_newton_convergence(<span class="kw-2">mut </span><span class="self">self</span>, newton_convergence: NewtonConvergence) -&gt; <span class="self">Self </span>{
@@ -130,13 +130,13 @@
 <a href=#120 id=120 data-nosnippet>120</a>        <span class="self">self
 <a href=#121 id=121 data-nosnippet>121</a>    </span>}
 <a href=#122 id=122 data-nosnippet>122</a>
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="doccomment">/// Configures the Jacobian refresh strategy (DD-044, #112).
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="doccomment">/// Configures the Jacobian refresh strategy (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)).
 <a href=#124 id=124 data-nosnippet>124</a>    </span><span class="kw">pub fn </span>with_jacobian_strategy(<span class="kw-2">mut </span><span class="self">self</span>, jacobian_strategy: JacobianStrategy) -&gt; <span class="self">Self </span>{
 <a href=#125 id=125 data-nosnippet>125</a>        <span class="self">self</span>.jacobian_strategy = jacobian_strategy;
 <a href=#126 id=126 data-nosnippet>126</a>        <span class="self">self
 <a href=#127 id=127 data-nosnippet>127</a>    </span>}
 <a href=#128 id=128 data-nosnippet>128</a>
-<a href=#129 id=129 data-nosnippet>129</a>    <span class="doccomment">/// Configures the Newton iteration budget (DD-044, #112) — see
+<a href=#129 id=129 data-nosnippet>129</a>    <span class="doccomment">/// Configures the Newton iteration budget (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — see
 <a href=#130 id=130 data-nosnippet>130</a>    /// [`BackwardEulerSolver::with_max_newton_iterations`](super::backward_euler::BackwardEulerSolver::with_max_newton_iterations).
 <a href=#131 id=131 data-nosnippet>131</a>    </span><span class="kw">pub fn </span>with_max_newton_iterations(<span class="kw-2">mut </span><span class="self">self</span>, max_newton_iterations: usize) -&gt; <span class="self">Self </span>{
 <a href=#132 id=132 data-nosnippet>132</a>        <span class="self">self</span>.max_newton_iterations = max_newton_iterations;
@@ -204,7 +204,7 @@
 <a href=#194 id=194 data-nosnippet>194</a><span class="doccomment">/// Same contract as the pre-DD-044 single-correction BDF2 step, routed
 <a href=#195 id=195 data-nosnippet>195</a>/// through the generic iterated Newton loop ([`newton::solve`]) with
 <a href=#196 id=196 data-nosnippet>196</a>/// caller-supplied convergence/Jacobian-strategy/iteration-budget
-<a href=#197 id=197 data-nosnippet>197</a>/// configuration (DD-044, #112) — [`BDF2Solver`] calls this directly,
+<a href=#197 id=197 data-nosnippet>197</a>/// configuration (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — [`BDF2Solver`] calls this directly,
 <a href=#198 id=198 data-nosnippet>198</a>/// passing its own configured fields. Passing `stiff_jacobian_convergence()`,
 <a href=#199 id=199 data-nosnippet>199</a>/// [`JacobianStrategy::default`], and `max_iterations = 1` reproduces the
 <a href=#200 id=200 data-nosnippet>200</a>/// pre-DD-044 behaviour exactly, matching
@@ -221,7 +221,7 @@
 <a href=#211 id=211 data-nosnippet>211</a>/// `f(u^n)` is evaluated once, at time `t`; every subsequent candidate
 <a href=#212 id=212 data-nosnippet>212</a>/// `f`/Jacobian evaluation inside the Newton loop is at time `t + dt`.
 <a href=#213 id=213 data-nosnippet>213</a></span><span class="attr">#[allow(clippy::too_many_arguments)]
-<a href=#214 id=214 data-nosnippet>214</a></span><span class="kw">fn </span>bdf2_step_newton(
+<a href=#214 id=214 data-nosnippet>214</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>bdf2_step_newton(
 <a href=#215 id=215 data-nosnippet>215</a>    domain: <span class="kw-2">&amp;</span>Domain,
 <a href=#216 id=216 data-nosnippet>216</a>    chain: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="kw">dyn </span>ContextCalculator],
 <a href=#217 id=217 data-nosnippet>217</a>    state: <span class="kw-2">&amp;mut </span>ContextValue,

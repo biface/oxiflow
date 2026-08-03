@@ -1,0 +1,47 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::sparse`"><title>oxiflow::solver::sparse - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module sparse</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.8.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module sparse</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solversparse" title="Module `solver::sparse`">Module <code>solver::sparse</code></a><ul><li><a href="#why-a-sibling-trait-not-an-extension-of-linearsolver" title="Why a sibling trait, not an extension of `LinearSolver`">Why a sibling trait, not an extension of <code>LinearSolver</code></a></li><li><a href="#verification-status" title="Verification status">Verification status</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#traits" title="Traits">Traits</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a></div><h1>Module <span>sparse</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/sparse.rs.html#1-194">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solversparse"><a class="doc-anchor" href="#module-solversparse">§</a>Module <code>solver::sparse</code></h2>
+<p>Sparse linear system solver abstraction — DD-013 (second phase), DD-043.</p>
+<p><strong><code>#[cfg(feature = "sparse")]</code> only</strong> — this module does not exist in a
+build without the <code>sparse</code> feature, and links no <code>faer</code> code in that
+case (zero overhead for the cas simple, same posture as <code>parallel</code>/
+<code>serde</code>/<code>hdf5</code>).</p>
+<h3 id="why-a-sibling-trait-not-an-extension-of-linearsolver"><a class="doc-anchor" href="#why-a-sibling-trait-not-an-extension-of-linearsolver">§</a>Why a sibling trait, not an extension of <code>LinearSolver</code></h3>
+<p><a href="../linear/trait.LinearSolver.html#tymethod.solve" title="method oxiflow::solver::linear::LinearSolver::solve"><code>crate::solver::linear::LinearSolver::solve</code></a> takes <code>&amp;DMatrix&lt;f64&gt;</code> — a
+dense <code>nalgebra</code> type. <code>faer</code>’s sparse column matrix
+(<code>faer::sparse::SparseColMat</code>) is structurally incompatible with
+<code>DMatrix</code> without a conversion that would erase the memory benefit
+sparsity exists to provide in the first place. <code>SparseLinearSolver</code>
+therefore has its own <code>solve()</code> signature over the sparse type — the
+same posture as <a href="../../operators/trait.FluxDivergenceOperator.html" title="trait oxiflow::operators::FluxDivergenceOperator"><code>crate::operators::FluxDivergenceOperator</code></a> relative to
+<a href="../../operators/trait.DiscreteOperator.html" title="trait oxiflow::operators::DiscreteOperator"><code>crate::operators::DiscreteOperator</code></a> (DD-039): a sibling trait when
+the two signatures genuinely diverge, not a sub-trait forcing one onto
+the other (DD-043, “Décision — forme du trait”, option C).</p>
+<p><code>b</code> and the return value stay <code>nalgebra::DVector&lt;f64&gt;</code> — consistent with
+the rest of the codebase; converting to/from <code>faer</code>’s own vector
+representation is the implementation’s job (<a href="struct.FaerSparseSolver.html" title="struct oxiflow::solver::sparse::FaerSparseSolver"><code>FaerSparseSolver</code></a>), a
+negligible cost next to the sparse factorization itself.</p>
+<h3 id="verification-status"><a class="doc-anchor" href="#verification-status">§</a>Verification status</h3>
+<p><strong>Written without a working Rust toolchain for the <code>sparse</code> feature</strong> —
+this environment’s <code>rustc</code>/<code>cargo</code> cannot resolve <code>faer</code>’s own
+dependency graph (<code>edition2024</code> requirement upstream, unavailable
+here). The exact <code>faer</code> 0.24 API surface used below (method names,
+error types, <code>Triplet</code> construction) is transcribed from the
+architecture notes carried over from the interrupted session
+(<code>prompt_next_session.md</code>) and general <code>faer</code> familiarity, <strong>not
+confirmed against a real compile</strong>. Before relying on this module:
+<code>cargo doc --open -p faer --features sparse</code> (or the docs.rs page for
+<code>faer</code> 0.24) to check <code>SparseColMat::try_new_from_triplets</code>, <code>Triplet</code>,
+<code>sp_lu()</code>’s error type in particular — this file treats that error as
+<code>impl Debug</code> via <code>{e:?}</code> deliberately, never matched on a specific
+variant, so a signature mismatch there is the most likely first
+compile error.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.FaerSparseSolver.html" title="struct oxiflow::solver::sparse::FaerSparseSolver">Faer<wbr>Sparse<wbr>Solver</a></dt><dd>Default sparse backend — LU factorization via <code>faer</code>.</dd></dl><h2 id="traits" class="section-header">Traits<a href="#traits" class="anchor">§</a></h2><dl class="item-table"><dt><a class="trait" href="trait.SparseLinearSolver.html" title="trait oxiflow::solver::sparse::SparseLinearSolver">Sparse<wbr>Linear<wbr>Solver</a></dt><dd>Solves a sparse linear system <code>A * x = b</code>.</dd></dl></section></div></main></body></html>

@@ -31,13 +31,13 @@
 <a href=#21 id=21 data-nosnippet>21</a>//!
 <a href=#22 id=22 data-nosnippet>22</a>//! where $f = \text{compute\_physics}(u, \text{ctx})$, evaluated on a state
 <a href=#23 id=23 data-nosnippet>23</a>//! that has had boundary conditions enforced for *that* stage — see
-<a href=#24 id=24 data-nosnippet>24</a>//! [`super::evaluate_derivative`].
+<a href=#24 id=24 data-nosnippet>24</a>//! `super::evaluate_derivative`.
 <a href=#25 id=25 data-nosnippet>25</a>//!
 <a href=#26 id=26 data-nosnippet>26</a>//! ## Boundary conditions across stages
 <a href=#27 id=27 data-nosnippet>27</a>//!
 <a href=#28 id=28 data-nosnippet>28</a>//! Each of the four stages is a separate derivative evaluation, so each one
 <a href=#29 id=29 data-nosnippet>29</a>//! gets its own boundary-condition application via
-<a href=#30 id=30 data-nosnippet>30</a>//! [`super::apply_boundary_conditions`] — on `u` itself for stage 1, and on
+<a href=#30 id=30 data-nosnippet>30</a>//! `super::apply_boundary_conditions` — on `u` itself for stage 1, and on
 <a href=#31 id=31 data-nosnippet>31</a>//! the transient intermediate states (`u + scale * k_i`) for stages 2-4. A
 <a href=#32 id=32 data-nosnippet>32</a>//! Dirichlet value enforced only once per outer step would otherwise drift
 <a href=#33 id=33 data-nosnippet>33</a>//! across the intermediate evaluations.

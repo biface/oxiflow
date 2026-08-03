@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["chain","config","linear","methods","orchestrator","scenario","snapshot"],"struct":["SimulationResult"],"trait":["Solver"]};
+window.SIDEBAR_ITEMS = {"mod":["chain","config","gpu","linear","methods","orchestrator","scenario","snapshot","sparse","spec"],"struct":["SimulationResult"],"trait":["Solver"]};
