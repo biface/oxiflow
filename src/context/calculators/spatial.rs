@@ -6,6 +6,17 @@
 //! delegate their stencil math to `operators::fd`'s `compute_from_dx`
 //! functions (#47, FD delegation refactor) — see that module's documentation
 //! for why the delegation bypasses `DiscreteOperator::apply()` itself.
+//!
+//! ## `parallel_threshold` via `solver::parallel::ParallelThreshold` (DD-014, DD-048)
+//!
+//! Both calculators hold a
+//! [`ParallelThreshold`](crate::solver::parallel::ParallelThreshold) field
+//! rather than reimplementing the atomic/sentinel/guard mechanism
+//! themselves — extracted into that shared type after this module wrote
+//! it twice, verbatim, on `FDGradientCalculator` and `FDLaplacianCalculator`.
+//! See that module's documentation for the full rationale (per-instance vs.
+//! chrom-rs's process-wide `static`, the `0`-as-sentinel design, why no
+//! trait is imposed on `ContextCalculator` for this).
 
 use std::sync::Arc;
 
@@ -18,6 +29,8 @@ use crate::context::variable::ContextVariable;
 use crate::mesh::Mesh;
 use crate::model::traits::RequiresContext;
 use crate::operators::fd::{CenteredGradient, CenteredLaplacian, Direction, UpwindGradient};
+#[cfg(feature = "parallel")]
+use crate::solver::parallel::ParallelThreshold;
 
 /// Translates `operators::fd`'s `InvalidDomain` (#47) into this calculator's
 /// `PreconditionFailed`, preserved from before the delegation refactor.
@@ -86,6 +99,10 @@ pub struct FDGradientCalculator {
     dimension: usize,
     component: Option<usize>,
     scheme: FDScheme,
+    /// Rayon dispatch threshold (DD-014, DD-048) — see
+    /// [`ParallelThreshold`]'s own docs for the sentinel/gating rationale.
+    #[cfg(feature = "parallel")]
+    parallel_threshold: ParallelThreshold,
 }
 
 impl FDGradientCalculator {
@@ -97,6 +114,14 @@ impl FDGradientCalculator {
     /// - `dimension` — spatial dimension (0 → ∂u/∂x, 1 → ∂u/∂y, …).
     /// - `component` — field component (`None` for mono-component, J1/J2 default).
     /// - `scheme` — finite-difference stencil.
+    ///
+    /// `parallel_threshold` has no override by default —
+    /// [`Self::parallel_threshold`] reports
+    /// [`operators::fd::default_parallel_threshold`](crate::operators::fd::default_parallel_threshold)
+    /// (DD-014, #51) until one is set, at construction with
+    /// [`Self::with_parallel_threshold`] or at runtime with
+    /// [`Self::set_parallel_threshold`]; both available only when the crate
+    /// is built with the `parallel` feature.
     pub fn new(
         mesh: Arc<dyn Mesh>,
         dimension: usize,
@@ -108,18 +133,60 @@ impl FDGradientCalculator {
             dimension,
             component,
             scheme,
+            #[cfg(feature = "parallel")]
+            parallel_threshold: ParallelThreshold::unset(),
         }
+    }
+
+    /// Overrides the Rayon dispatch threshold at construction time (DD-014,
+    /// #51). Only exists when the crate is built with the `parallel`
+    /// feature — mirrors `BackwardEulerSolver::with_sparse_threshold`'s
+    /// gating (DD-043).
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` — see [`ParallelThreshold::set`].
+    #[cfg(feature = "parallel")]
+    pub fn with_parallel_threshold(self, threshold: usize) -> Self {
+        self.parallel_threshold.set(threshold);
+        self
+    }
+
+    /// Reconfigures the Rayon dispatch threshold at runtime, through `&self`
+    /// — no rebuild required, unlike a consuming builder. Scoped to this
+    /// instance (see [`ParallelThreshold`]'s docs for why, vs. chrom-rs's
+    /// process-wide `set_parallel_threshold()`). Only exists when the crate
+    /// is built with the `parallel` feature.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` (see [`ParallelThreshold::set`]).
+    #[cfg(feature = "parallel")]
+    pub fn set_parallel_threshold(&self, threshold: usize) {
+        self.parallel_threshold.set(threshold);
+    }
+
+    /// Returns the effective Rayon dispatch threshold — the configured
+    /// override if one was set, otherwise
+    /// [`operators::fd::default_parallel_threshold`](crate::operators::fd::default_parallel_threshold)
+    /// resolved on demand. Only exists when the crate is built with the
+    /// `parallel` feature.
+    #[cfg(feature = "parallel")]
+    pub fn parallel_threshold(&self) -> usize {
+        self.parallel_threshold
+            .get(crate::operators::fd::default_parallel_threshold())
     }
 }
 
 impl std::fmt::Debug for FDGradientCalculator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FDGradientCalculator")
-            .field("dimension", &self.dimension)
+        let mut s = f.debug_struct("FDGradientCalculator");
+        s.field("dimension", &self.dimension)
             .field("component", &self.component)
-            .field("scheme", &self.scheme)
-            .field("mesh_n_dof", &self.mesh.n_dof())
-            .finish()
+            .field("scheme", &self.scheme);
+        #[cfg(feature = "parallel")]
+        s.field("parallel_threshold", &self.parallel_threshold());
+        s.field("mesh_n_dof", &self.mesh.n_dof()).finish()
     }
 }
 
@@ -155,11 +222,39 @@ impl ContextCalculator for FDGradientCalculator {
         // `&UniformGrid1D` that `DiscreteOperator::apply()` requires, so the
         // mesh-free `compute_from_dx` entry point is used directly instead
         // (see `operators::fd`'s module documentation for why).
+        //
+        // The match itself is duplicated per cfg, not just its threshold
+        // input (DD-014, #51): `compute_from_dx`'s arity differs by feature
+        // (see `operators::fd`), so a single match sharing one `threshold`
+        // binding would either not compile without `parallel`, or compute a
+        // threshold nobody reads — the earlier version of this method did
+        // exactly that.
+        #[cfg(feature = "parallel")]
+        let grad = {
+            let threshold = self.parallel_threshold();
+            match self.scheme {
+                FDScheme::Forward => {
+                    UpwindGradient::compute_from_dx(u, dx, Direction::Forward, threshold)
+                }
+                FDScheme::Backward => {
+                    UpwindGradient::compute_from_dx(u, dx, Direction::Backward, threshold)
+                }
+                FDScheme::Central => CenteredGradient::compute_from_dx(u, dx, threshold),
+                // J5+: higher-order stencils will be added here.
+                #[allow(unreachable_patterns)]
+                _ => {
+                    return Err(OxiflowError::PreconditionFailed {
+                        context: "FDGradientCalculator",
+                        message: "unsupported FDScheme variant".to_string(),
+                    })
+                }
+            }
+        };
+        #[cfg(not(feature = "parallel"))]
         let grad = match self.scheme {
             FDScheme::Forward => UpwindGradient::compute_from_dx(u, dx, Direction::Forward),
             FDScheme::Backward => UpwindGradient::compute_from_dx(u, dx, Direction::Backward),
             FDScheme::Central => CenteredGradient::compute_from_dx(u, dx),
-            // J5+: higher-order stencils will be added here.
             #[allow(unreachable_patterns)]
             _ => {
                 return Err(OxiflowError::PreconditionFailed {
@@ -167,8 +262,9 @@ impl ContextCalculator for FDGradientCalculator {
                     message: "unsupported FDScheme variant".to_string(),
                 })
             }
-        }
-        .map_err(|e| translate_domain_error(e, "FDGradientCalculator"))?;
+        };
+
+        let grad = grad.map_err(|e| translate_domain_error(e, "FDGradientCalculator"))?;
 
         Ok(ContextValue::ScalarField(grad))
     }
@@ -223,6 +319,10 @@ impl ContextCalculator for FDGradientCalculator {
 pub struct FDLaplacianCalculator {
     mesh: Arc<dyn Mesh>,
     variable: ContextVariable,
+    /// Rayon dispatch threshold (DD-014, DD-048) — see
+    /// [`ParallelThreshold`]'s own docs for the sentinel/gating rationale.
+    #[cfg(feature = "parallel")]
+    parallel_threshold: ParallelThreshold,
 }
 
 impl FDLaplacianCalculator {
@@ -233,17 +333,68 @@ impl FDLaplacianCalculator {
     /// - `mesh` — shared mesh reference (INV-1 compliant).
     /// - `variable` — the `ContextVariable` this calculator provides, typically
     ///   `ContextVariable::External { name: "laplacian".into() }`.
+    ///
+    /// `parallel_threshold` has no override by default —
+    /// [`Self::parallel_threshold`] reports
+    /// [`operators::fd::default_parallel_threshold`](crate::operators::fd::default_parallel_threshold)
+    /// (DD-014, #51) until one is set, at construction with
+    /// [`Self::with_parallel_threshold`] or at runtime with
+    /// [`Self::set_parallel_threshold`]; both available only when the crate
+    /// is built with the `parallel` feature.
     pub fn new(mesh: Arc<dyn Mesh>, variable: ContextVariable) -> Self {
-        Self { mesh, variable }
+        Self {
+            mesh,
+            variable,
+            #[cfg(feature = "parallel")]
+            parallel_threshold: ParallelThreshold::unset(),
+        }
+    }
+
+    /// Overrides the Rayon dispatch threshold at construction time (DD-014,
+    /// #51). Only exists when the crate is built with the `parallel`
+    /// feature (DD-043 gating pattern).
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` — see [`ParallelThreshold::set`].
+    #[cfg(feature = "parallel")]
+    pub fn with_parallel_threshold(self, threshold: usize) -> Self {
+        self.parallel_threshold.set(threshold);
+        self
+    }
+
+    /// Reconfigures the Rayon dispatch threshold at runtime, through `&self`
+    /// — see [`FDGradientCalculator::set_parallel_threshold`] for the
+    /// per-instance-vs-global rationale. Only exists when the crate is
+    /// built with the `parallel` feature.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` (see [`ParallelThreshold::set`]).
+    #[cfg(feature = "parallel")]
+    pub fn set_parallel_threshold(&self, threshold: usize) {
+        self.parallel_threshold.set(threshold);
+    }
+
+    /// Returns the effective Rayon dispatch threshold — the configured
+    /// override if one was set, otherwise
+    /// [`operators::fd::default_parallel_threshold`](crate::operators::fd::default_parallel_threshold)
+    /// resolved on demand. Only exists when the crate is built with the
+    /// `parallel` feature.
+    #[cfg(feature = "parallel")]
+    pub fn parallel_threshold(&self) -> usize {
+        self.parallel_threshold
+            .get(crate::operators::fd::default_parallel_threshold())
     }
 }
 
 impl std::fmt::Debug for FDLaplacianCalculator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FDLaplacianCalculator")
-            .field("variable", &self.variable)
-            .field("mesh_n_dof", &self.mesh.n_dof())
-            .finish()
+        let mut s = f.debug_struct("FDLaplacianCalculator");
+        s.field("variable", &self.variable);
+        #[cfg(feature = "parallel")]
+        s.field("parallel_threshold", &self.parallel_threshold());
+        s.field("mesh_n_dof", &self.mesh.n_dof()).finish()
     }
 }
 
@@ -272,9 +423,15 @@ impl ContextCalculator for FDLaplacianCalculator {
 
         // Delegates stencil math to `operators::fd` (#47, FD delegation
         // refactor) — see `FDGradientCalculator::compute()` above for why
-        // `compute_from_dx` is used directly rather than `apply()`.
-        let lap = CenteredLaplacian::compute_from_dx(u, dx)
-            .map_err(|e| translate_domain_error(e, "FDLaplacianCalculator"))?;
+        // `compute_from_dx` is used directly rather than `apply()`, and for
+        // why the call itself (not just its threshold argument) is split by
+        // cfg: `compute_from_dx`'s arity differs by feature.
+        #[cfg(feature = "parallel")]
+        let lap = CenteredLaplacian::compute_from_dx(u, dx, self.parallel_threshold());
+        #[cfg(not(feature = "parallel"))]
+        let lap = CenteredLaplacian::compute_from_dx(u, dx);
+
+        let lap = lap.map_err(|e| translate_domain_error(e, "FDLaplacianCalculator"))?;
 
         Ok(ContextValue::ScalarField(lap))
     }
@@ -510,5 +667,122 @@ mod tests {
         let calc = FDLaplacianCalculator::new(grid(5), laplacian_var());
         let result = calc.compute(&ContextValue::Scalar(1.0), &ctx());
         assert!(matches!(result, Err(OxiflowError::TypeMismatch { .. })));
+    }
+
+    // ── with_parallel_threshold (DD-014, #51) ─────────────────────────────────
+    //
+    // Overriding the threshold must not change the result on fields far
+    // below and far above it — only which `operators::fd` code path runs.
+    // Gated: the builder itself only exists with the `parallel` feature
+    // (mirrors `BackwardEulerSolver::with_sparse_threshold`'s gating).
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn gradient_with_parallel_threshold_does_not_change_result() {
+        let n = 5;
+        let mesh = grid(n);
+        let dx = mesh.characteristic_length();
+        let u: Vec<f64> = (0..n).map(|i| i as f64 * dx).collect();
+        let field = ContextValue::ScalarField(DVector::from_vec(u));
+
+        let default_calc = FDGradientCalculator::new(grid(n), 0, None, FDScheme::Central);
+        let forced_parallel = FDGradientCalculator::new(grid(n), 0, None, FDScheme::Central)
+            .with_parallel_threshold(1);
+
+        let default_grad = default_calc.compute(&field, &ctx()).unwrap();
+        let forced_grad = forced_parallel.compute(&field, &ctx()).unwrap();
+        assert_eq!(
+            default_grad.as_scalar_field().unwrap(),
+            forced_grad.as_scalar_field().unwrap()
+        );
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn laplacian_with_parallel_threshold_does_not_change_result() {
+        let n = 7;
+        let mesh = grid(n);
+        let dx = mesh.characteristic_length();
+        let u: Vec<f64> = (0..n).map(|i| (i as f64 * dx).powi(2)).collect();
+        let field = ContextValue::ScalarField(DVector::from_vec(u));
+
+        let default_calc = FDLaplacianCalculator::new(grid(n), laplacian_var());
+        let forced_parallel =
+            FDLaplacianCalculator::new(grid(n), laplacian_var()).with_parallel_threshold(1);
+
+        let default_lap = default_calc.compute(&field, &ctx()).unwrap();
+        let forced_lap = forced_parallel.compute(&field, &ctx()).unwrap();
+        assert_eq!(
+            default_lap.as_scalar_field().unwrap(),
+            forced_lap.as_scalar_field().unwrap()
+        );
+    }
+
+    // ── set_parallel_threshold / parallel_threshold() (DD-014, DD-048) ────────
+    //
+    // Per-instance ParallelThreshold, reconfigurable through &self — the
+    // point is that this works without rebuilding the calculator, and
+    // without touching any other instance (unlike chrom-rs's process-wide
+    // static).
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn gradient_set_parallel_threshold_is_visible_through_shared_ref() {
+        let calc = FDGradientCalculator::new(grid(5), 0, None, FDScheme::Central);
+        let default_value = calc.parallel_threshold();
+        calc.set_parallel_threshold(2048);
+        assert_eq!(calc.parallel_threshold(), 2048);
+        assert_ne!(calc.parallel_threshold(), default_value);
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    #[should_panic(expected = "parallel threshold must be at least 1")]
+    fn gradient_set_parallel_threshold_rejects_zero() {
+        FDGradientCalculator::new(grid(5), 0, None, FDScheme::Central).set_parallel_threshold(0);
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn laplacian_set_parallel_threshold_is_visible_through_shared_ref() {
+        let calc = FDLaplacianCalculator::new(grid(5), laplacian_var());
+        let default_value = calc.parallel_threshold();
+        calc.set_parallel_threshold(2048);
+        assert_eq!(calc.parallel_threshold(), 2048);
+        assert_ne!(calc.parallel_threshold(), default_value);
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    #[should_panic(expected = "parallel threshold must be at least 1")]
+    fn laplacian_set_parallel_threshold_rejects_zero() {
+        FDLaplacianCalculator::new(grid(5), laplacian_var()).set_parallel_threshold(0);
+    }
+
+    // ── 0-as-"unset" sentinel (DD-014, DD-048) ─────────────────────────────────
+    //
+    // A fresh instance has no override materialized at construction (the
+    // whole point of ParallelThreshold's design — see that module's own
+    // tests for the raw-storage detail) but still reports the module
+    // default through the public getter.
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn gradient_fresh_instance_reports_module_default() {
+        let calc = FDGradientCalculator::new(grid(5), 0, None, FDScheme::Central);
+        assert_eq!(
+            calc.parallel_threshold(),
+            crate::operators::fd::default_parallel_threshold()
+        );
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn laplacian_fresh_instance_reports_module_default() {
+        let calc = FDLaplacianCalculator::new(grid(5), laplacian_var());
+        assert_eq!(
+            calc.parallel_threshold(),
+            crate::operators::fd::default_parallel_threshold()
+        );
     }
 }
