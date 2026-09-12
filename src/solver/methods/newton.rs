@@ -329,31 +329,30 @@ mod tests {
     // against hand-written f/jacobian closures rather than a full
     // Domain/Scenario, unlike `implicit.rs`/`bdf2.rs`'s tests.
 
+    /// Boxed rather than `impl FnMut` (clippy::type_complexity on the
+    /// pair below) — `solve()` takes `impl FnMut`, which `Box<dyn FnMut>`
+    /// satisfies automatically, so boxing here costs nothing but an
+    /// allocation in test setup.
+    type StateFn = Box<dyn FnMut(&DVector<f64>) -> Result<DVector<f64>, OxiflowError>>;
+    type JacobianFn = Box<dyn FnMut(&DVector<f64>) -> Result<DMatrix<f64>, OxiflowError>>;
+
     /// f(u) = -lambda*u — affine, so a single correction is exact
     /// regardless of `max_iterations`/`jacobian_strategy`.
-    fn affine_decay(
-        lambda: f64,
-    ) -> (
-        impl FnMut(&DVector<f64>) -> Result<DVector<f64>, OxiflowError>,
-        impl FnMut(&DVector<f64>) -> Result<DMatrix<f64>, OxiflowError>,
-    ) {
+    fn affine_decay(lambda: f64) -> (StateFn, JacobianFn) {
         let f = move |u: &DVector<f64>| Ok(u.map(|v| -lambda * v));
         let jac =
             move |u: &DVector<f64>| Ok(DMatrix::<f64>::identity(u.len(), u.len()) * (-lambda));
-        (f, jac)
+        (Box::new(f), Box::new(jac))
     }
 
     /// f(u) = -u^3 — genuinely nonlinear; one frozen-Jacobian correction
     /// is only a first-order approximation, iterated Newton is needed
     /// for tight convergence.
-    fn cubic_decay() -> (
-        impl FnMut(&DVector<f64>) -> Result<DVector<f64>, OxiflowError>,
-        impl FnMut(&DVector<f64>) -> Result<DMatrix<f64>, OxiflowError>,
-    ) {
+    fn cubic_decay() -> (StateFn, JacobianFn) {
         let f = move |u: &DVector<f64>| Ok(u.map(|v| -v * v * v));
         let jac =
             move |u: &DVector<f64>| Ok(DMatrix::<f64>::from_diagonal(&u.map(|v| -3.0 * v * v)));
-        (f, jac)
+        (Box::new(f), Box::new(jac))
     }
 
     #[test]
