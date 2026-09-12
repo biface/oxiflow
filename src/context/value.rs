@@ -294,7 +294,7 @@ mod tests {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     fn scalar() -> ContextValue {
-        ContextValue::Scalar(3.14)
+        ContextValue::Scalar(std::f64::consts::PI)
     }
     fn boolean() -> ContextValue {
         ContextValue::Boolean(true)
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn as_scalar_on_scalar_returns_value() {
-        assert_eq!(scalar().as_scalar().unwrap(), 3.14);
+        assert_eq!(scalar().as_scalar().unwrap(), std::f64::consts::PI);
     }
 
     #[test]

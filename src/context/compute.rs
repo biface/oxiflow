@@ -218,8 +218,8 @@ mod tests {
 
     #[test]
     fn time_returns_correct_value() {
-        let ctx = ComputeContext::new(3.14, 0.001);
-        assert_eq!(ctx.time(), 3.14);
+        let ctx = ComputeContext::new(std::f64::consts::PI, 0.001);
+        assert_eq!(ctx.time(), std::f64::consts::PI);
     }
 
     #[test]

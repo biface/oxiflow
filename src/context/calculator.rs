@@ -207,11 +207,11 @@ mod tests {
 
     #[test]
     fn time_calculator_returns_current_time() {
-        let ctx = ComputeContext::new(3.14, 0.01);
+        let ctx = ComputeContext::new(std::f64::consts::PI, 0.01);
         let result = TimeCalculator
             .compute(&ContextValue::Scalar(0.0), &ctx)
             .unwrap();
-        assert_eq!(result.as_scalar().unwrap(), 3.14);
+        assert_eq!(result.as_scalar().unwrap(), std::f64::consts::PI);
     }
 
     #[test]

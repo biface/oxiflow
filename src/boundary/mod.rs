@@ -519,12 +519,14 @@ mod tests {
 
     #[test]
     fn boxed_bc_can_be_applied() {
-        let bc: Box<dyn BoundaryCondition> = Box::new(FixedInletBC { value: 3.14 });
+        let bc: Box<dyn BoundaryCondition> = Box::new(FixedInletBC {
+            value: std::f64::consts::PI,
+        });
         let mesh = make_mesh();
         let mut state = make_state(mesh.n_dof());
         let ctx = ComputeContext::new(0.0, 0.01);
         assert!(bc.apply(&mut state, &ctx, &mesh).is_ok());
-        assert!((state[0] - 3.14).abs() < 1e-12);
+        assert!((state[0] - std::f64::consts::PI).abs() < 1e-12);
     }
 
     // ── boundary_type() ───────────────────────────────────────────────────────
