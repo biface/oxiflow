@@ -147,7 +147,7 @@ impl CouplingOperator for MassTransfer {
         let source = states
             .get(interface.source(), &quantity)
             .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context: "MassTransfer".into(),
+                context: "MassTransfer",
                 message: format!(
                     "source domain '{}' has no Concentration field",
                     interface.source()
@@ -157,7 +157,7 @@ impl CouplingOperator for MassTransfer {
         let target = states
             .get(interface.target(), &quantity)
             .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context: "MassTransfer".into(),
+                context: "MassTransfer",
                 message: format!(
                     "target domain '{}' has no Concentration field",
                     interface.target()

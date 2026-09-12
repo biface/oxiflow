@@ -151,7 +151,7 @@ impl CouplingOperator for MassTransferCoupling {
         let source_field = states
             .get(source_id, &quantity)
             .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context: "MassTransferCoupling".into(),
+                context: "MassTransferCoupling",
                 message: format!("source domain '{}' has no Concentration field", source_id),
             })?
             .as_scalar_field()?;
