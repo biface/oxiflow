@@ -131,14 +131,14 @@ impl CouplingOperator for MassTransfer {
         let source = states
             .get(interface.source(), &quantity)
             .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context: "MassTransfer".into(),
+                context: "MassTransfer",
                 message: "missing source field".into(),
             })?
             .as_scalar_field()?;
         let target = states
             .get(interface.target(), &quantity)
             .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context: "MassTransfer".into(),
+                context: "MassTransfer",
                 message: "missing target field".into(),
             })?
             .as_scalar_field()?;
