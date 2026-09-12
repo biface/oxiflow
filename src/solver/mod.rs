@@ -29,6 +29,8 @@ pub mod gpu;
 pub mod linear;
 pub mod methods;
 pub mod orchestrator;
+#[cfg(feature = "parallel")]
+pub mod parallel;
 pub mod scenario;
 pub mod snapshot;
 #[cfg(feature = "sparse")]
