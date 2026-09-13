@@ -163,22 +163,74 @@ impl FluxDivergenceOperator for AdaptiveFlux {
 
         // Same stencil footprint and margins as WENO3 — see the module doc.
         let div = match &self.boundary {
-            FluxBoundary::Periodic => periodic_wide_divergence(u, dx, 3, "AdaptiveFlux", face)?,
+            FluxBoundary::Periodic => {
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    periodic_wide_divergence(u, dx, 3, "AdaptiveFlux", threshold, face)?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    periodic_wide_divergence(u, dx, 3, "AdaptiveFlux", face)?
+                }
+            }
             FluxBoundary::Truncation => {
                 let (margin_left, margin_right) =
                     if self.velocity >= 0.0 { (1, 1) } else { (0, 2) };
-                truncated_wide_divergence(u, dx, margin_left, margin_right, "AdaptiveFlux", face)?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    truncated_wide_divergence(
+                        u,
+                        dx,
+                        margin_left,
+                        margin_right,
+                        "AdaptiveFlux",
+                        threshold,
+                        face,
+                    )?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    truncated_wide_divergence(
+                        u,
+                        dx,
+                        margin_left,
+                        margin_right,
+                        "AdaptiveFlux",
+                        face,
+                    )?
+                }
             }
             FluxBoundary::GhostCell(left_bc, right_bc) => {
                 let margins = if self.velocity >= 0.0 { (2, 1) } else { (1, 2) };
-                ghost_cell_wide_divergence(
-                    u,
-                    dx,
-                    margins,
-                    (left_bc.as_ref(), right_bc.as_ref()),
-                    "AdaptiveFlux",
-                    face,
-                )?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    ghost_cell_wide_divergence(
+                        u,
+                        dx,
+                        margins,
+                        (left_bc.as_ref(), right_bc.as_ref()),
+                        "AdaptiveFlux",
+                        threshold,
+                        face,
+                    )?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    ghost_cell_wide_divergence(
+                        u,
+                        dx,
+                        margins,
+                        (left_bc.as_ref(), right_bc.as_ref()),
+                        "AdaptiveFlux",
+                        face,
+                    )?
+                }
             }
         };
         Ok(ContextValue::ScalarField(div))

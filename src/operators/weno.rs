@@ -296,7 +296,20 @@ impl FluxDivergenceOperator for WENO3 {
 
         let div = match &self.boundary {
             FluxBoundary::Periodic => {
-                periodic_wide_divergence(u, dx, 3, "WENO3", |u, n, i| self.face_flux(dx, u, n, i))?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    periodic_wide_divergence(u, dx, 3, "WENO3", threshold, |u, n, i| {
+                        self.face_flux(dx, u, n, i)
+                    })?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    periodic_wide_divergence(u, dx, 3, "WENO3", |u, n, i| {
+                        self.face_flux(dx, u, n, i)
+                    })?
+                }
             }
             FluxBoundary::Truncation => {
                 // weno3_left reads {i-1, i, i+1} (margin_left=1, margin_right=1);
@@ -305,9 +318,31 @@ impl FluxDivergenceOperator for WENO3 {
                 // boundary zone tracks the reconstruction actually selected.
                 let (margin_left, margin_right) =
                     if self.velocity >= 0.0 { (1, 1) } else { (0, 2) };
-                truncated_wide_divergence(u, dx, margin_left, margin_right, "WENO3", |u, n, i| {
-                    self.face_flux(dx, u, n, i)
-                })?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    truncated_wide_divergence(
+                        u,
+                        dx,
+                        margin_left,
+                        margin_right,
+                        "WENO3",
+                        threshold,
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    truncated_wide_divergence(
+                        u,
+                        dx,
+                        margin_left,
+                        margin_right,
+                        "WENO3",
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
             }
             FluxBoundary::GhostCell(left_bc, right_bc) => {
                 // NOT the same margins as Truncation: computing face_flux(-1)
@@ -317,14 +352,31 @@ impl FluxDivergenceOperator for WENO3 {
                 // (the rightmost face actually needed, face_flux(n-1), is
                 // the same one Truncation's own safe-range derivation uses).
                 let margins = if self.velocity >= 0.0 { (2, 1) } else { (1, 2) };
-                ghost_cell_wide_divergence(
-                    u,
-                    dx,
-                    margins,
-                    (left_bc.as_ref(), right_bc.as_ref()),
-                    "WENO3",
-                    |u, n, i| self.face_flux(dx, u, n, i),
-                )?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    ghost_cell_wide_divergence(
+                        u,
+                        dx,
+                        margins,
+                        (left_bc.as_ref(), right_bc.as_ref()),
+                        "WENO3",
+                        threshold,
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    ghost_cell_wide_divergence(
+                        u,
+                        dx,
+                        margins,
+                        (left_bc.as_ref(), right_bc.as_ref()),
+                        "WENO3",
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
             }
         };
         Ok(ContextValue::ScalarField(div))
@@ -402,29 +454,81 @@ impl FluxDivergenceOperator for WENO5 {
 
         let div = match &self.boundary {
             FluxBoundary::Periodic => {
-                periodic_wide_divergence(u, dx, 5, "WENO5", |u, n, i| self.face_flux(dx, u, n, i))?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    periodic_wide_divergence(u, dx, 5, "WENO5", threshold, |u, n, i| {
+                        self.face_flux(dx, u, n, i)
+                    })?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    periodic_wide_divergence(u, dx, 5, "WENO5", |u, n, i| {
+                        self.face_flux(dx, u, n, i)
+                    })?
+                }
             }
             FluxBoundary::Truncation => {
                 // weno5_left reads {i-2..i+2} (margin_left=2, margin_right=2);
                 // weno5_right reads {i-1..i+3} (margin_left=1, margin_right=3).
                 let (margin_left, margin_right) =
                     if self.velocity >= 0.0 { (2, 2) } else { (1, 3) };
-                truncated_wide_divergence(u, dx, margin_left, margin_right, "WENO5", |u, n, i| {
-                    self.face_flux(dx, u, n, i)
-                })?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    truncated_wide_divergence(
+                        u,
+                        dx,
+                        margin_left,
+                        margin_right,
+                        "WENO5",
+                        threshold,
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    truncated_wide_divergence(
+                        u,
+                        dx,
+                        margin_left,
+                        margin_right,
+                        "WENO5",
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
             }
             FluxBoundary::GhostCell(left_bc, right_bc) => {
                 // See WENO3's GhostCell arm for why margin_left = Truncation's
                 // margin_left + 1 here, margin_right unchanged.
                 let margins = if self.velocity >= 0.0 { (3, 2) } else { (2, 3) };
-                ghost_cell_wide_divergence(
-                    u,
-                    dx,
-                    margins,
-                    (left_bc.as_ref(), right_bc.as_ref()),
-                    "WENO5",
-                    |u, n, i| self.face_flux(dx, u, n, i),
-                )?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    ghost_cell_wide_divergence(
+                        u,
+                        dx,
+                        margins,
+                        (left_bc.as_ref(), right_bc.as_ref()),
+                        "WENO5",
+                        threshold,
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    ghost_cell_wide_divergence(
+                        u,
+                        dx,
+                        margins,
+                        (left_bc.as_ref(), right_bc.as_ref()),
+                        "WENO5",
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
             }
         };
         Ok(ContextValue::ScalarField(div))

@@ -224,33 +224,78 @@ impl FluxDivergenceOperator for LimitedFlux {
 
         let div = match &self.boundary {
             FluxBoundary::Periodic => {
-                periodic_wide_divergence(u, dx, 3, "LimitedFlux", |u, n, i| {
-                    self.face_flux(dx, u, n, i)
-                })?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    periodic_wide_divergence(u, dx, 3, "LimitedFlux", threshold, |u, n, i| {
+                        self.face_flux(dx, u, n, i)
+                    })?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    periodic_wide_divergence(u, dx, 3, "LimitedFlux", |u, n, i| {
+                        self.face_flux(dx, u, n, i)
+                    })?
+                }
             }
             FluxBoundary::Truncation => {
                 // Same stencil footprint as WENO3 — see the module doc.
                 let (margin_left, margin_right) =
                     if self.velocity >= 0.0 { (1, 1) } else { (0, 2) };
-                truncated_wide_divergence(
-                    u,
-                    dx,
-                    margin_left,
-                    margin_right,
-                    "LimitedFlux",
-                    |u, n, i| self.face_flux(dx, u, n, i),
-                )?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    truncated_wide_divergence(
+                        u,
+                        dx,
+                        margin_left,
+                        margin_right,
+                        "LimitedFlux",
+                        threshold,
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    truncated_wide_divergence(
+                        u,
+                        dx,
+                        margin_left,
+                        margin_right,
+                        "LimitedFlux",
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
             }
             FluxBoundary::GhostCell(left_bc, right_bc) => {
                 let margins = if self.velocity >= 0.0 { (2, 1) } else { (1, 2) };
-                ghost_cell_wide_divergence(
-                    u,
-                    dx,
-                    margins,
-                    (left_bc.as_ref(), right_bc.as_ref()),
-                    "LimitedFlux",
-                    |u, n, i| self.face_flux(dx, u, n, i),
-                )?
+                #[cfg(feature = "parallel")]
+                let threshold = crate::operators::fd::default_parallel_threshold();
+                #[cfg(feature = "parallel")]
+                {
+                    ghost_cell_wide_divergence(
+                        u,
+                        dx,
+                        margins,
+                        (left_bc.as_ref(), right_bc.as_ref()),
+                        "LimitedFlux",
+                        threshold,
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    ghost_cell_wide_divergence(
+                        u,
+                        dx,
+                        margins,
+                        (left_bc.as_ref(), right_bc.as_ref()),
+                        "LimitedFlux",
+                        |u, n, i| self.face_flux(dx, u, n, i),
+                    )?
+                }
             }
         };
         Ok(ContextValue::ScalarField(div))
