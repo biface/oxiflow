@@ -54,6 +54,8 @@ use crate::context::value::ContextValue;
 use crate::mesh::Mesh;
 use crate::model::traits::RequiresContext;
 use nalgebra::DVector;
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 
 /// Raw spatial differential operator (FD family) — INV-2.
 ///
@@ -264,6 +266,48 @@ pub(crate) fn wrap(i: usize, k: isize, n: usize) -> usize {
 ///
 /// `face_flux(u, n, i)` evaluates the flux at the face between node `i` and
 /// node `(i+1) % n`.
+///
+/// Two versions exist, split by `#[cfg(feature = "parallel")]` rather than
+/// one that sometimes ignores the threshold — see `operators::fv`'s
+/// `periodic_divergence` for the same split. The full `0..n` loop is the
+/// dispatch candidate here, same as `periodic_divergence`.
+#[cfg(feature = "parallel")]
+pub(crate) fn periodic_wide_divergence(
+    u: &DVector<f64>,
+    dx: f64,
+    min_nodes: usize,
+    context: &'static str,
+    parallel_threshold: usize,
+    face_flux: impl Fn(&DVector<f64>, usize, usize) -> f64 + Sync,
+) -> Result<DVector<f64>, OxiflowError> {
+    let n = u.len();
+    if n < min_nodes {
+        return Err(OxiflowError::InvalidDomain(format!(
+            "{context} requires at least {min_nodes} nodes, got {n}"
+        )));
+    }
+
+    let stencil = |i: usize| -> f64 {
+        let flux_right = face_flux(u, n, i);
+        let flux_left = face_flux(u, n, (i + n - 1) % n);
+        (flux_right - flux_left) / dx
+    };
+
+    if n >= parallel_threshold {
+        let values: Vec<f64> = (0..n).into_par_iter().map(stencil).collect();
+        return Ok(DVector::from_vec(values));
+    }
+
+    let mut div = DVector::zeros(n);
+    for i in 0..n {
+        div[i] = stencil(i);
+    }
+    Ok(div)
+}
+
+/// Sequential-only counterpart of [`periodic_wide_divergence`], compiled
+/// when the `parallel` feature is off.
+#[cfg(not(feature = "parallel"))]
 pub(crate) fn periodic_wide_divergence(
     u: &DVector<f64>,
     dx: f64,
@@ -307,6 +351,68 @@ pub(crate) fn periodic_wide_divergence(
 /// (`margin_left+1` cells on the left, `margin_right` cells on the right) —
 /// an inherent consequence of `face(i)` and `face(i−1)` both needing to be
 /// safe for cell `i`, not an asymmetry bug.
+///
+/// Only the interior loop (`safe_start..=safe_end`) is a dispatch
+/// candidate — the two boundary-fill loops copy O(margin) values, where
+/// margin is bounded by the stencil width in use (2-3 cells even for
+/// WENO5), never proportional to mesh size — not worth Rayon's overhead at
+/// any threshold this module would pick, same conclusion as
+/// `operators::fv::truncated_divergence`/`CenteredLaplacian::compute_from_dx`.
+#[cfg(feature = "parallel")]
+pub(crate) fn truncated_wide_divergence(
+    u: &DVector<f64>,
+    dx: f64,
+    margin_left: usize,
+    margin_right: usize,
+    context: &'static str,
+    parallel_threshold: usize,
+    face_flux: impl Fn(&DVector<f64>, usize, usize) -> f64 + Sync,
+) -> Result<DVector<f64>, OxiflowError> {
+    let n = u.len();
+    let min_nodes = margin_left + margin_right + 2;
+    if n < min_nodes {
+        return Err(OxiflowError::InvalidDomain(format!(
+            "{context} with FluxBoundary::Truncation requires at least {min_nodes} nodes \
+             for this upwind direction (margin_left={margin_left}, margin_right={margin_right}), \
+             got {n}"
+        )));
+    }
+
+    let safe_start = margin_left + 1;
+    let safe_end = n - 1 - margin_right; // inclusive
+
+    let interior_stencil = |i: usize| -> f64 {
+        let flux_right = face_flux(u, n, i);
+        let flux_left = face_flux(u, n, i - 1);
+        (flux_right - flux_left) / dx
+    };
+
+    let mut div = DVector::zeros(n);
+    if n >= parallel_threshold {
+        let values: Vec<f64> = (safe_start..=safe_end)
+            .into_par_iter()
+            .map(interior_stencil)
+            .collect();
+        for (offset, v) in values.into_iter().enumerate() {
+            div[safe_start + offset] = v;
+        }
+    } else {
+        for i in safe_start..=safe_end {
+            div[i] = interior_stencil(i);
+        }
+    }
+    for i in 0..safe_start {
+        div[i] = div[safe_start];
+    }
+    for i in (safe_end + 1)..n {
+        div[i] = div[safe_end];
+    }
+    Ok(div)
+}
+
+/// Sequential-only counterpart of [`truncated_wide_divergence`], compiled
+/// when the `parallel` feature is off.
+#[cfg(not(feature = "parallel"))]
 pub(crate) fn truncated_wide_divergence(
     u: &DVector<f64>,
     dx: f64,
@@ -411,6 +517,52 @@ pub(crate) fn ghost_padded_field(
 /// including the two boundary ones, reads only in-bounds data, so no
 /// separate boundary-cell code path is needed here (unlike
 /// [`truncated_wide_divergence`]): the padding does the work.
+///
+/// Two versions exist, split by `#[cfg(feature = "parallel")]` rather than
+/// one that sometimes ignores the threshold — see `operators::fv`'s
+/// `ghost_cell_divergence` for the same split. Unlike that function, the
+/// full `0..n` loop here is the dispatch candidate, with no boundary
+/// carve-out at all: the padding already makes every cell's stencil
+/// uniform. [`ghost_padded_field`] itself runs first regardless of the
+/// threshold — it is O(margin), sequential prep, not a dispatch site.
+#[cfg(feature = "parallel")]
+pub(crate) fn ghost_cell_wide_divergence(
+    u: &DVector<f64>,
+    dx: f64,
+    margins: (usize, usize),
+    bcs: (&dyn BoundaryCondition, &dyn BoundaryCondition),
+    context: &'static str,
+    parallel_threshold: usize,
+    face_flux: impl Fn(&DVector<f64>, usize, usize) -> f64 + Sync,
+) -> Result<DVector<f64>, OxiflowError> {
+    let n = u.len();
+    let margin_left = margins.0;
+    let extended = ghost_padded_field(u, dx, margins, bcs, context)?;
+    let extended = DVector::from_vec(extended);
+    let m = extended.len();
+
+    let stencil = |i: usize| -> f64 {
+        let k = i + margin_left;
+        let flux_right = face_flux(&extended, m, k);
+        let flux_left = face_flux(&extended, m, k - 1);
+        (flux_right - flux_left) / dx
+    };
+
+    if n >= parallel_threshold {
+        let values: Vec<f64> = (0..n).into_par_iter().map(stencil).collect();
+        return Ok(DVector::from_vec(values));
+    }
+
+    let mut div = DVector::zeros(n);
+    for i in 0..n {
+        div[i] = stencil(i);
+    }
+    Ok(div)
+}
+
+/// Sequential-only counterpart of [`ghost_cell_wide_divergence`], compiled
+/// when the `parallel` feature is off.
+#[cfg(not(feature = "parallel"))]
 pub(crate) fn ghost_cell_wide_divergence(
     u: &DVector<f64>,
     dx: f64,
@@ -433,4 +585,106 @@ pub(crate) fn ghost_cell_wide_divergence(
         div[i] = (flux_right - flux_left) / dx;
     }
     Ok(div)
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+//
+// The dispatch mechanism is identical regardless of which consumer's
+// face_flux is passed (WENO3/WENO5/LimitedFlux all delegate to these same
+// three functions) — tested once here at the shared-helper level, mirroring
+// operators::fd's own SEQ/PAR-driven correctness tests, rather than
+// duplicated per consumer.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A threshold no test field ever reaches — forces the sequential path.
+    #[cfg(feature = "parallel")]
+    const SEQ: usize = usize::MAX;
+    /// A threshold every non-empty test field reaches — forces the Rayon
+    /// path.
+    #[cfg(feature = "parallel")]
+    const PAR: usize = 0;
+
+    /// A representative wide-stencil face flux: reads a 3-point window
+    /// `{i-1, i, i+1}` (mirroring WENO3's footprint) with fixed weights —
+    /// enough to exercise the dispatch mechanism without needing real WENO
+    /// or limiter math, which lives in `operators::weno`/`operators::limiters`.
+    fn sample_face_flux(u: &DVector<f64>, n: usize, i: usize) -> f64 {
+        0.3 * u[wrap(i, -1, n)] + 0.5 * u[i] + 0.2 * u[wrap(i, 1, n)]
+    }
+
+    #[derive(Debug)]
+    struct FixedGhost(f64);
+
+    impl RequiresContext for FixedGhost {
+        fn required_variables(&self) -> Vec<crate::context::variable::ContextVariable> {
+            vec![]
+        }
+    }
+
+    impl BoundaryCondition for FixedGhost {
+        fn boundary_type(&self) -> crate::boundary::BoundaryType {
+            crate::boundary::BoundaryType::Dirichlet
+        }
+        fn apply(
+            &self,
+            _state: &mut DVector<f64>,
+            _ctx: &ComputeContext,
+            _mesh: &dyn Mesh,
+        ) -> Result<(), OxiflowError> {
+            Ok(())
+        }
+        fn ghost_value(&self, _depth: usize, _interior_at_depth: f64, _dx: f64) -> Option<f64> {
+            Some(self.0)
+        }
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn periodic_wide_divergence_parallel_matches_sequential() {
+        let u = DVector::from_vec((0..64).map(|i| (i as f64 * 0.1).sin()).collect());
+        let seq = periodic_wide_divergence(&u, 0.1, 3, "test", SEQ, sample_face_flux).unwrap();
+        let par = periodic_wide_divergence(&u, 0.1, 3, "test", PAR, sample_face_flux).unwrap();
+        assert_eq!(seq, par);
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn truncated_wide_divergence_parallel_matches_sequential() {
+        let u = DVector::from_vec((0..64).map(|i| (i as f64 * 0.1).sin()).collect());
+        let seq = truncated_wide_divergence(&u, 0.1, 1, 1, "test", SEQ, sample_face_flux).unwrap();
+        let par = truncated_wide_divergence(&u, 0.1, 1, 1, "test", PAR, sample_face_flux).unwrap();
+        assert_eq!(seq, par);
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn ghost_cell_wide_divergence_parallel_matches_sequential() {
+        let u = DVector::from_vec((0..64).map(|i| (i as f64 * 0.1).sin()).collect());
+        let left_bc = FixedGhost(0.0);
+        let right_bc = FixedGhost(0.0);
+        let seq = ghost_cell_wide_divergence(
+            &u,
+            0.1,
+            (1, 1),
+            (&left_bc, &right_bc),
+            "test",
+            SEQ,
+            sample_face_flux,
+        )
+        .unwrap();
+        let par = ghost_cell_wide_divergence(
+            &u,
+            0.1,
+            (1, 1),
+            (&left_bc, &right_bc),
+            "test",
+            PAR,
+            sample_face_flux,
+        )
+        .unwrap();
+        assert_eq!(seq, par);
+    }
 }
