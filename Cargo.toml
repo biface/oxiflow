@@ -130,13 +130,15 @@ gpu      = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]
 # ──────────────────────────────────────────────────────────────────────────────
 
 [dev-dependencies]
-# Benchmarks — suite prévue à v0.7.0/J5 (issue #53, encore ouverte : le
-# harness ci-dessous n'est pas encore activé, seul le crate est déclaré).
+# Benchmarks — suite #53. Un seul binaire Criterion (`oxiflow_benchmarks`),
+# les modèles individuels (diffusion_1d, puis burgers_1d/langmuir/lahar au
+# fur et à mesure de #137-#139) vivent chacun dans leur propre fichier sous
+# benches/, regroupés via `mod` depuis le point d'entrée.
 criterion = { version = "0.8", features = ["html_reports"] }
 
-# [[bench]]
-# name    = "oxiflow_benchmarks"
-# harness = false
+[[bench]]
+name    = "oxiflow_benchmarks"
+harness = false
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Définition du package / Package specification
