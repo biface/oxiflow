@@ -365,10 +365,16 @@ impl CenteredLaplacian {
         let interior_stencil = |i: usize| -> f64 { (u[i - 1] - 2.0 * u[i] + u[i + 1]) / dx2 };
 
         if n >= parallel_threshold {
-            let values: Vec<f64> = (1..n - 1).into_par_iter().map(interior_stencil).collect();
-            for (offset, v) in values.into_iter().enumerate() {
-                lap[1 + offset] = v;
-            }
+            // Writes directly into lap's interior slice in parallel -- no
+            // temporary Vec, no separate sequential copy pass afterward
+            // (sub-issue of #136: collect()-into-a-Vec then copy-into-lap
+            // was large enough to erase the entire parallel benefit at
+            // every problem size tested on real multi-core hardware, not
+            // just a theoretical inefficiency).
+            lap.as_mut_slice()[1..n - 1]
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(offset, slot)| *slot = interior_stencil(1 + offset));
             return Ok(lap);
         }
 
