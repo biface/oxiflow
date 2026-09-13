@@ -165,10 +165,13 @@ pub(crate) fn truncated_divergence(
 
     let mut div = DVector::zeros(n);
     if n >= parallel_threshold {
-        let values: Vec<f64> = (1..n - 1).into_par_iter().map(interior_stencil).collect();
-        for (offset, v) in values.into_iter().enumerate() {
-            div[1 + offset] = v;
-        }
+        // Direct write into div's interior slice -- no temporary Vec, no
+        // separate sequential copy pass (sub-issue of #136 -- see
+        // CenteredLaplacian::compute_from_dx's equivalent fix).
+        div.as_mut_slice()[1..n - 1]
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(offset, slot)| *slot = interior_stencil(1 + offset));
     } else {
         for i in 1..n - 1 {
             div[i] = interior_stencil(i);
@@ -269,10 +272,13 @@ fn ghost_cell_divergence(
 
     let mut div = DVector::zeros(n);
     if n >= parallel_threshold {
-        let values: Vec<f64> = (1..n - 1).into_par_iter().map(interior_stencil).collect();
-        for (offset, v) in values.into_iter().enumerate() {
-            div[1 + offset] = v;
-        }
+        // Direct write into div's interior slice -- no temporary Vec, no
+        // separate sequential copy pass (sub-issue of #136 -- see
+        // CenteredLaplacian::compute_from_dx's equivalent fix).
+        div.as_mut_slice()[1..n - 1]
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(offset, slot)| *slot = interior_stencil(1 + offset));
     } else {
         for i in 1..n - 1 {
             div[i] = interior_stencil(i);
