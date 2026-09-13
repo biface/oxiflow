@@ -43,6 +43,8 @@
 //! [`UniformGrid1D`]: crate::mesh::structured::UniformGrid1D
 
 use nalgebra::DVector;
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 
 use crate::boundary::BoundaryCondition;
 use crate::context::compute::ComputeContext;
@@ -62,6 +64,49 @@ use crate::operators::{check_cfl, FluxBoundary, FluxDivergenceOperator};
 /// two neighboring cells, given their (cell-average) state values. The
 /// divergence at cell `i` is `(F_{i+1/2} − F_{i−1/2}) / dx`, with periodic
 /// wrap-around indexing (`FluxBoundary::Periodic`, see module documentation).
+///
+/// Two versions exist, split by `#[cfg(feature = "parallel")]` rather than
+/// one that sometimes ignores the threshold — see `operators::fd`'s
+/// `UpwindGradient::compute_from_dx` for the same split and its rationale.
+/// The full `0..n` loop is the dispatch candidate here (no boundary
+/// carve-out, unlike `truncated_divergence`/`ghost_cell_divergence`):
+/// periodic wrap-around gives every cell the same two-face formula.
+#[cfg(feature = "parallel")]
+pub(crate) fn periodic_divergence(
+    u: &DVector<f64>,
+    dx: f64,
+    parallel_threshold: usize,
+    face_flux: impl Fn(f64, f64) -> f64 + Sync,
+) -> Result<DVector<f64>, OxiflowError> {
+    let n = u.len();
+    if n < 2 {
+        return Err(OxiflowError::InvalidDomain(format!(
+            "finite-volume flux requires at least 2 cells, got {n}"
+        )));
+    }
+
+    let stencil = |i: usize| -> f64 {
+        let next = (i + 1) % n;
+        let prev = (i + n - 1) % n;
+        (face_flux(u[i], u[next]) - face_flux(u[prev], u[i])) / dx
+    };
+
+    if n >= parallel_threshold {
+        let values: Vec<f64> = (0..n).into_par_iter().map(stencil).collect();
+        return Ok(DVector::from_vec(values));
+    }
+
+    let mut div = DVector::zeros(n);
+    for i in 0..n {
+        div[i] = stencil(i);
+    }
+    Ok(div)
+}
+
+/// Sequential-only counterpart of [`periodic_divergence`], compiled when the
+/// `parallel` feature is off — no threshold parameter, mirroring
+/// `UpwindGradient::compute_from_dx`'s equivalent split.
+#[cfg(not(feature = "parallel"))]
 pub(crate) fn periodic_divergence(
     u: &DVector<f64>,
     dx: f64,
@@ -96,6 +141,47 @@ pub(crate) fn periodic_divergence(
 /// documentation for why this mirrors `operators::fd`'s existing boundary
 /// posture. Requires at least 3 cells: 2 boundary cells plus 1 interior cell
 /// to borrow from.
+///
+/// Only the interior loop (`1..n-1`) is a dispatch candidate — the two
+/// boundary values are O(1) copies, not worth Rayon's overhead at any
+/// threshold this module would pick, mirroring
+/// `CenteredLaplacian::compute_from_dx`'s identical boundary/interior split.
+#[cfg(feature = "parallel")]
+pub(crate) fn truncated_divergence(
+    u: &DVector<f64>,
+    dx: f64,
+    parallel_threshold: usize,
+    face_flux: impl Fn(f64, f64) -> f64 + Sync,
+) -> Result<DVector<f64>, OxiflowError> {
+    let n = u.len();
+    if n < 3 {
+        return Err(OxiflowError::InvalidDomain(format!(
+            "finite-volume flux with FluxBoundary::Truncation requires at least 3 cells, got {n}"
+        )));
+    }
+
+    let interior_stencil =
+        |i: usize| -> f64 { (face_flux(u[i], u[i + 1]) - face_flux(u[i - 1], u[i])) / dx };
+
+    let mut div = DVector::zeros(n);
+    if n >= parallel_threshold {
+        let values: Vec<f64> = (1..n - 1).into_par_iter().map(interior_stencil).collect();
+        for (offset, v) in values.into_iter().enumerate() {
+            div[1 + offset] = v;
+        }
+    } else {
+        for i in 1..n - 1 {
+            div[i] = interior_stencil(i);
+        }
+    }
+    div[0] = div[1];
+    div[n - 1] = div[n - 2];
+    Ok(div)
+}
+
+/// Sequential-only counterpart of [`truncated_divergence`], compiled when
+/// the `parallel` feature is off.
+#[cfg(not(feature = "parallel"))]
 pub(crate) fn truncated_divergence(
     u: &DVector<f64>,
     dx: f64,
@@ -132,6 +218,74 @@ pub(crate) fn truncated_divergence(
 /// references real boundary physics. Fails explicitly if either BC does not
 /// override `ghost_value()` (still returns `None`) — no generic fallback is
 /// substituted (DD-042).
+///
+/// Only the interior loop (`1..n-1`) is a dispatch candidate — the two
+/// boundary formulas are O(1) each (one `ghost_value` lookup plus one
+/// `face_flux` call per side), not worth Rayon's overhead at any threshold
+/// this module would pick, mirroring `CenteredLaplacian::compute_from_dx`'s
+/// identical boundary/interior split.
+#[cfg(feature = "parallel")]
+fn ghost_cell_divergence(
+    u: &DVector<f64>,
+    dx: f64,
+    left_bc: &dyn BoundaryCondition,
+    right_bc: &dyn BoundaryCondition,
+    context: &'static str,
+    parallel_threshold: usize,
+    face_flux: impl Fn(f64, f64) -> f64 + Sync,
+) -> Result<DVector<f64>, OxiflowError> {
+    let n = u.len();
+    if n < 2 {
+        return Err(OxiflowError::InvalidDomain(format!(
+            "finite-volume flux requires at least 2 cells, got {n}"
+        )));
+    }
+
+    let ghost_left =
+        left_bc
+            .ghost_value(1, u[0], dx)
+            .ok_or_else(|| OxiflowError::PreconditionFailed {
+                context,
+                message: format!(
+                    "left boundary condition ({:?}) does not supply a ghost value at depth 1 — \
+                 FluxBoundary::GhostCell requires an exact ghost value, not a generic fallback",
+                    left_bc.boundary_type()
+                ),
+            })?;
+    let ghost_right =
+        right_bc
+            .ghost_value(1, u[n - 1], dx)
+            .ok_or_else(|| OxiflowError::PreconditionFailed {
+                context,
+                message: format!(
+                    "right boundary condition ({:?}) does not supply a ghost value at depth 1 — \
+                 FluxBoundary::GhostCell requires an exact ghost value, not a generic fallback",
+                    right_bc.boundary_type()
+                ),
+            })?;
+
+    let interior_stencil =
+        |i: usize| -> f64 { (face_flux(u[i], u[i + 1]) - face_flux(u[i - 1], u[i])) / dx };
+
+    let mut div = DVector::zeros(n);
+    if n >= parallel_threshold {
+        let values: Vec<f64> = (1..n - 1).into_par_iter().map(interior_stencil).collect();
+        for (offset, v) in values.into_iter().enumerate() {
+            div[1 + offset] = v;
+        }
+    } else {
+        for i in 1..n - 1 {
+            div[i] = interior_stencil(i);
+        }
+    }
+    div[0] = (face_flux(u[0], u[1]) - face_flux(ghost_left, u[0])) / dx;
+    div[n - 1] = (face_flux(u[n - 1], ghost_right) - face_flux(u[n - 2], u[n - 1])) / dx;
+    Ok(div)
+}
+
+/// Sequential-only counterpart of [`ghost_cell_divergence`], compiled when
+/// the `parallel` feature is off.
+#[cfg(not(feature = "parallel"))]
 fn ghost_cell_divergence(
     u: &DVector<f64>,
     dx: f64,
@@ -231,9 +385,34 @@ impl FluxDivergenceOperator for FVCenteredFlux {
         let d = self.diffusion;
         let face_flux = |left: f64, right: f64| v * (left + right) / 2.0 - d * (right - left) / dx;
 
+        // No per-instance override, same posture as `CenteredLaplacian`
+        // (`operators::fd`): `default_parallel_threshold()` resolved fresh
+        // on every call, not stored on `self` — keeps this struct a plain
+        // `Clone`-able value (velocity/diffusion/boundary only), at the
+        // cost of no `with_parallel_threshold` for this site specifically.
+        #[cfg(feature = "parallel")]
+        let threshold = crate::operators::fd::default_parallel_threshold();
+
         let div = match &self.boundary {
+            #[cfg(feature = "parallel")]
+            FluxBoundary::Periodic => periodic_divergence(u, dx, threshold, face_flux)?,
+            #[cfg(not(feature = "parallel"))]
             FluxBoundary::Periodic => periodic_divergence(u, dx, face_flux)?,
+            #[cfg(feature = "parallel")]
+            FluxBoundary::Truncation => truncated_divergence(u, dx, threshold, face_flux)?,
+            #[cfg(not(feature = "parallel"))]
             FluxBoundary::Truncation => truncated_divergence(u, dx, face_flux)?,
+            #[cfg(feature = "parallel")]
+            FluxBoundary::GhostCell(left_bc, right_bc) => ghost_cell_divergence(
+                u,
+                dx,
+                left_bc.as_ref(),
+                right_bc.as_ref(),
+                "FVCenteredFlux",
+                threshold,
+                face_flux,
+            )?,
+            #[cfg(not(feature = "parallel"))]
             FluxBoundary::GhostCell(left_bc, right_bc) => ghost_cell_divergence(
                 u,
                 dx,
@@ -303,9 +482,30 @@ impl FluxDivergenceOperator for FVUpwindFlux {
             advective - d * (right - left) / dx
         };
 
+        // Same posture as `FVCenteredFlux::apply` — see its comment.
+        #[cfg(feature = "parallel")]
+        let threshold = crate::operators::fd::default_parallel_threshold();
+
         let div = match &self.boundary {
+            #[cfg(feature = "parallel")]
+            FluxBoundary::Periodic => periodic_divergence(u, dx, threshold, face_flux)?,
+            #[cfg(not(feature = "parallel"))]
             FluxBoundary::Periodic => periodic_divergence(u, dx, face_flux)?,
+            #[cfg(feature = "parallel")]
+            FluxBoundary::Truncation => truncated_divergence(u, dx, threshold, face_flux)?,
+            #[cfg(not(feature = "parallel"))]
             FluxBoundary::Truncation => truncated_divergence(u, dx, face_flux)?,
+            #[cfg(feature = "parallel")]
+            FluxBoundary::GhostCell(left_bc, right_bc) => ghost_cell_divergence(
+                u,
+                dx,
+                left_bc.as_ref(),
+                right_bc.as_ref(),
+                "FVUpwindFlux",
+                threshold,
+                face_flux,
+            )?,
+            #[cfg(not(feature = "parallel"))]
             FluxBoundary::GhostCell(left_bc, right_bc) => ghost_cell_divergence(
                 u,
                 dx,
@@ -580,5 +780,57 @@ mod tests {
     fn constant_parameters_require_no_context_variables() {
         let op = FVCenteredFlux::new(1.0, 0.1, FluxBoundary::Periodic);
         assert!(op.required_variables().is_empty());
+    }
+
+    // ── Parallel dispatch (DD-048 consequence) ────────────────────────────────
+    //
+    // No per-instance threshold on FVCenteredFlux/FVUpwindFlux (chosen over
+    // a ParallelThreshold field specifically to keep both structs `Clone` —
+    // mirrors `operators::fd`'s CenteredLaplacian/UpwindGradient, which make
+    // the same trade for the same reason). So these tests call the shared
+    // helpers directly with an explicit threshold, exactly like fd.rs's own
+    // `SEQ`/`PAR`-driven correctness tests — bypassing `apply()` entirely
+    // rather than going through a struct that has nothing to override.
+
+    /// A threshold no test field ever reaches — forces the sequential path.
+    #[cfg(feature = "parallel")]
+    const SEQ: usize = usize::MAX;
+    /// A threshold every non-empty test field reaches — forces the Rayon
+    /// path.
+    #[cfg(feature = "parallel")]
+    const PAR: usize = 0;
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn periodic_divergence_parallel_matches_sequential() {
+        let u = DVector::from_vec((0..64).map(|i| (i as f64 * 0.1).sin()).collect());
+        let face_flux = |l: f64, r: f64| 0.8 * (l + r) / 2.0 - 0.05 * (r - l) / 0.1;
+        let seq = periodic_divergence(&u, 0.1, SEQ, face_flux).unwrap();
+        let par = periodic_divergence(&u, 0.1, PAR, face_flux).unwrap();
+        assert_eq!(seq, par);
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn truncated_divergence_parallel_matches_sequential() {
+        let u = DVector::from_vec((0..64).map(|i| (i as f64 * 0.1).sin()).collect());
+        let face_flux = |l: f64, r: f64| 0.8 * (l + r) / 2.0 - 0.05 * (r - l) / 0.1;
+        let seq = truncated_divergence(&u, 0.1, SEQ, face_flux).unwrap();
+        let par = truncated_divergence(&u, 0.1, PAR, face_flux).unwrap();
+        assert_eq!(seq, par);
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn ghost_cell_divergence_parallel_matches_sequential() {
+        let u = DVector::from_vec((0..64).map(|i| (i as f64 * 0.1).sin()).collect());
+        let face_flux = |l: f64, r: f64| 0.8 * (l + r) / 2.0 - 0.05 * (r - l) / 0.1;
+        let left_bc = FixedGhost(0.0);
+        let right_bc = FixedGhost(0.0);
+        let seq =
+            ghost_cell_divergence(&u, 0.1, &left_bc, &right_bc, "test", SEQ, face_flux).unwrap();
+        let par =
+            ghost_cell_divergence(&u, 0.1, &left_bc, &right_bc, "test", PAR, face_flux).unwrap();
+        assert_eq!(seq, par);
     }
 }
