@@ -21,10 +21,12 @@
 use std::hint::black_box;
 use std::sync::Arc;
 
-use criterion::Criterion;
 #[cfg(feature = "parallel")]
 use criterion::BenchmarkId;
+use criterion::Criterion;
 use nalgebra::DVector;
+#[cfg(feature = "parallel")]
+use oxiflow::context::ContextCalculator;
 use oxiflow::{
     context::{
         calculators::FDLaplacianCalculator, compute::ComputeContext, error::OxiflowError,
@@ -39,8 +41,6 @@ use oxiflow::{
         Solver, SolverConfiguration,
     },
 };
-#[cfg(feature = "parallel")]
-use oxiflow::context::ContextCalculator;
 
 fn laplacian_variable() -> ContextVariable {
     ContextVariable::External {
@@ -161,7 +161,16 @@ pub fn laplacian_dispatch(c: &mut Criterion) {
     // dispatch overhead -- these two extra sizes locate where, or
     // confirm it doesn't within a range still worth shipping a default
     // for.
-    for &n in &[1_000usize, 10_000, 100_000, 1_000_000, 3_000_000, 10_000_000, 30_000_000] {
+    for &n in &[
+        1_000usize,
+        10_000,
+        100_000,
+        1_000_000,
+        3_000_000,
+        10_000_000,
+        30_000_000,
+        100_000_000,
+    ] {
         let mesh: Arc<dyn Mesh> = Arc::new(UniformGrid1D::new(n, -1.0, 1.0).unwrap());
         let field = ContextValue::ScalarField(DVector::from_iterator(
             n,
