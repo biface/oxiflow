@@ -389,13 +389,13 @@ pub(crate) fn truncated_wide_divergence(
 
     let mut div = DVector::zeros(n);
     if n >= parallel_threshold {
-        let values: Vec<f64> = (safe_start..=safe_end)
-            .into_par_iter()
-            .map(interior_stencil)
-            .collect();
-        for (offset, v) in values.into_iter().enumerate() {
-            div[safe_start + offset] = v;
-        }
+        // Direct write into div's interior slice -- no temporary Vec, no
+        // separate sequential copy pass (sub-issue of #136 -- see
+        // CenteredLaplacian::compute_from_dx's equivalent fix).
+        div.as_mut_slice()[safe_start..=safe_end]
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(offset, slot)| *slot = interior_stencil(safe_start + offset));
     } else {
         for i in safe_start..=safe_end {
             div[i] = interior_stencil(i);
@@ -595,16 +595,14 @@ pub(crate) fn ghost_cell_wide_divergence(
 // operators::fd's own SEQ/PAR-driven correctness tests, rather than
 // duplicated per consumer.
 
-#[cfg(test)]
+#[cfg(all(test, feature = "parallel"))]
 mod tests {
     use super::*;
 
     /// A threshold no test field ever reaches — forces the sequential path.
-    #[cfg(feature = "parallel")]
     const SEQ: usize = usize::MAX;
     /// A threshold every non-empty test field reaches — forces the Rayon
     /// path.
-    #[cfg(feature = "parallel")]
     const PAR: usize = 0;
 
     /// A representative wide-stencil face flux: reads a 3-point window
@@ -641,7 +639,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "parallel")]
     #[test]
     fn periodic_wide_divergence_parallel_matches_sequential() {
         let u = DVector::from_vec((0..64).map(|i| (i as f64 * 0.1).sin()).collect());
@@ -650,7 +647,6 @@ mod tests {
         assert_eq!(seq, par);
     }
 
-    #[cfg(feature = "parallel")]
     #[test]
     fn truncated_wide_divergence_parallel_matches_sequential() {
         let u = DVector::from_vec((0..64).map(|i| (i as f64 * 0.1).sin()).collect());
@@ -659,7 +655,6 @@ mod tests {
         assert_eq!(seq, par);
     }
 
-    #[cfg(feature = "parallel")]
     #[test]
     fn ghost_cell_wide_divergence_parallel_matches_sequential() {
         let u = DVector::from_vec((0..64).map(|i| (i as f64 * 0.1).sin()).collect());
