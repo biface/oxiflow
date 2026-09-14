@@ -6,6 +6,7 @@
 //! #137/#138/#139 add a new model.
 
 mod diffusion_1d;
+mod viscous_burgers;
 
 use criterion::{criterion_group, criterion_main};
 
@@ -14,9 +15,11 @@ criterion_group!(
     benches,
     diffusion_1d::full_run,
     diffusion_1d::laplacian_dispatch,
-    diffusion_1d::raw_rayon_dispatch_diagnostic
+    diffusion_1d::raw_rayon_dispatch_diagnostic,
+    viscous_burgers::full_run,
+    viscous_burgers::combined_dispatch_diagnostic
 );
 #[cfg(not(feature = "parallel"))]
-criterion_group!(benches, diffusion_1d::full_run);
+criterion_group!(benches, diffusion_1d::full_run, viscous_burgers::full_run);
 
 criterion_main!(benches);
