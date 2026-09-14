@@ -329,6 +329,66 @@ impl ContextValue {
         }
     }
 
+    /// Computes `self + dt * other`, handling `ScalarField` and
+    /// `VectorField` uniformly.
+    ///
+    /// This is the arithmetic combination every explicit time-stepping
+    /// integrator needs (`ForwardEulerSolver`'s own `u + dt*du/dt`, and —
+    /// not yet wired in, see the consequence note below — RK4's weighted
+    /// stage combinations, BDF2's history-weighted update, etc.).
+    /// Generalizes the same way [`Self::scalar_component`] did for
+    /// calculator input extraction, but for the solver's own state-update
+    /// arithmetic rather than input extraction.
+    ///
+    /// # Consequence not yet addressed
+    ///
+    /// Every integrator in `solver::methods` (`euler`, `backward_euler`,
+    /// `crank_nicolson`, `bdf2`, `rk4`, `dopri45`, `imex`,
+    /// `implicit`/`newton`) currently hardcodes `ScalarField`-only
+    /// arithmetic in its own stepping core, discovered when #138's
+    /// `VectorField` state hit `ForwardEulerSolver`'s `euler_step` and
+    /// failed with a `TypeMismatch`. Only `euler.rs`'s `euler_step` has
+    /// been switched to this method so far -- #138 only exercises
+    /// `ForwardEulerSolver`. The other seven sites are a separate,
+    /// larger piece of work (each integrator's own combination pattern,
+    /// not just a single `u + dt*du`), tracked separately rather than
+    /// attempted here.
+    ///
+    /// # Errors
+    ///
+    /// - `OxiflowError::TypeMismatch` if `self` and `other` are different
+    ///   variants, or neither is `ScalarField`/`VectorField`.
+    /// - `OxiflowError::InvalidDomain` if their shapes don't match (length
+    ///   for `ScalarField`, `(rows, cols)` for `VectorField`).
+    pub fn add_scaled(&self, dt: f64, other: &ContextValue) -> Result<ContextValue, OxiflowError> {
+        match (self, other) {
+            (Self::ScalarField(u), Self::ScalarField(du)) => {
+                if u.len() != du.len() {
+                    return Err(OxiflowError::InvalidDomain(format!(
+                        "state length {} != derivative length {}",
+                        u.len(),
+                        du.len()
+                    )));
+                }
+                Ok(Self::ScalarField(u + du * dt))
+            }
+            (Self::VectorField(u), Self::VectorField(du)) => {
+                if u.shape() != du.shape() {
+                    return Err(OxiflowError::InvalidDomain(format!(
+                        "state shape {:?} != derivative shape {:?}",
+                        u.shape(),
+                        du.shape()
+                    )));
+                }
+                Ok(Self::VectorField(u + du * dt))
+            }
+            (a, b) => Err(OxiflowError::TypeMismatch {
+                expected: a.variant_name(),
+                actual: b.variant_name(),
+            }),
+        }
+    }
+
     // ── Type predicates ───────────────────────────────────────────────────────
 
     /// Returns `true` if this is a `Scalar`.

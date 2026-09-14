@@ -214,7 +214,7 @@ impl ContextCalculator for FDGradientCalculator {
         state: &ContextValue,
         _ctx: &ComputeContext,
     ) -> Result<ContextValue, OxiflowError> {
-        let u = state.as_scalar_field()?;
+        let u = state.scalar_component(self.component)?;
         let dx = self.mesh.characteristic_length();
 
         // Delegates stencil math to `operators::fd` (#47, FD delegation
@@ -234,12 +234,12 @@ impl ContextCalculator for FDGradientCalculator {
             let threshold = self.parallel_threshold();
             match self.scheme {
                 FDScheme::Forward => {
-                    UpwindGradient::compute_from_dx(u, dx, Direction::Forward, threshold)
+                    UpwindGradient::compute_from_dx(&u, dx, Direction::Forward, threshold)
                 }
                 FDScheme::Backward => {
-                    UpwindGradient::compute_from_dx(u, dx, Direction::Backward, threshold)
+                    UpwindGradient::compute_from_dx(&u, dx, Direction::Backward, threshold)
                 }
-                FDScheme::Central => CenteredGradient::compute_from_dx(u, dx, threshold),
+                FDScheme::Central => CenteredGradient::compute_from_dx(&u, dx, threshold),
                 // J5+: higher-order stencils will be added here.
                 #[allow(unreachable_patterns)]
                 _ => {
@@ -252,9 +252,9 @@ impl ContextCalculator for FDGradientCalculator {
         };
         #[cfg(not(feature = "parallel"))]
         let grad = match self.scheme {
-            FDScheme::Forward => UpwindGradient::compute_from_dx(u, dx, Direction::Forward),
-            FDScheme::Backward => UpwindGradient::compute_from_dx(u, dx, Direction::Backward),
-            FDScheme::Central => CenteredGradient::compute_from_dx(u, dx),
+            FDScheme::Forward => UpwindGradient::compute_from_dx(&u, dx, Direction::Forward),
+            FDScheme::Backward => UpwindGradient::compute_from_dx(&u, dx, Direction::Backward),
+            FDScheme::Central => CenteredGradient::compute_from_dx(&u, dx),
             #[allow(unreachable_patterns)]
             _ => {
                 return Err(OxiflowError::PreconditionFailed {
@@ -319,6 +319,13 @@ impl ContextCalculator for FDGradientCalculator {
 pub struct FDLaplacianCalculator {
     mesh: Arc<dyn Mesh>,
     variable: ContextVariable,
+    /// Which column of a `VectorField` state to read, or `None` for a
+    /// plain mono-component `ScalarField` — see
+    /// [`ContextValue::scalar_component`]. Defaults to `None`; set via
+    /// [`Self::with_component`] for a multi-component state (one
+    /// calculator instance per component, each with its own `variable`
+    /// tag to keep them distinct in the context store).
+    component: Option<usize>,
     /// Rayon dispatch threshold (DD-014, DD-048) — see
     /// [`ParallelThreshold`]'s own docs for the sentinel/gating rationale.
     #[cfg(feature = "parallel")]
@@ -326,7 +333,9 @@ pub struct FDLaplacianCalculator {
 }
 
 impl FDLaplacianCalculator {
-    /// Creates a new FD Laplacian calculator.
+    /// Creates a new FD Laplacian calculator, reading a plain
+    /// mono-component `ScalarField` state (`component: None`) — see
+    /// [`Self::with_component`] for a `VectorField` state.
     ///
     /// # Arguments
     ///
@@ -345,9 +354,25 @@ impl FDLaplacianCalculator {
         Self {
             mesh,
             variable,
+            component: None,
             #[cfg(feature = "parallel")]
             parallel_threshold: ParallelThreshold::unset(),
         }
+    }
+
+    /// Configures this calculator to read one column of a multi-component
+    /// `VectorField` state instead of a plain `ScalarField` (builder
+    /// style). Register one calculator instance per component, each with
+    /// its own `variable` tag (distinct `ContextVariable`s — e.g. distinct
+    /// `External { name }` values) so they don't collide in the context
+    /// store.
+    ///
+    /// See [`ContextValue::scalar_component`] for what happens if `state`
+    /// doesn't match (a `ScalarField` with a component set, or a
+    /// `VectorField` with none, or an out-of-bounds index).
+    pub fn with_component(mut self, component: usize) -> Self {
+        self.component = Some(component);
+        self
     }
 
     /// Overrides the Rayon dispatch threshold at construction time (DD-014,
@@ -392,6 +417,7 @@ impl std::fmt::Debug for FDLaplacianCalculator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = f.debug_struct("FDLaplacianCalculator");
         s.field("variable", &self.variable);
+        s.field("component", &self.component);
         #[cfg(feature = "parallel")]
         s.field("parallel_threshold", &self.parallel_threshold());
         s.field("mesh_n_dof", &self.mesh.n_dof()).finish()
@@ -418,7 +444,7 @@ impl ContextCalculator for FDLaplacianCalculator {
         state: &ContextValue,
         _ctx: &ComputeContext,
     ) -> Result<ContextValue, OxiflowError> {
-        let u = state.as_scalar_field()?;
+        let u = state.scalar_component(self.component)?;
         let dx = self.mesh.characteristic_length();
 
         // Delegates stencil math to `operators::fd` (#47, FD delegation
@@ -427,9 +453,9 @@ impl ContextCalculator for FDLaplacianCalculator {
         // why the call itself (not just its threshold argument) is split by
         // cfg: `compute_from_dx`'s arity differs by feature.
         #[cfg(feature = "parallel")]
-        let lap = CenteredLaplacian::compute_from_dx(u, dx, self.parallel_threshold());
+        let lap = CenteredLaplacian::compute_from_dx(&u, dx, self.parallel_threshold());
         #[cfg(not(feature = "parallel"))]
-        let lap = CenteredLaplacian::compute_from_dx(u, dx);
+        let lap = CenteredLaplacian::compute_from_dx(&u, dx);
 
         let lap = lap.map_err(|e| translate_domain_error(e, "FDLaplacianCalculator"))?;
 
