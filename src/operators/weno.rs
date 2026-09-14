@@ -361,7 +361,7 @@ impl FluxDivergenceOperator for WENO3 {
                         dx,
                         margins,
                         (left_bc.as_ref(), right_bc.as_ref()),
-                        "WENO3",
+                        ("WENO3", ctx),
                         threshold,
                         |u, n, i| self.face_flux(dx, u, n, i),
                     )?
@@ -373,7 +373,7 @@ impl FluxDivergenceOperator for WENO3 {
                         dx,
                         margins,
                         (left_bc.as_ref(), right_bc.as_ref()),
-                        "WENO3",
+                        ("WENO3", ctx),
                         |u, n, i| self.face_flux(dx, u, n, i),
                     )?
                 }
@@ -513,7 +513,7 @@ impl FluxDivergenceOperator for WENO5 {
                         dx,
                         margins,
                         (left_bc.as_ref(), right_bc.as_ref()),
-                        "WENO5",
+                        ("WENO5", ctx),
                         threshold,
                         |u, n, i| self.face_flux(dx, u, n, i),
                     )?
@@ -525,7 +525,7 @@ impl FluxDivergenceOperator for WENO5 {
                         dx,
                         margins,
                         (left_bc.as_ref(), right_bc.as_ref()),
-                        "WENO5",
+                        ("WENO5", ctx),
                         |u, n, i| self.face_flux(dx, u, n, i),
                     )?
                 }
@@ -583,7 +583,13 @@ mod tests {
         ) -> Result<(), OxiflowError> {
             Ok(())
         }
-        fn ghost_value(&self, _depth: usize, interior_at_depth: f64, _dx: f64) -> Option<f64> {
+        fn ghost_value(
+            &self,
+            _depth: usize,
+            interior_at_depth: f64,
+            _dx: f64,
+            _ctx: &ComputeContext,
+        ) -> Option<f64> {
             Some(2.0 * self.0 - interior_at_depth)
         }
     }

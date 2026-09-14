@@ -70,6 +70,9 @@ use nalgebra::DVector;
 pub mod danckwerts;
 pub use danckwerts::{DanckwertsInlet, DanckwertsOutlet};
 
+pub mod injection;
+pub use injection::{dirac_initial_state, InjectionInlet, TemporalInjection};
+
 // ── BoundaryType ──────────────────────────────────────────────────────────────
 
 /// Mathematical classification of a boundary condition.
@@ -326,8 +329,22 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
     /// `depth` a caller needs, must fail explicitly
     /// (`OxiflowError::PreconditionFailed`) rather than substitute an
     /// approximation of its own.
-    fn ghost_value(&self, depth: usize, interior_at_depth: f64, dx: f64) -> Option<f64> {
-        let _ = (depth, interior_at_depth, dx);
+    ///
+    /// Takes `ctx` (added alongside [`InjectionInlet`]) so a ghost value can
+    /// depend on simulation time — the two motivating cases at DD-042
+    /// (lahar-lake, Danckwerts) were both steady-state, so the original
+    /// signature had no way to express a time-varying boundary; a
+    /// competitive-adsorption inlet (chromatography) needs exactly that
+    /// (an injection profile evaluated at `ctx.time()`), not a
+    /// per-implementation special case bolted on separately.
+    fn ghost_value(
+        &self,
+        depth: usize,
+        interior_at_depth: f64,
+        dx: f64,
+        ctx: &ComputeContext,
+    ) -> Option<f64> {
+        let _ = (depth, interior_at_depth, dx, ctx);
         None
     }
 }
@@ -633,8 +650,12 @@ mod tests {
 
     #[test]
     fn ghost_value_defaults_to_none() {
-        assert_eq!(ZeroFluxBC.ghost_value(1, 2.0, 0.1), None);
-        assert_eq!(FixedInletBC { value: 0.0 }.ghost_value(2, 2.0, 0.1), None);
+        let ctx = ComputeContext::new(0.0, 0.01);
+        assert_eq!(ZeroFluxBC.ghost_value(1, 2.0, 0.1, &ctx), None);
+        assert_eq!(
+            FixedInletBC { value: 0.0 }.ghost_value(2, 2.0, 0.1, &ctx),
+            None
+        );
     }
 
     // ── Debug supertrait ──────────────────────────────────────────────────────
