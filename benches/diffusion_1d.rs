@@ -152,15 +152,12 @@ pub fn laplacian_dispatch(c: &mut Criterion) {
     let ctx = ComputeContext::new(0.0, 1e-4);
     let mut group = c.benchmark_group("diffusion_1d_laplacian_dispatch");
 
-    // Extended past 1e6 (issue: at 1e6 the ratio was still improving --
-    // 30.8x -> 5.2x -> 1.74x -> 1.63x slower as n grew -- without having
-    // crossed over yet, unlike raw_rayon_dispatch_diagnostic's heavier
-    // sin/cos-based stencil, which crosses between 1e3 and 1e4. The real
-    // Laplacian stencil measured ~12x cheaper per element there, so it
-    // needs a correspondingly larger n to amortize the same fixed Rayon
-    // dispatch overhead -- these two extra sizes locate where, or
-    // confirm it doesn't within a range still worth shipping a default
-    // for.
+    // Extended past 1e6, then past 1e7 (see BENCHMARKS.md): crossover
+    // confirmed between 1e7 (still 1.02x slower) and 3e7 (1.03x faster),
+    // plateauing around 3-4% by 1e8 -- the signature of a
+    // memory-bandwidth-bound kernel, not one still climbing toward a
+    // larger win. Sizes beyond 1e8 were not pursued further on that
+    // basis.
     for &n in &[
         1_000usize,
         10_000,
@@ -221,8 +218,8 @@ pub fn raw_rayon_dispatch_diagnostic(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("sequential", n), &n, |b, &n| {
             b.iter(|| {
                 let mut out = vec![0.0; n];
-                for i in 0..n {
-                    out[i] = stencil(i);
+                for (i, slot) in out.iter_mut().enumerate() {
+                    *slot = stencil(i);
                 }
                 black_box(out)
             })
