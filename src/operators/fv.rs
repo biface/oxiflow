@@ -231,12 +231,13 @@ pub(crate) fn truncated_divergence(
 fn ghost_cell_divergence(
     u: &DVector<f64>,
     dx: f64,
-    left_bc: &dyn BoundaryCondition,
-    right_bc: &dyn BoundaryCondition,
+    bcs: (&dyn BoundaryCondition, &dyn BoundaryCondition),
     context: &'static str,
+    ctx: &ComputeContext,
     parallel_threshold: usize,
     face_flux: impl Fn(f64, f64) -> f64 + Sync,
 ) -> Result<DVector<f64>, OxiflowError> {
+    let (left_bc, right_bc) = bcs;
     let n = u.len();
     if n < 2 {
         return Err(OxiflowError::InvalidDomain(format!(
@@ -246,7 +247,7 @@ fn ghost_cell_divergence(
 
     let ghost_left =
         left_bc
-            .ghost_value(1, u[0], dx)
+            .ghost_value(1, u[0], dx, ctx)
             .ok_or_else(|| OxiflowError::PreconditionFailed {
                 context,
                 message: format!(
@@ -255,17 +256,16 @@ fn ghost_cell_divergence(
                     left_bc.boundary_type()
                 ),
             })?;
-    let ghost_right =
-        right_bc
-            .ghost_value(1, u[n - 1], dx)
-            .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context,
-                message: format!(
-                    "right boundary condition ({:?}) does not supply a ghost value at depth 1 — \
+    let ghost_right = right_bc.ghost_value(1, u[n - 1], dx, ctx).ok_or_else(|| {
+        OxiflowError::PreconditionFailed {
+            context,
+            message: format!(
+                "right boundary condition ({:?}) does not supply a ghost value at depth 1 — \
                  FluxBoundary::GhostCell requires an exact ghost value, not a generic fallback",
-                    right_bc.boundary_type()
-                ),
-            })?;
+                right_bc.boundary_type()
+            ),
+        }
+    })?;
 
     let interior_stencil =
         |i: usize| -> f64 { (face_flux(u[i], u[i + 1]) - face_flux(u[i - 1], u[i])) / dx };
@@ -295,11 +295,12 @@ fn ghost_cell_divergence(
 fn ghost_cell_divergence(
     u: &DVector<f64>,
     dx: f64,
-    left_bc: &dyn BoundaryCondition,
-    right_bc: &dyn BoundaryCondition,
+    bcs: (&dyn BoundaryCondition, &dyn BoundaryCondition),
     context: &'static str,
+    ctx: &ComputeContext,
     face_flux: impl Fn(f64, f64) -> f64,
 ) -> Result<DVector<f64>, OxiflowError> {
+    let (left_bc, right_bc) = bcs;
     let n = u.len();
     if n < 2 {
         return Err(OxiflowError::InvalidDomain(format!(
@@ -309,7 +310,7 @@ fn ghost_cell_divergence(
 
     let ghost_left =
         left_bc
-            .ghost_value(1, u[0], dx)
+            .ghost_value(1, u[0], dx, ctx)
             .ok_or_else(|| OxiflowError::PreconditionFailed {
                 context,
                 message: format!(
@@ -318,17 +319,16 @@ fn ghost_cell_divergence(
                     left_bc.boundary_type()
                 ),
             })?;
-    let ghost_right =
-        right_bc
-            .ghost_value(1, u[n - 1], dx)
-            .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context,
-                message: format!(
-                    "right boundary condition ({:?}) does not supply a ghost value at depth 1 — \
+    let ghost_right = right_bc.ghost_value(1, u[n - 1], dx, ctx).ok_or_else(|| {
+        OxiflowError::PreconditionFailed {
+            context,
+            message: format!(
+                "right boundary condition ({:?}) does not supply a ghost value at depth 1 — \
                  FluxBoundary::GhostCell requires an exact ghost value, not a generic fallback",
-                    right_bc.boundary_type()
-                ),
-            })?;
+                right_bc.boundary_type()
+            ),
+        }
+    })?;
 
     let mut div = DVector::zeros(n);
     for i in 1..n - 1 {
@@ -412,9 +412,9 @@ impl FluxDivergenceOperator for FVCenteredFlux {
             FluxBoundary::GhostCell(left_bc, right_bc) => ghost_cell_divergence(
                 u,
                 dx,
-                left_bc.as_ref(),
-                right_bc.as_ref(),
+                (left_bc.as_ref(), right_bc.as_ref()),
                 "FVCenteredFlux",
+                ctx,
                 threshold,
                 face_flux,
             )?,
@@ -422,9 +422,9 @@ impl FluxDivergenceOperator for FVCenteredFlux {
             FluxBoundary::GhostCell(left_bc, right_bc) => ghost_cell_divergence(
                 u,
                 dx,
-                left_bc.as_ref(),
-                right_bc.as_ref(),
+                (left_bc.as_ref(), right_bc.as_ref()),
                 "FVCenteredFlux",
+                ctx,
                 face_flux,
             )?,
         };
@@ -505,9 +505,9 @@ impl FluxDivergenceOperator for FVUpwindFlux {
             FluxBoundary::GhostCell(left_bc, right_bc) => ghost_cell_divergence(
                 u,
                 dx,
-                left_bc.as_ref(),
-                right_bc.as_ref(),
+                (left_bc.as_ref(), right_bc.as_ref()),
                 "FVUpwindFlux",
+                ctx,
                 threshold,
                 face_flux,
             )?,
@@ -515,9 +515,9 @@ impl FluxDivergenceOperator for FVUpwindFlux {
             FluxBoundary::GhostCell(left_bc, right_bc) => ghost_cell_divergence(
                 u,
                 dx,
-                left_bc.as_ref(),
-                right_bc.as_ref(),
+                (left_bc.as_ref(), right_bc.as_ref()),
                 "FVUpwindFlux",
+                ctx,
                 face_flux,
             )?,
         };
@@ -572,7 +572,13 @@ mod tests {
         ) -> Result<(), OxiflowError> {
             Ok(())
         }
-        fn ghost_value(&self, _depth: usize, _interior_at_depth: f64, _dx: f64) -> Option<f64> {
+        fn ghost_value(
+            &self,
+            _depth: usize,
+            _interior_at_depth: f64,
+            _dx: f64,
+            _ctx: &ComputeContext,
+        ) -> Option<f64> {
             Some(self.0)
         }
     }
@@ -833,10 +839,13 @@ mod tests {
         let face_flux = |l: f64, r: f64| 0.8 * (l + r) / 2.0 - 0.05 * (r - l) / 0.1;
         let left_bc = FixedGhost(0.0);
         let right_bc = FixedGhost(0.0);
+        let ctx = ComputeContext::new(0.0, 0.1);
         let seq =
-            ghost_cell_divergence(&u, 0.1, &left_bc, &right_bc, "test", SEQ, face_flux).unwrap();
+            ghost_cell_divergence(&u, 0.1, (&left_bc, &right_bc), "test", &ctx, SEQ, face_flux)
+                .unwrap();
         let par =
-            ghost_cell_divergence(&u, 0.1, &left_bc, &right_bc, "test", PAR, face_flux).unwrap();
+            ghost_cell_divergence(&u, 0.1, (&left_bc, &right_bc), "test", &ctx, PAR, face_flux)
+                .unwrap();
         assert_eq!(seq, par);
     }
 }
