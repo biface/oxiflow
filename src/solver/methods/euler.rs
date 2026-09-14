@@ -96,27 +96,21 @@ impl SteppableSolver for ForwardEulerSolver {
     }
 }
 
-/// Computes `u + dt * du_dt` for `ScalarField` states.
+/// Computes `u + dt * du_dt`, for `ScalarField` or `VectorField` states
+/// alike (#138 consequence: `LangmuirMulti`'s `VectorField` state hit this
+/// function's earlier `ScalarField`-only version, hard-coded before the
+/// generic combination existed).
 ///
-/// Returns `OxiflowError::TypeMismatch` if `u` and `du_dt` are not both
-/// `ScalarField`, or `InvalidDomain` if their lengths differ.
+/// Returns `OxiflowError::TypeMismatch` if `u` and `du_dt` are not the
+/// same variant (or neither `ScalarField` nor `VectorField`), or
+/// `InvalidDomain` if their shapes differ — see
+/// [`ContextValue::add_scaled`] for the exact rules.
 fn euler_step(
     u: &ContextValue,
     du_dt: &ContextValue,
     dt: f64,
 ) -> Result<ContextValue, OxiflowError> {
-    let u_field = u.as_scalar_field()?;
-    let du_field = du_dt.as_scalar_field()?;
-
-    if u_field.len() != du_field.len() {
-        return Err(OxiflowError::InvalidDomain(format!(
-            "state length {} != derivative length {}",
-            u_field.len(),
-            du_field.len()
-        )));
-    }
-
-    Ok(ContextValue::ScalarField(u_field + du_field * dt))
+    u.add_scaled(dt, du_dt)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
