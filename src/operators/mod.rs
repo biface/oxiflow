@@ -467,6 +467,7 @@ pub(crate) fn ghost_padded_field(
     margins: (usize, usize),
     bcs: (&dyn BoundaryCondition, &dyn BoundaryCondition),
     context: &'static str,
+    ctx: &ComputeContext,
 ) -> Result<Vec<f64>, OxiflowError> {
     let (margin_left, margin_right) = margins;
     let (left_bc, right_bc) = bcs;
@@ -478,7 +479,7 @@ pub(crate) fn ghost_padded_field(
     for depth in (1..=margin_left).rev() {
         let interior_at_depth = u[depth - 1];
         let g = left_bc
-            .ghost_value(depth, interior_at_depth, dx)
+            .ghost_value(depth, interior_at_depth, dx, ctx)
             .ok_or_else(|| OxiflowError::PreconditionFailed {
                 context,
                 message: format!(
@@ -496,7 +497,7 @@ pub(crate) fn ghost_padded_field(
     for depth in 1..=margin_right {
         let interior_at_depth = u[n - depth];
         let g = right_bc
-            .ghost_value(depth, interior_at_depth, dx)
+            .ghost_value(depth, interior_at_depth, dx, ctx)
             .ok_or_else(|| OxiflowError::PreconditionFailed {
                 context,
                 message: format!(
@@ -531,13 +532,14 @@ pub(crate) fn ghost_cell_wide_divergence(
     dx: f64,
     margins: (usize, usize),
     bcs: (&dyn BoundaryCondition, &dyn BoundaryCondition),
-    context: &'static str,
+    diag: (&'static str, &ComputeContext),
     parallel_threshold: usize,
     face_flux: impl Fn(&DVector<f64>, usize, usize) -> f64 + Sync,
 ) -> Result<DVector<f64>, OxiflowError> {
+    let (context, ctx) = diag;
     let n = u.len();
     let margin_left = margins.0;
-    let extended = ghost_padded_field(u, dx, margins, bcs, context)?;
+    let extended = ghost_padded_field(u, dx, margins, bcs, context, ctx)?;
     let extended = DVector::from_vec(extended);
     let m = extended.len();
 
@@ -568,12 +570,13 @@ pub(crate) fn ghost_cell_wide_divergence(
     dx: f64,
     margins: (usize, usize),
     bcs: (&dyn BoundaryCondition, &dyn BoundaryCondition),
-    context: &'static str,
+    diag: (&'static str, &ComputeContext),
     face_flux: impl Fn(&DVector<f64>, usize, usize) -> f64,
 ) -> Result<DVector<f64>, OxiflowError> {
+    let (context, ctx) = diag;
     let n = u.len();
     let margin_left = margins.0;
-    let extended = ghost_padded_field(u, dx, margins, bcs, context)?;
+    let extended = ghost_padded_field(u, dx, margins, bcs, context, ctx)?;
     let extended = DVector::from_vec(extended);
     let m = extended.len();
 
@@ -634,7 +637,13 @@ mod tests {
         ) -> Result<(), OxiflowError> {
             Ok(())
         }
-        fn ghost_value(&self, _depth: usize, _interior_at_depth: f64, _dx: f64) -> Option<f64> {
+        fn ghost_value(
+            &self,
+            _depth: usize,
+            _interior_at_depth: f64,
+            _dx: f64,
+            _ctx: &ComputeContext,
+        ) -> Option<f64> {
             Some(self.0)
         }
     }
@@ -660,12 +669,13 @@ mod tests {
         let u = DVector::from_vec((0..64).map(|i| (i as f64 * 0.1).sin()).collect());
         let left_bc = FixedGhost(0.0);
         let right_bc = FixedGhost(0.0);
+        let ctx = ComputeContext::new(0.0, 0.1);
         let seq = ghost_cell_wide_divergence(
             &u,
             0.1,
             (1, 1),
             (&left_bc, &right_bc),
-            "test",
+            ("test", &ctx),
             SEQ,
             sample_face_flux,
         )
@@ -675,7 +685,7 @@ mod tests {
             0.1,
             (1, 1),
             (&left_bc, &right_bc),
-            "test",
+            ("test", &ctx),
             PAR,
             sample_face_flux,
         )

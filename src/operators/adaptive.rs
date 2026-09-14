@@ -215,7 +215,7 @@ impl FluxDivergenceOperator for AdaptiveFlux {
                         dx,
                         margins,
                         (left_bc.as_ref(), right_bc.as_ref()),
-                        "AdaptiveFlux",
+                        ("AdaptiveFlux", ctx),
                         threshold,
                         face,
                     )?
@@ -227,7 +227,7 @@ impl FluxDivergenceOperator for AdaptiveFlux {
                         dx,
                         margins,
                         (left_bc.as_ref(), right_bc.as_ref()),
-                        "AdaptiveFlux",
+                        ("AdaptiveFlux", ctx),
                         face,
                     )?
                 }
