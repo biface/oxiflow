@@ -130,14 +130,17 @@ gpu      = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]
 # ──────────────────────────────────────────────────────────────────────────────
 
 [dev-dependencies]
-# Benchmarks — suite #53. Un seul binaire Criterion (`oxiflow_benchmarks`),
-# les modèles individuels (diffusion_1d, puis burgers_1d/langmuir/lahar au
-# fur et à mesure de #137-#139) vivent chacun dans leur propre fichier sous
-# benches/, regroupés via `mod` depuis le point d'entrée.
+# Benchmarks — suite #53. Un seul binaire Criterion (`oxiflow_parallel`,
+# nommé pour son objet -- calibration du seuil de dispatch parallèle, pas
+# "tous les benchmarks du crate" ; d'autres [[bench]] viendront pour
+# d'autres objets), les modèles individuels (diffusion_1d, puis
+# burgers_1d/langmuir/lahar au fur et à mesure de #137-#139) vivent
+# chacun dans leur propre fichier sous benches/, regroupés via `mod`
+# depuis le point d'entrée.
 criterion = { version = "0.8", features = ["html_reports"] }
 
 [[bench]]
-name    = "oxiflow_benchmarks"
+name    = "oxiflow_parallel"
 harness = false
 
 # ──────────────────────────────────────────────────────────────────────────────
