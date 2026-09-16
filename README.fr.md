@@ -11,8 +11,13 @@
 oxiflow fournit les blocs architecturaux permettant de construire des solveurs d'équations aux
 dérivées partielles rigoureux, maintenables et performants en Rust — des modèles de
 chromatographie 1D aux systèmes multi-physiques couplés les plus complexes. L'architecture
-supporte les grilles structurées (v1.0), les maillages éléments finis non structurés (v2.0),
-et une famille de frameworks de niche (v3.0).
+supportera :
+
+- les grilles structurées (v1.0)
+- les maillages non structurés pour la méthode des éléments finis — un ensemble complet ciblé
+  pour v2.0 — et un jeu complémentaire de composants pour les grilles structurées, déjà amorcé
+  en v1.0
+- des familles de frameworks de niche (v3.0)
 
 ---
 
@@ -29,11 +34,12 @@ oxiflow              (moteur — champs, flux, maillages, couplages, solveurs)
 └── ...              (frameworks tiers sur crates.io)
 ```
 
-Chaque framework est une crate indépendante qui dépend du moteur et apporte des modèles
-physiques, conditions aux limites, nomenclature et configuration déclarative propres à
-son domaine. Des tiers peuvent publier leurs propres frameworks `oxiflow-*` sur crates.io
-en utilisant la même API de plugin — le moteur expose des points d'extension stables et
-object-safe précisément dans ce but.
+Chaque framework est une crate indépendante qui adaptera le moteur central aux problématiques
+spécifiques des modèles physiques, conditions aux limites, nomenclature et configuration
+déclarative propres à son domaine. Ce travail aura pour objectif de montrer comment utiliser
+la bibliothèque centrale `oxiflow` à des tiers qui pourront alors publier leurs propres
+frameworks `oxiflow-*` sur crates.io en utilisant la même API de plugin — le moteur expose des
+points d'extension stables et object-safe précisément dans ce but.
 
 ---
 
@@ -48,10 +54,11 @@ object-safe précisément dans ce but.
 - **Couplage multi-domaines** — `CouplingOperator` connecte des domaines physiques distincts
   à travers des interfaces mobiles (mouvements gravitaires, interaction fluide–solide, ...)
 - **Opérateurs spatiaux abstraits** — `DiscreteOperator` découple les solveurs des schémas
-  de discrétisation ; FD, FV et FEM (v2.0) s'enfichent sans réécrire les intégrateurs
+  de discrétisation ; FD, FV et FEM (arrivant progressivement de v1.1 à v1.9, [DD-047](https://github.com/biface/oxiflow/issues/132))
+  s'enfichent sans réécrire les intégrateurs
 - **Maillage abstrait** — le trait `Mesh` libère `PhysicalState` de toute hypothèse de grille
 - **Bibliothèque d'intégrateurs** — Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson,
-  BDF2/3, IMEX (splitting de Strang) — avec correction de Newton itérée (DD-044, v0.7.0)
+  BDF2/3, IMEX (splitting de Strang) — avec correction de Newton itérée ([DD-044](https://github.com/biface/oxiflow/issues/109), v0.7.0)
   pour les méthodes implicites, configurable par solveur (critère de convergence, stratégie
   de rafraîchissement du jacobien, budget d'itérations)
 - **Schémas spatiaux** — FD décentrées/centrées, WENO3/5, FV conservatifs, Lax–Wendroff,
@@ -67,7 +74,7 @@ object-safe précisément dans ce but.
 
 ```toml
 [dependencies]
-oxiflow = "0.8"
+oxiflow = "0.9"
 # oxiflow-chrom = "3.0"    # framework chromatographie (disponible dès v3.0)
 ```
 
@@ -151,26 +158,35 @@ assurent la compatibilité des frameworks tiers entre les versions du moteur :
 
 ## État de Développement
 
-| Jalon                                    | Version | Statut     | Thème                                                                                                              |
-|------------------------------------------|--------|------------|--------------------------------------------------------------------------------------------------------------------|
-| J0 — Fondations                          | v0.0.5 | ✅ Publié   | Placeholder · CI · structure projet                                                                                |
-| J1 — Architecture cœur                   | v0.1.0 | ✅ Publié   | ContextValue · OxiflowError · Mesh (INV-1)                                                                         |
-| J2 — Contexte complet                    | v0.2.0 | ✅ Publié   | BCs requirantes · ordonnancement topologique · calculateurs                                                        |
-| J3 — Multi-composants                    | v0.3.0 | ✅ Publié   | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3)                                                     |
-| J4a — Intégrateurs                       | v0.4.0 | ✅ Publié   | Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson, BDF2, IMEX                                                   |
-| J5 — Discrétisation                      | v0.5.0 | ✅ Publié   | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · limiteurs de flux + sélection adaptative                              |
-| J6 — Algèbre creuse & persistance        | v0.6.0 | ✅ Publié   | solveur creux faer · SimulationSnapshot (checkpoint/on_divergence) · chargement HDF5 · export VTK · IntegratorSpec |
-| J7 — Intégration temporelle non linéaire | v0.7.0 | ✅ Publié   | Itération de Newton pour les intégrateurs implicites (DD-044) · `IntegratorSpec` étendu à BE/CN/BDF2                |
-| J8 — Optimisation des calculs            | v0.8.0 | ✅ Publié   | GPU-readiness (DD-026, DD-045) · feature `gpu` (`wgpu`) · MSRV 1.84                                                 |
-| J9 — Parallélisme & Benchmarking         | v0.9.0 | ⏳ Planifié | Rayon · cache dirty-flag · benchmarks Criterion                                                                    |
-| J10 — Écosystème v1.0                    | v1.0.0 | ⏳ Planifié | 7 exemples · audit FEM · API stable                                                                                |
-| J20 — FEM                                | v2.0.0 | 🔭 Horizon | Maillages non structurés · ALE · INV-4 plugin-safe                                                                 |
-| J30 — Frameworks                         | v3.0.0 | 🔭 Horizon | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run`                                                                    |
+| Jalon                                    | Version                           | Statut      | Thème                                                                                                                                                                                                                                                                                                           |
+|------------------------------------------|-----------------------------------|-------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| J0 — Fondations                          | v0.0.5                            | ✅ Publié   | Placeholder · CI · structure projet                                                                                                                                                                                                                                                                             |
+| J1 — Architecture cœur                   | v0.1.0                            | ✅ Publié   | ContextValue · OxiflowError · Mesh (INV-1)                                                                                                                                                                                                                                                                      |
+| J2 — Contexte complet                    | v0.2.0                            | ✅ Publié   | BCs requirantes · ordonnancement topologique · calculateurs                                                                                                                                                                                                                                                     |
+| J3 — Multi-composants                    | v0.3.0                            | ✅ Publié   | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3)                                                                                                                                                                                                                                                  |
+| J4a — Intégrateurs                       | v0.4.0                            | ✅ Publié   | Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson, BDF2, IMEX                                                                                                                                                                                                                                                |
+| J5 — Discrétisation                      | v0.5.0                            | ✅ Publié   | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · limiteurs de flux + sélection adaptative                                                                                                                                                                                                                           |
+| J6 — Algèbre creuse & persistance        | v0.6.0                            | ✅ Publié   | solveur creux faer · SimulationSnapshot (checkpoint/on_divergence) · chargement HDF5 · export VTK · IntegratorSpec                                                                                                                                                                                              |
+| J7 — Intégration temporelle non linéaire | v0.7.0                            | ✅ Publié   | Itération de Newton pour les intégrateurs implicites ([DD-044](https://github.com/biface/oxiflow/issues/109)) · `IntegratorSpec` étendu à BE/CN/BDF2                                                                                                                                                            |
+| J8 — Optimisation des calculs            | v0.8.0                            | ✅ Publié   | GPU-readiness ([DD-026](https://github.com/biface/oxiflow/issues/73), [DD-045](https://github.com/biface/oxiflow/issues/128)) · feature `gpu` (`wgpu`) · MSRV 1.84                                                                                                                                              |
+| J9 — Parallélisme & Benchmarking         | v0.9.0                            | ✅ Publié   | Dispatch Rayon ([DD-014](https://github.com/biface/oxiflow/issues/14)/[DD-048](https://github.com/biface/oxiflow/issues/140)) · suite de benchmarks Criterion (`oxiflow_parallel`, 4 modèles) · modèle lahar multi-champs ([DD-032](https://github.com/biface/oxiflow/issues/85)) · graphiques SVG de référence |
+| J10 — Écosystème v1.0                    | v1.0.0                            | ⏳ Planifié | 7 exemples multi-domaines · coefficients `(x,t)` (`ExternalTabulated`) · API stable ([DD-016](https://github.com/biface/oxiflow/issues/16))                                                                                                                                                                     |
+| J11 — Fondations de maillage nD          | v1.1.0 (FEM) / v1.1.5 (structuré) | ⏳ Planifié | Fondations de maillage pour la scission FEM/structurée ([DD-047](https://github.com/biface/oxiflow/issues/132))                                                                                                                                                                                                 |
+| J12 — Discrétisation vitesse-pression    | v1.2.0 / v1.2.5                   | ⏳ Planifié | Import Gmsh (FEM, [DD-028](https://github.com/biface/oxiflow/issues/76)) ou MAC/collocated+Rhie-Chow (structuré)                                                                                                                                                                                                |
+| J13 — Solveur point-selle                | v1.3.0                            | ⏳ Planifié | `SaddlePointSolver`, partagé entre les deux voies                                                                                                                                                                                                                                                               |
+| J14 — DAE & Navier-Stokes                | v1.4.0                            | ⏳ Planifié | Intégration temporelle DAE + Navier-Stokes en `PhysicalModel`, partagé                                                                                                                                                                                                                                          |
+| J15 — Branchement bout-en-bout           | v1.5.0 / v1.5.5                   | ⏳ Planifié | Taylor-Hood/MINI (FEM) ou pipeline structuré complet                                                                                                                                                                                                                                                            |
+| J16 — Protocole de comparaison           | v1.6.0                            | ⏳ Planifié | Validation FEM vs structuré (cavité entraînée, Poiseuille, Ghia et al. 1982)                                                                                                                                                                                                                                    |
+| J17 — ALE                                | v1.7.0                            | ⏳ Planifié | Formulation Arbitrary Lagrangian-Eulerian                                                                                                                                                                                                                                                                       |
+| J18 — Solveurs creux préconditionnés     | v1.8.0                            | ⏳ Planifié | Préconditionneurs ILU/AMG                                                                                                                                                                                                                                                                                       |
+| J19 — Méthodes spectrales                | v1.9.0                            | ⏳ Planifié | `Discretization` ancêtre commun, `Mesh`/`SpectralBasis` frères ([DD-024](https://github.com/biface/oxiflow/issues/63))                                                                                                                                                                                          |
+| J20 — Stabilisation                      | v2.0.0                            | 🔭 Horizon  | Gel SemVer sur l'ensemble du cœur numérique — aucune fonctionnalité neuve                                                                                                                                                                                                                                       |
+| J30 — Frameworks                         | v3.0.0                            | 🔭 Horizon  | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run`                                                                                                                                                                                                                                                                 |
 
-Les sous-invariants INV-GPU-1 à INV-GPU-5 (DD-026) gouvernent la GPU-readiness des
+Les sous-invariants INV-GPU-1 à INV-GPU-5 ([DD-026](https://github.com/biface/oxiflow/issues/73)) gouvernent la GPU-readiness des
 structures de données numériques depuis v0.3.0 ; la feature `gpu` elle-même (sélection de
 backend, acquisition d'adaptateur, conversion à la frontière CPU↔GPU) est arrivée en
-v0.8.0 (DD-045), sans aucun breaking change sur les types conçus contre ces invariants.
+v0.8.0 ([DD-045](https://github.com/biface/oxiflow/issues/128)), sans aucun breaking change sur les types conçus contre ces invariants.
 
 Voir [DEVELOPPEMENT.md](DEVELOPPEMENT.md) pour la spécification architecturale complète.
 
@@ -178,15 +194,15 @@ Voir [DEVELOPPEMENT.md](DEVELOPPEMENT.md) pour la spécification architecturale 
 
 ## Feature Flags
 
-| Flag       | Description                                                | Disponible dès  |
-|------------|------------------------------------------------------------|-----------------|
-| *(défaut)* | Moteur cœur, exécution séquentielle                        | v0.2            |
-| `serde`    | Sérialisation des états et scénarios                       | v0.6            |
-| `hdf5`     | Import/export HDF5 pour données tabulées externes          | v0.6            |
-| `vtk`      | Export VTK (`.vtu`) de `SimulationResult`                  | v0.6            |
-| `sparse`   | Solveur linéaire creux `faer` pour intégrateurs implicites | v0.6            |
-| `parallel` | Parallélisme Rayon pour les calculateurs indépendants      | v0.9 (planifié) |
-| `gpu`      | Accélération GPU via `wgpu` (Vulkan/Metal/DX12)            | v0.8            |
+| Flag       | Description                                                | Disponible avec  |
+|------------|------------------------------------------------------------|------------------|
+| *(défaut)* | Moteur cœur, exécution séquentielle                        | v0.2             |
+| `serde`    | Sérialisation des états et scénarios                       | v0.6             |
+| `hdf5`     | Import/export HDF5 pour données tabulées externes          | v0.6             |
+| `vtk`      | Export VTK (`.vtu`) de `SimulationResult`                  | v0.6             |
+| `sparse`   | Solveur linéaire creux `faer` pour intégrateurs implicites | v0.6             |
+| `parallel` | Parallélisme Rayon pour les calculateurs indépendants      | v0.9             |
+| `gpu`      | Accélération GPU via `wgpu` (Vulkan/Metal/DX12)            | v0.8             |
 
 ---
 
