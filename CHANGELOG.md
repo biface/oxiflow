@@ -7,6 +7,56 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.9.0] - 2026-09-16
+
+### Added
+
+- `parallel` feature flag (Rayon, optional) — per-site dispatch calibration
+  rather than a single crate-wide threshold ([DD-048](https://github.com/biface/oxiflow/issues/140)): `fd.rs`'s
+  `default_parallel_threshold()` (`49_999`, [DD-014](https://github.com/biface/oxiflow/issues/14), bare-stencil profile),
+  `langmuir_multi`'s measured `1_000` (#138), `lahar_multifield`'s two
+  independent sites — `default_source_parallel_threshold()` (`1_000`,
+  friction/erosion loop) and `default_flux_parallel_threshold()`
+  (`10_000`, flux divergence loop, set above an unstable crossover region
+  rather than at its lower bound) ([DD-048](https://github.com/biface/oxiflow/issues/140), #139)
+- `ParallelThreshold`/`calibrate_parallel_threshold` (`src/solver/parallel.rs`)
+  — shared `AtomicUsize`-backed mechanism for future `src/`-internal
+  dispatch sites; `pub(crate)`, not usable from `examples/`/`tests/`/
+  `benches/` ([DD-048](https://github.com/biface/oxiflow/issues/140))
+- `benches/oxiflow_parallel` — Criterion suite (#53) covering four
+  benchmark models: `diffusion_1d` (#136), `viscous_burgers` (#137),
+  `langmuir_multi` (#138), `lahar_multifield` (#139); full write-up in
+  `BENCHMARKS.md`
+- `examples/lahar_multifield.rs` — multi-field lahar model ([DD-032](https://github.com/biface/oxiflow/issues/85), #139):
+  Woodhouse/Hogg/Phillips shallow-layer equations reduced to 1D, four
+  coupled conservative quantities `(m, p, s, b)` including bed elevation,
+  Rusanov flux with MinMod-limited MUSCL reconstruction
+  (`ShallowLayerFlux`), full Pouliquen-Forterre + Chezy blended friction,
+  Shields-threshold erosion, Soulsby/Richardson-Zaki hindered-settling
+  deposition (`LaharSource`); validated against three independent
+  regimes (early inertial, Chezy-drag-dominated, constant-Coulomb
+  slump/stall pattern) in `tests/lahar_multifield_analytical.rs`
+- `examples/{diffusion_1d,viscous_burgers,langmuir_multi,lahar_multifield}_plot.rs`
+  — SVG reference plots for all four benchmark models, matching the
+  literature figures / chrom-rs's own chromatogram output each model is
+  validated against (#145)
+- `plotters` dev-dependency for the above
+
+### Changed
+
+- Criterion bench target renamed `oxiflow_benchmarks` → `oxiflow_parallel`
+  — named for its actual object (parallel-dispatch calibration), since
+  other `[[bench]]` targets for other purposes are expected once 2D/3D
+  work starts
+
+### Not implemented
+
+- Dirty-flag caching for repeated `ContextCalculator` evaluations
+  ([DD-015](https://github.com/biface/oxiflow/issues/15), #52) — closed without implementation this sprint; scope
+  parked, not delivered
+
+---
+
 ## [0.8.0] - 2026-08-03
 
 ### Added
