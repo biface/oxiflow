@@ -79,11 +79,15 @@ jobs:
       - name: cargo clippy — feature gpu
         run: cargo clippy --features gpu -- -D warnings
 
+      # DD-014/DD-048, #51/#136-#139 (v0.9.0) — genuinely exercised now
+      # (fd.rs, langmuir_multi, lahar_multifield all gate real dispatch
+      # code behind this feature), unlike when this job was first stubbed
+      # out at J5. `serde` remains commented out below: still declared but
+      # not yet consumed by any real code path.
+      - name: cargo clippy — feature parallel
+        run: cargo clippy --features parallel --all-targets -- -D warnings
+
       # J5 (v0.7) — activate when consumed for real:
-      # parallel/serde are already declared in Cargo.toml but not yet
-      # exercised by any real threshold-triggered or serialized code path.
-      # - name: cargo clippy — feature parallel
-      #   run: cargo clippy --features parallel -- -D warnings
       # - name: cargo clippy — feature serde
       #   run: cargo clippy --features serde -- -D warnings
 
@@ -129,9 +133,12 @@ jobs:
       - name: cargo test — feature gpu
         run: cargo test --features gpu
 
+      # DD-014/DD-048, #51/#136-#139 (v0.9.0) — see the clippy job for why
+      # this is now genuinely exercised, unlike at J5.
+      - name: cargo test — feature parallel
+        run: cargo test --features parallel
+
       # J5 (v0.7) — activate when consumed for real (see the clippy job).
-      # - name: cargo test — feature parallel
-      #   run: cargo test --features parallel
       # - name: cargo test — feature serde
       #   run: cargo test --features serde
 
