@@ -1,6 +1,6 @@
 [package]
 name        = "oxiflow"
-version     = "0.8.0"
+version     = "0.9.0"
 edition     = "2021"
 rust-version = "1.84"
 
@@ -138,6 +138,10 @@ gpu      = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]
 # chacun dans leur propre fichier sous benches/, regroupés via `mod`
 # depuis le point d'entrée.
 criterion = { version = "0.8", features = ["html_reports"] }
+# plotters — SVG reference plots for the four benchmark models (#145),
+# matching the literature figures / chrom-rs's own chromatogram output
+# each model is validated against.
+plotters = "0.3"
 
 [[bench]]
 name    = "oxiflow_parallel"
