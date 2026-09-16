@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/solver/methods/newton.rs`."><title>newton.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/solver/methods/newton.rs`."><title>newton.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
         onload="renderMathInElement(document.body, {
@@ -339,200 +339,199 @@
 <a href=#329 id=329 data-nosnippet>329</a>    // against hand-written f/jacobian closures rather than a full
 <a href=#330 id=330 data-nosnippet>330</a>    // Domain/Scenario, unlike `implicit.rs`/`bdf2.rs`'s tests.
 <a href=#331 id=331 data-nosnippet>331</a>
-<a href=#332 id=332 data-nosnippet>332</a>    </span><span class="doccomment">/// f(u) = -lambda*u — affine, so a single correction is exact
-<a href=#333 id=333 data-nosnippet>333</a>    /// regardless of `max_iterations`/`jacobian_strategy`.
-<a href=#334 id=334 data-nosnippet>334</a>    </span><span class="kw">fn </span>affine_decay(
-<a href=#335 id=335 data-nosnippet>335</a>        lambda: f64,
-<a href=#336 id=336 data-nosnippet>336</a>    ) -&gt; (
-<a href=#337 id=337 data-nosnippet>337</a>        <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>DVector&lt;f64&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;DVector&lt;f64&gt;, OxiflowError&gt;,
-<a href=#338 id=338 data-nosnippet>338</a>        <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>DVector&lt;f64&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;DMatrix&lt;f64&gt;, OxiflowError&gt;,
-<a href=#339 id=339 data-nosnippet>339</a>    ) {
-<a href=#340 id=340 data-nosnippet>340</a>        <span class="kw">let </span>f = <span class="kw">move </span>|u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(u.map(|v| -lambda * v));
-<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">let </span>jac =
-<a href=#342 id=342 data-nosnippet>342</a>            <span class="kw">move </span>|u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(DMatrix::&lt;f64&gt;::identity(u.len(), u.len()) * (-lambda));
-<a href=#343 id=343 data-nosnippet>343</a>        (f, jac)
-<a href=#344 id=344 data-nosnippet>344</a>    }
-<a href=#345 id=345 data-nosnippet>345</a>
-<a href=#346 id=346 data-nosnippet>346</a>    <span class="doccomment">/// f(u) = -u^3 — genuinely nonlinear; one frozen-Jacobian correction
-<a href=#347 id=347 data-nosnippet>347</a>    /// is only a first-order approximation, iterated Newton is needed
-<a href=#348 id=348 data-nosnippet>348</a>    /// for tight convergence.
-<a href=#349 id=349 data-nosnippet>349</a>    </span><span class="kw">fn </span>cubic_decay() -&gt; (
-<a href=#350 id=350 data-nosnippet>350</a>        <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>DVector&lt;f64&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;DVector&lt;f64&gt;, OxiflowError&gt;,
-<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span>DVector&lt;f64&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;DMatrix&lt;f64&gt;, OxiflowError&gt;,
-<a href=#352 id=352 data-nosnippet>352</a>    ) {
-<a href=#353 id=353 data-nosnippet>353</a>        <span class="kw">let </span>f = <span class="kw">move </span>|u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(u.map(|v| -v * v * v));
-<a href=#354 id=354 data-nosnippet>354</a>        <span class="kw">let </span>jac =
-<a href=#355 id=355 data-nosnippet>355</a>            <span class="kw">move </span>|u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(DMatrix::&lt;f64&gt;::from_diagonal(<span class="kw-2">&amp;</span>u.map(|v| -<span class="number">3.0 </span>* v * v)));
-<a href=#356 id=356 data-nosnippet>356</a>        (f, jac)
-<a href=#357 id=357 data-nosnippet>357</a>    }
-<a href=#358 id=358 data-nosnippet>358</a>
-<a href=#359 id=359 data-nosnippet>359</a>    <span class="attr">#[test]
-<a href=#360 id=360 data-nosnippet>360</a>    </span><span class="kw">fn </span>residual_matches_hand_derivation() {
-<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>u = DVector::from_vec(<span class="macro">vec!</span>[<span class="number">2.0</span>, <span class="number">3.0</span>]);
-<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">let </span>u_star = DVector::from_vec(<span class="macro">vec!</span>[<span class="number">1.0</span>, <span class="number">1.0</span>]);
-<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span>f_u = DVector::from_vec(<span class="macro">vec!</span>[<span class="number">0.5</span>, <span class="number">0.5</span>]);
-<a href=#364 id=364 data-nosnippet>364</a>        <span class="comment">// g(u) = 1.5*(u - u_star) - 0.1*f(u)
-<a href=#365 id=365 data-nosnippet>365</a>        </span><span class="kw">let </span>res = residual(<span class="kw-2">&amp;</span>u, <span class="kw-2">&amp;</span>u_star, <span class="number">1.5</span>, <span class="number">0.1</span>, <span class="kw-2">&amp;</span>f_u);
-<a href=#366 id=366 data-nosnippet>366</a>        <span class="macro">assert!</span>((res[<span class="number">0</span>] - (<span class="number">1.5 </span>* <span class="number">1.0 </span>- <span class="number">0.1 </span>* <span class="number">0.5</span>)).abs() &lt; <span class="number">1e-12</span>);
-<a href=#367 id=367 data-nosnippet>367</a>        <span class="macro">assert!</span>((res[<span class="number">1</span>] - (<span class="number">1.5 </span>* <span class="number">2.0 </span>- <span class="number">0.1 </span>* <span class="number">0.5</span>)).abs() &lt; <span class="number">1e-12</span>);
-<a href=#368 id=368 data-nosnippet>368</a>    }
-<a href=#369 id=369 data-nosnippet>369</a>
-<a href=#370 id=370 data-nosnippet>370</a>    <span class="attr">#[test]
-<a href=#371 id=371 data-nosnippet>371</a>    </span><span class="kw">fn </span>linear_correction_solves_the_linearised_system() {
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="comment">// alpha*I - coeff*J with J = -2*I, alpha=1, coeff=0.1 -&gt; 1.2*I.
-<a href=#373 id=373 data-nosnippet>373</a>        </span><span class="kw">let </span>jacobian = DMatrix::&lt;f64&gt;::identity(<span class="number">2</span>, <span class="number">2</span>) * -<span class="number">2.0</span>;
-<a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">let </span>res = DVector::from_vec(<span class="macro">vec!</span>[<span class="number">1.2</span>, <span class="number">2.4</span>]);
-<a href=#375 id=375 data-nosnippet>375</a>        <span class="kw">let </span>delta = linear_correction(<span class="kw-2">&amp;</span>jacobian, <span class="number">1.0</span>, <span class="number">0.1</span>, <span class="kw-2">&amp;</span>res, <span class="kw-2">&amp;</span>NalgebraDenseSolver).unwrap();
-<a href=#376 id=376 data-nosnippet>376</a>        <span class="macro">assert!</span>((delta[<span class="number">0</span>] - (-<span class="number">1.0</span>)).abs() &lt; <span class="number">1e-9</span>);
-<a href=#377 id=377 data-nosnippet>377</a>        <span class="macro">assert!</span>((delta[<span class="number">1</span>] - (-<span class="number">2.0</span>)).abs() &lt; <span class="number">1e-9</span>);
-<a href=#378 id=378 data-nosnippet>378</a>    }
-<a href=#379 id=379 data-nosnippet>379</a>
-<a href=#380 id=380 data-nosnippet>380</a>    <span class="attr">#[test]
-<a href=#381 id=381 data-nosnippet>381</a>    </span><span class="kw">fn </span>single_iteration_is_exact_for_affine_problem() {
-<a href=#382 id=382 data-nosnippet>382</a>        <span class="comment">// Backward-Euler-style step: alpha=1, coeff=theta*dt=0.1,
-<a href=#383 id=383 data-nosnippet>383</a>        // u_star = u_n (theta=1 so the (1-theta) term vanishes).
-<a href=#384 id=384 data-nosnippet>384</a>        </span><span class="kw">let </span>lambda = <span class="number">3.0</span>;
-<a href=#385 id=385 data-nosnippet>385</a>        <span class="kw">let </span>(f, jac) = affine_decay(lambda);
-<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">let </span>u0 = DVector::from_element(<span class="number">3</span>, <span class="number">1.0</span>);
-<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">let </span>u_star = u0.clone();
-<a href=#388 id=388 data-nosnippet>388</a>        <span class="kw">let </span>params = NewtonParams {
-<a href=#389 id=389 data-nosnippet>389</a>            convergence: NewtonConvergence::default(),
-<a href=#390 id=390 data-nosnippet>390</a>            jacobian_strategy: JacobianStrategy::ModifiedFrozen,
-<a href=#391 id=391 data-nosnippet>391</a>            max_iterations: <span class="number">1</span>,
-<a href=#392 id=392 data-nosnippet>392</a>        };
-<a href=#393 id=393 data-nosnippet>393</a>
-<a href=#394 id=394 data-nosnippet>394</a>        <span class="kw">let </span>u_next = solve(u0, <span class="kw-2">&amp;</span>u_star, <span class="number">1.0</span>, <span class="number">0.1</span>, f, jac, <span class="kw-2">&amp;</span>NalgebraDenseSolver, <span class="kw-2">&amp;</span>params).unwrap();
-<a href=#395 id=395 data-nosnippet>395</a>
-<a href=#396 id=396 data-nosnippet>396</a>        <span class="kw">let </span>expected = <span class="number">1.0 </span>/ (<span class="number">1.0 </span>+ lambda * <span class="number">0.1</span>);
-<a href=#397 id=397 data-nosnippet>397</a>        <span class="kw">for </span>v <span class="kw">in </span>u_next.iter() {
-<a href=#398 id=398 data-nosnippet>398</a>            <span class="macro">assert!</span>((v - expected).abs() &lt; <span class="number">1e-9</span>, <span class="string">"got {v}, expected {expected}"</span>);
-<a href=#399 id=399 data-nosnippet>399</a>        }
-<a href=#400 id=400 data-nosnippet>400</a>    }
-<a href=#401 id=401 data-nosnippet>401</a>
-<a href=#402 id=402 data-nosnippet>402</a>    <span class="attr">#[test]
-<a href=#403 id=403 data-nosnippet>403</a>    </span><span class="kw">fn </span>full_newton_converges_on_nonaffine_problem() {
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">let </span>(f, jac) = cubic_decay();
-<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">let </span>u0 = DVector::from_element(<span class="number">2</span>, <span class="number">1.0</span>);
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">let </span>u_star = u0.clone();
-<a href=#407 id=407 data-nosnippet>407</a>        <span class="kw">let </span>params = NewtonParams {
-<a href=#408 id=408 data-nosnippet>408</a>            convergence: NewtonConvergence::default(),
-<a href=#409 id=409 data-nosnippet>409</a>            jacobian_strategy: JacobianStrategy::FullNewton,
-<a href=#410 id=410 data-nosnippet>410</a>            max_iterations: <span class="number">20</span>,
-<a href=#411 id=411 data-nosnippet>411</a>        };
-<a href=#412 id=412 data-nosnippet>412</a>
-<a href=#413 id=413 data-nosnippet>413</a>        <span class="kw">let </span>u_next = solve(u0, <span class="kw-2">&amp;</span>u_star, <span class="number">1.0</span>, <span class="number">0.1</span>, f, jac, <span class="kw-2">&amp;</span>NalgebraDenseSolver, <span class="kw-2">&amp;</span>params).unwrap();
-<a href=#414 id=414 data-nosnippet>414</a>
-<a href=#415 id=415 data-nosnippet>415</a>        <span class="comment">// Cross-check against an independently solved scalar equation:
-<a href=#416 id=416 data-nosnippet>416</a>        // u + 0.1*u^3 = 1.0 (Backward-Euler-style implicit cubic decay).
-<a href=#417 id=417 data-nosnippet>417</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>u_scalar = <span class="number">1.0_f64</span>;
-<a href=#418 id=418 data-nosnippet>418</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">50 </span>{
-<a href=#419 id=419 data-nosnippet>419</a>            <span class="kw">let </span>g = u_scalar + <span class="number">0.1 </span>* u_scalar.powi(<span class="number">3</span>) - <span class="number">1.0</span>;
-<a href=#420 id=420 data-nosnippet>420</a>            <span class="kw">let </span>dg = <span class="number">1.0 </span>+ <span class="number">0.3 </span>* u_scalar.powi(<span class="number">2</span>);
-<a href=#421 id=421 data-nosnippet>421</a>            u_scalar -= g / dg;
-<a href=#422 id=422 data-nosnippet>422</a>        }
-<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">for </span>v <span class="kw">in </span>u_next.iter() {
-<a href=#424 id=424 data-nosnippet>424</a>            <span class="macro">assert!</span>((v - u_scalar).abs() &lt; <span class="number">1e-5</span>, <span class="string">"got {v}, expected {u_scalar}"</span>);
-<a href=#425 id=425 data-nosnippet>425</a>        }
-<a href=#426 id=426 data-nosnippet>426</a>    }
-<a href=#427 id=427 data-nosnippet>427</a>
-<a href=#428 id=428 data-nosnippet>428</a>    <span class="attr">#[test]
-<a href=#429 id=429 data-nosnippet>429</a>    </span><span class="kw">fn </span>modified_frozen_with_single_correction_does_not_converge_on_nonaffine_problem() {
-<a href=#430 id=430 data-nosnippet>430</a>        <span class="comment">// A single frozen-Jacobian correction is only a first-order
-<a href=#431 id=431 data-nosnippet>431</a>        // approximation for this nonaffine f (contrast with
-<a href=#432 id=432 data-nosnippet>432</a>        // `full_newton_converges_on_nonaffine_problem`, which reaches the
-<a href=#433 id=433 data-nosnippet>433</a>        // true root): under the loop's default tolerance, that shows up
-<a href=#434 id=434 data-nosnippet>434</a>        // as an honest convergence failure -- not a silently inaccurate
-<a href=#435 id=435 data-nosnippet>435</a>        // "success" -- since nothing about affine-ness is special-cased;
-<a href=#436 id=436 data-nosnippet>436</a>        // see `solve`'s docs.
-<a href=#437 id=437 data-nosnippet>437</a>        </span><span class="kw">let </span>(f, jac) = cubic_decay();
-<a href=#438 id=438 data-nosnippet>438</a>        <span class="kw">let </span>u0 = DVector::from_element(<span class="number">1</span>, <span class="number">1.0</span>);
-<a href=#439 id=439 data-nosnippet>439</a>        <span class="kw">let </span>u_star = u0.clone();
-<a href=#440 id=440 data-nosnippet>440</a>        <span class="kw">let </span>params = NewtonParams {
-<a href=#441 id=441 data-nosnippet>441</a>            convergence: NewtonConvergence::default(),
-<a href=#442 id=442 data-nosnippet>442</a>            jacobian_strategy: JacobianStrategy::ModifiedFrozen,
-<a href=#443 id=443 data-nosnippet>443</a>            max_iterations: <span class="number">1</span>,
-<a href=#444 id=444 data-nosnippet>444</a>        };
-<a href=#445 id=445 data-nosnippet>445</a>
-<a href=#446 id=446 data-nosnippet>446</a>        <span class="kw">let </span>err = solve(u0, <span class="kw-2">&amp;</span>u_star, <span class="number">1.0</span>, <span class="number">0.1</span>, f, jac, <span class="kw-2">&amp;</span>NalgebraDenseSolver, <span class="kw-2">&amp;</span>params).unwrap_err();
-<a href=#447 id=447 data-nosnippet>447</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#448 id=448 data-nosnippet>448</a>            err,
-<a href=#449 id=449 data-nosnippet>449</a>            OxiflowError::NewtonNotConverged { iterations: <span class="number">1</span>, .. }
-<a href=#450 id=450 data-nosnippet>450</a>        ));
-<a href=#451 id=451 data-nosnippet>451</a>    }
-<a href=#452 id=452 data-nosnippet>452</a>
-<a href=#453 id=453 data-nosnippet>453</a>    <span class="attr">#[test]
-<a href=#454 id=454 data-nosnippet>454</a>    </span><span class="kw">fn </span>not_converged_when_iteration_budget_too_small() {
-<a href=#455 id=455 data-nosnippet>455</a>        <span class="kw">let </span>(f, jac) = cubic_decay();
-<a href=#456 id=456 data-nosnippet>456</a>        <span class="kw">let </span>u0 = DVector::from_element(<span class="number">1</span>, <span class="number">1.0</span>);
-<a href=#457 id=457 data-nosnippet>457</a>        <span class="kw">let </span>u_star = u0.clone();
-<a href=#458 id=458 data-nosnippet>458</a>        <span class="kw">let </span>params = NewtonParams {
-<a href=#459 id=459 data-nosnippet>459</a>            convergence: NewtonConvergence::ResidualOnly {
-<a href=#460 id=460 data-nosnippet>460</a>                tol_abs: <span class="number">1e-14</span>,
-<a href=#461 id=461 data-nosnippet>461</a>                tol_rel: <span class="number">0.0</span>,
-<a href=#462 id=462 data-nosnippet>462</a>            },
-<a href=#463 id=463 data-nosnippet>463</a>            jacobian_strategy: JacobianStrategy::ModifiedFrozen,
-<a href=#464 id=464 data-nosnippet>464</a>            max_iterations: <span class="number">1</span>,
-<a href=#465 id=465 data-nosnippet>465</a>        };
-<a href=#466 id=466 data-nosnippet>466</a>
-<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">let </span>err = solve(u0, <span class="kw-2">&amp;</span>u_star, <span class="number">1.0</span>, <span class="number">0.1</span>, f, jac, <span class="kw-2">&amp;</span>NalgebraDenseSolver, <span class="kw-2">&amp;</span>params).unwrap_err();
-<a href=#468 id=468 data-nosnippet>468</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
-<a href=#469 id=469 data-nosnippet>469</a>            err,
-<a href=#470 id=470 data-nosnippet>470</a>            OxiflowError::NewtonNotConverged { iterations: <span class="number">1</span>, .. }
-<a href=#471 id=471 data-nosnippet>471</a>        ));
-<a href=#472 id=472 data-nosnippet>472</a>    }
-<a href=#473 id=473 data-nosnippet>473</a>
-<a href=#474 id=474 data-nosnippet>474</a>    <span class="attr">#[test]
-<a href=#475 id=475 data-nosnippet>475</a>    </span><span class="kw">fn </span>combined_or_converges_when_correction_is_small_even_if_residual_is_not() {
-<a href=#476 id=476 data-nosnippet>476</a>        <span class="kw">let </span>f = |u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(u.map(|v| v + <span class="number">1.0</span>)); <span class="comment">// never zero for u &gt;= 0
-<a href=#477 id=477 data-nosnippet>477</a>        </span><span class="kw">let </span>jac = |u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(DMatrix::&lt;f64&gt;::identity(u.len(), u.len()) * -<span class="number">1.0e6</span>);
-<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">let </span>u0 = DVector::from_element(<span class="number">1</span>, <span class="number">0.0</span>);
-<a href=#479 id=479 data-nosnippet>479</a>        <span class="kw">let </span>u_star = u0.clone();
-<a href=#480 id=480 data-nosnippet>480</a>        <span class="comment">// A deliberately stiff Jacobian (-1e6) makes the correction
-<a href=#481 id=481 data-nosnippet>481</a>        // collapse to a tiny step even though the residual itself does
-<a href=#482 id=482 data-nosnippet>482</a>        // not shrink below tolerance -- see the closures above.
-<a href=#483 id=483 data-nosnippet>483</a>        </span><span class="kw">let </span>params_or = NewtonParams {
-<a href=#484 id=484 data-nosnippet>484</a>            convergence: NewtonConvergence::CombinedOr {
-<a href=#485 id=485 data-nosnippet>485</a>                tol_abs: <span class="number">1e-3</span>,
-<a href=#486 id=486 data-nosnippet>486</a>                tol_rel: <span class="number">0.0</span>,
-<a href=#487 id=487 data-nosnippet>487</a>            },
-<a href=#488 id=488 data-nosnippet>488</a>            jacobian_strategy: JacobianStrategy::ModifiedFrozen,
-<a href=#489 id=489 data-nosnippet>489</a>            max_iterations: <span class="number">1</span>,
-<a href=#490 id=490 data-nosnippet>490</a>        };
-<a href=#491 id=491 data-nosnippet>491</a>        <span class="kw">let </span>params_residual_only = NewtonParams {
-<a href=#492 id=492 data-nosnippet>492</a>            convergence: NewtonConvergence::ResidualOnly {
-<a href=#493 id=493 data-nosnippet>493</a>                tol_abs: <span class="number">1e-3</span>,
-<a href=#494 id=494 data-nosnippet>494</a>                tol_rel: <span class="number">0.0</span>,
-<a href=#495 id=495 data-nosnippet>495</a>            },
-<a href=#496 id=496 data-nosnippet>496</a>            jacobian_strategy: JacobianStrategy::ModifiedFrozen,
-<a href=#497 id=497 data-nosnippet>497</a>            max_iterations: <span class="number">1</span>,
-<a href=#498 id=498 data-nosnippet>498</a>        };
-<a href=#499 id=499 data-nosnippet>499</a>
-<a href=#500 id=500 data-nosnippet>500</a>        <span class="kw">let </span>out_or = solve(
-<a href=#501 id=501 data-nosnippet>501</a>            u0.clone(),
-<a href=#502 id=502 data-nosnippet>502</a>            <span class="kw-2">&amp;</span>u_star,
+<a href=#332 id=332 data-nosnippet>332</a>    </span><span class="doccomment">/// Boxed rather than `impl FnMut` (clippy::type_complexity on the
+<a href=#333 id=333 data-nosnippet>333</a>    /// pair below) — `solve()` takes `impl FnMut`, which `Box&lt;dyn FnMut&gt;`
+<a href=#334 id=334 data-nosnippet>334</a>    /// satisfies automatically, so boxing here costs nothing but an
+<a href=#335 id=335 data-nosnippet>335</a>    /// allocation in test setup.
+<a href=#336 id=336 data-nosnippet>336</a>    </span><span class="kw">type </span>StateFn = Box&lt;<span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;</span>DVector&lt;f64&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;DVector&lt;f64&gt;, OxiflowError&gt;&gt;;
+<a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">type </span>JacobianFn = Box&lt;<span class="kw">dyn </span>FnMut(<span class="kw-2">&amp;</span>DVector&lt;f64&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;DMatrix&lt;f64&gt;, OxiflowError&gt;&gt;;
+<a href=#338 id=338 data-nosnippet>338</a>
+<a href=#339 id=339 data-nosnippet>339</a>    <span class="doccomment">/// f(u) = -lambda*u — affine, so a single correction is exact
+<a href=#340 id=340 data-nosnippet>340</a>    /// regardless of `max_iterations`/`jacobian_strategy`.
+<a href=#341 id=341 data-nosnippet>341</a>    </span><span class="kw">fn </span>affine_decay(lambda: f64) -&gt; (StateFn, JacobianFn) {
+<a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">let </span>f = <span class="kw">move </span>|u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(u.map(|v| -lambda * v));
+<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">let </span>jac =
+<a href=#344 id=344 data-nosnippet>344</a>            <span class="kw">move </span>|u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(DMatrix::&lt;f64&gt;::identity(u.len(), u.len()) * (-lambda));
+<a href=#345 id=345 data-nosnippet>345</a>        (Box::new(f), Box::new(jac))
+<a href=#346 id=346 data-nosnippet>346</a>    }
+<a href=#347 id=347 data-nosnippet>347</a>
+<a href=#348 id=348 data-nosnippet>348</a>    <span class="doccomment">/// f(u) = -u^3 — genuinely nonlinear; one frozen-Jacobian correction
+<a href=#349 id=349 data-nosnippet>349</a>    /// is only a first-order approximation, iterated Newton is needed
+<a href=#350 id=350 data-nosnippet>350</a>    /// for tight convergence.
+<a href=#351 id=351 data-nosnippet>351</a>    </span><span class="kw">fn </span>cubic_decay() -&gt; (StateFn, JacobianFn) {
+<a href=#352 id=352 data-nosnippet>352</a>        <span class="kw">let </span>f = <span class="kw">move </span>|u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(u.map(|v| -v * v * v));
+<a href=#353 id=353 data-nosnippet>353</a>        <span class="kw">let </span>jac =
+<a href=#354 id=354 data-nosnippet>354</a>            <span class="kw">move </span>|u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(DMatrix::&lt;f64&gt;::from_diagonal(<span class="kw-2">&amp;</span>u.map(|v| -<span class="number">3.0 </span>* v * v)));
+<a href=#355 id=355 data-nosnippet>355</a>        (Box::new(f), Box::new(jac))
+<a href=#356 id=356 data-nosnippet>356</a>    }
+<a href=#357 id=357 data-nosnippet>357</a>
+<a href=#358 id=358 data-nosnippet>358</a>    <span class="attr">#[test]
+<a href=#359 id=359 data-nosnippet>359</a>    </span><span class="kw">fn </span>residual_matches_hand_derivation() {
+<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span>u = DVector::from_vec(<span class="macro">vec!</span>[<span class="number">2.0</span>, <span class="number">3.0</span>]);
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>u_star = DVector::from_vec(<span class="macro">vec!</span>[<span class="number">1.0</span>, <span class="number">1.0</span>]);
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">let </span>f_u = DVector::from_vec(<span class="macro">vec!</span>[<span class="number">0.5</span>, <span class="number">0.5</span>]);
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="comment">// g(u) = 1.5*(u - u_star) - 0.1*f(u)
+<a href=#364 id=364 data-nosnippet>364</a>        </span><span class="kw">let </span>res = residual(<span class="kw-2">&amp;</span>u, <span class="kw-2">&amp;</span>u_star, <span class="number">1.5</span>, <span class="number">0.1</span>, <span class="kw-2">&amp;</span>f_u);
+<a href=#365 id=365 data-nosnippet>365</a>        <span class="macro">assert!</span>((res[<span class="number">0</span>] - (<span class="number">1.5 </span>* <span class="number">1.0 </span>- <span class="number">0.1 </span>* <span class="number">0.5</span>)).abs() &lt; <span class="number">1e-12</span>);
+<a href=#366 id=366 data-nosnippet>366</a>        <span class="macro">assert!</span>((res[<span class="number">1</span>] - (<span class="number">1.5 </span>* <span class="number">2.0 </span>- <span class="number">0.1 </span>* <span class="number">0.5</span>)).abs() &lt; <span class="number">1e-12</span>);
+<a href=#367 id=367 data-nosnippet>367</a>    }
+<a href=#368 id=368 data-nosnippet>368</a>
+<a href=#369 id=369 data-nosnippet>369</a>    <span class="attr">#[test]
+<a href=#370 id=370 data-nosnippet>370</a>    </span><span class="kw">fn </span>linear_correction_solves_the_linearised_system() {
+<a href=#371 id=371 data-nosnippet>371</a>        <span class="comment">// alpha*I - coeff*J with J = -2*I, alpha=1, coeff=0.1 -&gt; 1.2*I.
+<a href=#372 id=372 data-nosnippet>372</a>        </span><span class="kw">let </span>jacobian = DMatrix::&lt;f64&gt;::identity(<span class="number">2</span>, <span class="number">2</span>) * -<span class="number">2.0</span>;
+<a href=#373 id=373 data-nosnippet>373</a>        <span class="kw">let </span>res = DVector::from_vec(<span class="macro">vec!</span>[<span class="number">1.2</span>, <span class="number">2.4</span>]);
+<a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">let </span>delta = linear_correction(<span class="kw-2">&amp;</span>jacobian, <span class="number">1.0</span>, <span class="number">0.1</span>, <span class="kw-2">&amp;</span>res, <span class="kw-2">&amp;</span>NalgebraDenseSolver).unwrap();
+<a href=#375 id=375 data-nosnippet>375</a>        <span class="macro">assert!</span>((delta[<span class="number">0</span>] - (-<span class="number">1.0</span>)).abs() &lt; <span class="number">1e-9</span>);
+<a href=#376 id=376 data-nosnippet>376</a>        <span class="macro">assert!</span>((delta[<span class="number">1</span>] - (-<span class="number">2.0</span>)).abs() &lt; <span class="number">1e-9</span>);
+<a href=#377 id=377 data-nosnippet>377</a>    }
+<a href=#378 id=378 data-nosnippet>378</a>
+<a href=#379 id=379 data-nosnippet>379</a>    <span class="attr">#[test]
+<a href=#380 id=380 data-nosnippet>380</a>    </span><span class="kw">fn </span>single_iteration_is_exact_for_affine_problem() {
+<a href=#381 id=381 data-nosnippet>381</a>        <span class="comment">// Backward-Euler-style step: alpha=1, coeff=theta*dt=0.1,
+<a href=#382 id=382 data-nosnippet>382</a>        // u_star = u_n (theta=1 so the (1-theta) term vanishes).
+<a href=#383 id=383 data-nosnippet>383</a>        </span><span class="kw">let </span>lambda = <span class="number">3.0</span>;
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">let </span>(f, jac) = affine_decay(lambda);
+<a href=#385 id=385 data-nosnippet>385</a>        <span class="kw">let </span>u0 = DVector::from_element(<span class="number">3</span>, <span class="number">1.0</span>);
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">let </span>u_star = u0.clone();
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">let </span>params = NewtonParams {
+<a href=#388 id=388 data-nosnippet>388</a>            convergence: NewtonConvergence::default(),
+<a href=#389 id=389 data-nosnippet>389</a>            jacobian_strategy: JacobianStrategy::ModifiedFrozen,
+<a href=#390 id=390 data-nosnippet>390</a>            max_iterations: <span class="number">1</span>,
+<a href=#391 id=391 data-nosnippet>391</a>        };
+<a href=#392 id=392 data-nosnippet>392</a>
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="kw">let </span>u_next = solve(u0, <span class="kw-2">&amp;</span>u_star, <span class="number">1.0</span>, <span class="number">0.1</span>, f, jac, <span class="kw-2">&amp;</span>NalgebraDenseSolver, <span class="kw-2">&amp;</span>params).unwrap();
+<a href=#394 id=394 data-nosnippet>394</a>
+<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw">let </span>expected = <span class="number">1.0 </span>/ (<span class="number">1.0 </span>+ lambda * <span class="number">0.1</span>);
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="kw">for </span>v <span class="kw">in </span>u_next.iter() {
+<a href=#397 id=397 data-nosnippet>397</a>            <span class="macro">assert!</span>((v - expected).abs() &lt; <span class="number">1e-9</span>, <span class="string">"got {v}, expected {expected}"</span>);
+<a href=#398 id=398 data-nosnippet>398</a>        }
+<a href=#399 id=399 data-nosnippet>399</a>    }
+<a href=#400 id=400 data-nosnippet>400</a>
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="attr">#[test]
+<a href=#402 id=402 data-nosnippet>402</a>    </span><span class="kw">fn </span>full_newton_converges_on_nonaffine_problem() {
+<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw">let </span>(f, jac) = cubic_decay();
+<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">let </span>u0 = DVector::from_element(<span class="number">2</span>, <span class="number">1.0</span>);
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">let </span>u_star = u0.clone();
+<a href=#406 id=406 data-nosnippet>406</a>        <span class="kw">let </span>params = NewtonParams {
+<a href=#407 id=407 data-nosnippet>407</a>            convergence: NewtonConvergence::default(),
+<a href=#408 id=408 data-nosnippet>408</a>            jacobian_strategy: JacobianStrategy::FullNewton,
+<a href=#409 id=409 data-nosnippet>409</a>            max_iterations: <span class="number">20</span>,
+<a href=#410 id=410 data-nosnippet>410</a>        };
+<a href=#411 id=411 data-nosnippet>411</a>
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="kw">let </span>u_next = solve(u0, <span class="kw-2">&amp;</span>u_star, <span class="number">1.0</span>, <span class="number">0.1</span>, f, jac, <span class="kw-2">&amp;</span>NalgebraDenseSolver, <span class="kw-2">&amp;</span>params).unwrap();
+<a href=#413 id=413 data-nosnippet>413</a>
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="comment">// Cross-check against an independently solved scalar equation:
+<a href=#415 id=415 data-nosnippet>415</a>        // u + 0.1*u^3 = 1.0 (Backward-Euler-style implicit cubic decay).
+<a href=#416 id=416 data-nosnippet>416</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>u_scalar = <span class="number">1.0_f64</span>;
+<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw">for _ in </span><span class="number">0</span>..<span class="number">50 </span>{
+<a href=#418 id=418 data-nosnippet>418</a>            <span class="kw">let </span>g = u_scalar + <span class="number">0.1 </span>* u_scalar.powi(<span class="number">3</span>) - <span class="number">1.0</span>;
+<a href=#419 id=419 data-nosnippet>419</a>            <span class="kw">let </span>dg = <span class="number">1.0 </span>+ <span class="number">0.3 </span>* u_scalar.powi(<span class="number">2</span>);
+<a href=#420 id=420 data-nosnippet>420</a>            u_scalar -= g / dg;
+<a href=#421 id=421 data-nosnippet>421</a>        }
+<a href=#422 id=422 data-nosnippet>422</a>        <span class="kw">for </span>v <span class="kw">in </span>u_next.iter() {
+<a href=#423 id=423 data-nosnippet>423</a>            <span class="macro">assert!</span>((v - u_scalar).abs() &lt; <span class="number">1e-5</span>, <span class="string">"got {v}, expected {u_scalar}"</span>);
+<a href=#424 id=424 data-nosnippet>424</a>        }
+<a href=#425 id=425 data-nosnippet>425</a>    }
+<a href=#426 id=426 data-nosnippet>426</a>
+<a href=#427 id=427 data-nosnippet>427</a>    <span class="attr">#[test]
+<a href=#428 id=428 data-nosnippet>428</a>    </span><span class="kw">fn </span>modified_frozen_with_single_correction_does_not_converge_on_nonaffine_problem() {
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="comment">// A single frozen-Jacobian correction is only a first-order
+<a href=#430 id=430 data-nosnippet>430</a>        // approximation for this nonaffine f (contrast with
+<a href=#431 id=431 data-nosnippet>431</a>        // `full_newton_converges_on_nonaffine_problem`, which reaches the
+<a href=#432 id=432 data-nosnippet>432</a>        // true root): under the loop's default tolerance, that shows up
+<a href=#433 id=433 data-nosnippet>433</a>        // as an honest convergence failure -- not a silently inaccurate
+<a href=#434 id=434 data-nosnippet>434</a>        // "success" -- since nothing about affine-ness is special-cased;
+<a href=#435 id=435 data-nosnippet>435</a>        // see `solve`'s docs.
+<a href=#436 id=436 data-nosnippet>436</a>        </span><span class="kw">let </span>(f, jac) = cubic_decay();
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="kw">let </span>u0 = DVector::from_element(<span class="number">1</span>, <span class="number">1.0</span>);
+<a href=#438 id=438 data-nosnippet>438</a>        <span class="kw">let </span>u_star = u0.clone();
+<a href=#439 id=439 data-nosnippet>439</a>        <span class="kw">let </span>params = NewtonParams {
+<a href=#440 id=440 data-nosnippet>440</a>            convergence: NewtonConvergence::default(),
+<a href=#441 id=441 data-nosnippet>441</a>            jacobian_strategy: JacobianStrategy::ModifiedFrozen,
+<a href=#442 id=442 data-nosnippet>442</a>            max_iterations: <span class="number">1</span>,
+<a href=#443 id=443 data-nosnippet>443</a>        };
+<a href=#444 id=444 data-nosnippet>444</a>
+<a href=#445 id=445 data-nosnippet>445</a>        <span class="kw">let </span>err = solve(u0, <span class="kw-2">&amp;</span>u_star, <span class="number">1.0</span>, <span class="number">0.1</span>, f, jac, <span class="kw-2">&amp;</span>NalgebraDenseSolver, <span class="kw-2">&amp;</span>params).unwrap_err();
+<a href=#446 id=446 data-nosnippet>446</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#447 id=447 data-nosnippet>447</a>            err,
+<a href=#448 id=448 data-nosnippet>448</a>            OxiflowError::NewtonNotConverged { iterations: <span class="number">1</span>, .. }
+<a href=#449 id=449 data-nosnippet>449</a>        ));
+<a href=#450 id=450 data-nosnippet>450</a>    }
+<a href=#451 id=451 data-nosnippet>451</a>
+<a href=#452 id=452 data-nosnippet>452</a>    <span class="attr">#[test]
+<a href=#453 id=453 data-nosnippet>453</a>    </span><span class="kw">fn </span>not_converged_when_iteration_budget_too_small() {
+<a href=#454 id=454 data-nosnippet>454</a>        <span class="kw">let </span>(f, jac) = cubic_decay();
+<a href=#455 id=455 data-nosnippet>455</a>        <span class="kw">let </span>u0 = DVector::from_element(<span class="number">1</span>, <span class="number">1.0</span>);
+<a href=#456 id=456 data-nosnippet>456</a>        <span class="kw">let </span>u_star = u0.clone();
+<a href=#457 id=457 data-nosnippet>457</a>        <span class="kw">let </span>params = NewtonParams {
+<a href=#458 id=458 data-nosnippet>458</a>            convergence: NewtonConvergence::ResidualOnly {
+<a href=#459 id=459 data-nosnippet>459</a>                tol_abs: <span class="number">1e-14</span>,
+<a href=#460 id=460 data-nosnippet>460</a>                tol_rel: <span class="number">0.0</span>,
+<a href=#461 id=461 data-nosnippet>461</a>            },
+<a href=#462 id=462 data-nosnippet>462</a>            jacobian_strategy: JacobianStrategy::ModifiedFrozen,
+<a href=#463 id=463 data-nosnippet>463</a>            max_iterations: <span class="number">1</span>,
+<a href=#464 id=464 data-nosnippet>464</a>        };
+<a href=#465 id=465 data-nosnippet>465</a>
+<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">let </span>err = solve(u0, <span class="kw-2">&amp;</span>u_star, <span class="number">1.0</span>, <span class="number">0.1</span>, f, jac, <span class="kw-2">&amp;</span>NalgebraDenseSolver, <span class="kw-2">&amp;</span>params).unwrap_err();
+<a href=#467 id=467 data-nosnippet>467</a>        <span class="macro">assert!</span>(<span class="macro">matches!</span>(
+<a href=#468 id=468 data-nosnippet>468</a>            err,
+<a href=#469 id=469 data-nosnippet>469</a>            OxiflowError::NewtonNotConverged { iterations: <span class="number">1</span>, .. }
+<a href=#470 id=470 data-nosnippet>470</a>        ));
+<a href=#471 id=471 data-nosnippet>471</a>    }
+<a href=#472 id=472 data-nosnippet>472</a>
+<a href=#473 id=473 data-nosnippet>473</a>    <span class="attr">#[test]
+<a href=#474 id=474 data-nosnippet>474</a>    </span><span class="kw">fn </span>combined_or_converges_when_correction_is_small_even_if_residual_is_not() {
+<a href=#475 id=475 data-nosnippet>475</a>        <span class="kw">let </span>f = |u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(u.map(|v| v + <span class="number">1.0</span>)); <span class="comment">// never zero for u &gt;= 0
+<a href=#476 id=476 data-nosnippet>476</a>        </span><span class="kw">let </span>jac = |u: <span class="kw-2">&amp;</span>DVector&lt;f64&gt;| <span class="prelude-val">Ok</span>(DMatrix::&lt;f64&gt;::identity(u.len(), u.len()) * -<span class="number">1.0e6</span>);
+<a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">let </span>u0 = DVector::from_element(<span class="number">1</span>, <span class="number">0.0</span>);
+<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">let </span>u_star = u0.clone();
+<a href=#479 id=479 data-nosnippet>479</a>        <span class="comment">// A deliberately stiff Jacobian (-1e6) makes the correction
+<a href=#480 id=480 data-nosnippet>480</a>        // collapse to a tiny step even though the residual itself does
+<a href=#481 id=481 data-nosnippet>481</a>        // not shrink below tolerance -- see the closures above.
+<a href=#482 id=482 data-nosnippet>482</a>        </span><span class="kw">let </span>params_or = NewtonParams {
+<a href=#483 id=483 data-nosnippet>483</a>            convergence: NewtonConvergence::CombinedOr {
+<a href=#484 id=484 data-nosnippet>484</a>                tol_abs: <span class="number">1e-3</span>,
+<a href=#485 id=485 data-nosnippet>485</a>                tol_rel: <span class="number">0.0</span>,
+<a href=#486 id=486 data-nosnippet>486</a>            },
+<a href=#487 id=487 data-nosnippet>487</a>            jacobian_strategy: JacobianStrategy::ModifiedFrozen,
+<a href=#488 id=488 data-nosnippet>488</a>            max_iterations: <span class="number">1</span>,
+<a href=#489 id=489 data-nosnippet>489</a>        };
+<a href=#490 id=490 data-nosnippet>490</a>        <span class="kw">let </span>params_residual_only = NewtonParams {
+<a href=#491 id=491 data-nosnippet>491</a>            convergence: NewtonConvergence::ResidualOnly {
+<a href=#492 id=492 data-nosnippet>492</a>                tol_abs: <span class="number">1e-3</span>,
+<a href=#493 id=493 data-nosnippet>493</a>                tol_rel: <span class="number">0.0</span>,
+<a href=#494 id=494 data-nosnippet>494</a>            },
+<a href=#495 id=495 data-nosnippet>495</a>            jacobian_strategy: JacobianStrategy::ModifiedFrozen,
+<a href=#496 id=496 data-nosnippet>496</a>            max_iterations: <span class="number">1</span>,
+<a href=#497 id=497 data-nosnippet>497</a>        };
+<a href=#498 id=498 data-nosnippet>498</a>
+<a href=#499 id=499 data-nosnippet>499</a>        <span class="kw">let </span>out_or = solve(
+<a href=#500 id=500 data-nosnippet>500</a>            u0.clone(),
+<a href=#501 id=501 data-nosnippet>501</a>            <span class="kw-2">&amp;</span>u_star,
+<a href=#502 id=502 data-nosnippet>502</a>            <span class="number">1.0</span>,
 <a href=#503 id=503 data-nosnippet>503</a>            <span class="number">1.0</span>,
-<a href=#504 id=504 data-nosnippet>504</a>            <span class="number">1.0</span>,
-<a href=#505 id=505 data-nosnippet>505</a>            f,
-<a href=#506 id=506 data-nosnippet>506</a>            jac,
-<a href=#507 id=507 data-nosnippet>507</a>            <span class="kw-2">&amp;</span>NalgebraDenseSolver,
-<a href=#508 id=508 data-nosnippet>508</a>            <span class="kw-2">&amp;</span>params_or,
-<a href=#509 id=509 data-nosnippet>509</a>        );
-<a href=#510 id=510 data-nosnippet>510</a>        <span class="kw">let </span>out_residual_only = solve(
-<a href=#511 id=511 data-nosnippet>511</a>            u0,
-<a href=#512 id=512 data-nosnippet>512</a>            <span class="kw-2">&amp;</span>u_star,
+<a href=#504 id=504 data-nosnippet>504</a>            f,
+<a href=#505 id=505 data-nosnippet>505</a>            jac,
+<a href=#506 id=506 data-nosnippet>506</a>            <span class="kw-2">&amp;</span>NalgebraDenseSolver,
+<a href=#507 id=507 data-nosnippet>507</a>            <span class="kw-2">&amp;</span>params_or,
+<a href=#508 id=508 data-nosnippet>508</a>        );
+<a href=#509 id=509 data-nosnippet>509</a>        <span class="kw">let </span>out_residual_only = solve(
+<a href=#510 id=510 data-nosnippet>510</a>            u0,
+<a href=#511 id=511 data-nosnippet>511</a>            <span class="kw-2">&amp;</span>u_star,
+<a href=#512 id=512 data-nosnippet>512</a>            <span class="number">1.0</span>,
 <a href=#513 id=513 data-nosnippet>513</a>            <span class="number">1.0</span>,
-<a href=#514 id=514 data-nosnippet>514</a>            <span class="number">1.0</span>,
-<a href=#515 id=515 data-nosnippet>515</a>            f,
-<a href=#516 id=516 data-nosnippet>516</a>            jac,
-<a href=#517 id=517 data-nosnippet>517</a>            <span class="kw-2">&amp;</span>NalgebraDenseSolver,
-<a href=#518 id=518 data-nosnippet>518</a>            <span class="kw-2">&amp;</span>params_residual_only,
-<a href=#519 id=519 data-nosnippet>519</a>        );
-<a href=#520 id=520 data-nosnippet>520</a>
-<a href=#521 id=521 data-nosnippet>521</a>        <span class="macro">assert!</span>(out_or.is_ok(), <span class="string">"CombinedOr should accept a tiny correction"</span>);
-<a href=#522 id=522 data-nosnippet>522</a>        <span class="macro">assert!</span>(
-<a href=#523 id=523 data-nosnippet>523</a>            out_residual_only.is_err(),
-<a href=#524 id=524 data-nosnippet>524</a>            <span class="string">"ResidualOnly should reject a large residual"
-<a href=#525 id=525 data-nosnippet>525</a>        </span>);
-<a href=#526 id=526 data-nosnippet>526</a>    }
-<a href=#527 id=527 data-nosnippet>527</a>}
+<a href=#514 id=514 data-nosnippet>514</a>            f,
+<a href=#515 id=515 data-nosnippet>515</a>            jac,
+<a href=#516 id=516 data-nosnippet>516</a>            <span class="kw-2">&amp;</span>NalgebraDenseSolver,
+<a href=#517 id=517 data-nosnippet>517</a>            <span class="kw-2">&amp;</span>params_residual_only,
+<a href=#518 id=518 data-nosnippet>518</a>        );
+<a href=#519 id=519 data-nosnippet>519</a>
+<a href=#520 id=520 data-nosnippet>520</a>        <span class="macro">assert!</span>(out_or.is_ok(), <span class="string">"CombinedOr should accept a tiny correction"</span>);
+<a href=#521 id=521 data-nosnippet>521</a>        <span class="macro">assert!</span>(
+<a href=#522 id=522 data-nosnippet>522</a>            out_residual_only.is_err(),
+<a href=#523 id=523 data-nosnippet>523</a>            <span class="string">"ResidualOnly should reject a large residual"
+<a href=#524 id=524 data-nosnippet>524</a>        </span>);
+<a href=#525 id=525 data-nosnippet>525</a>    }
+<a href=#526 id=526 data-nosnippet>526</a>}
 </code></pre></div></section></main></body></html>

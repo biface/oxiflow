@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TemporalInjection"],"fn":["dirac_initial_state"],"struct":["InjectionInlet"]};

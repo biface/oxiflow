@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["BoundaryLocation","BoundaryType"],"mod":["danckwerts"],"trait":["BoundaryCondition"]};
+window.SIDEBAR_ITEMS = {"enum":["BoundaryLocation","BoundaryType"],"mod":["danckwerts","injection"],"trait":["BoundaryCondition"]};
