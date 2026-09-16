@@ -10,8 +10,12 @@
 
 oxiflow provides the architectural building blocks to construct rigorous, maintainable and
 performant PDE solvers in Rust — from simple 1D chromatography models to complex multi-physics
-coupled systems. It is designed from the ground up to support structured grids (v1.0),
-unstructured finite element meshes (v2.0), and a family of domain-specific frameworks (v3.0).
+coupled systems. The architecture will support:
+
+- structured grids (v1.0)
+- unstructured finite element meshes — a complete set targeted for v2.0 — plus a complementary
+  set of structured-grid components, already under way since v1.0
+- a family of niche frameworks (v3.0)
 
 ---
 
@@ -28,10 +32,11 @@ oxiflow              (engine — fields, fluxes, meshes, couplings, solvers)
 └── ...              (third-party frameworks on crates.io)
 ```
 
-Each framework is an independent crate that depends on the engine and provides
-domain-specific models, boundary conditions, nomenclature and declarative configuration.
-Third parties can publish their own `oxiflow-*` frameworks on crates.io using the same
-plugin API — the engine exposes stable, object-safe extension points for exactly this purpose.
+Each framework is an independent crate that will adapt the core engine to the domain-specific
+physical models, boundary conditions, nomenclature and declarative configuration of its field.
+This work aims to show third parties how to use the core `oxiflow` library, so they can then
+publish their own `oxiflow-*` frameworks on crates.io using the same plugin API — the engine
+exposes stable, object-safe extension points for exactly this purpose.
 
 ---
 
@@ -46,11 +51,12 @@ plugin API — the engine exposes stable, object-safe extension points for exact
 - **Multi-domain coupling** — `CouplingOperator` connects distinct physical domains across
   moving interfaces (gravitational flows, fluid–solid interaction, ...)
 - **Abstract spatial operators** — `DiscreteOperator` decouples solvers from discretisation
-  schemes; FD, FV and (in v2.0) FEM plug in without rewriting integrators
+  schemes; FD, FV and FEM (landing progressively across v1.1-v1.9, [DD-047](https://github.com/biface/oxiflow/issues/132))
+  plug in without rewriting integrators
 - **Abstract mesh** — `Mesh` trait keeps `PhysicalState` free of grid assumptions;
   `UniformGrid1D` in v1.0, unstructured triangular meshes in v2.0
 - **Rich integrator library** — Forward Euler, RK4, Dormand–Prince 4/5, Backward Euler,
-  Crank–Nicolson, BDF2/3, IMEX (Strang splitting) — with iterated Newton correction (DD-044,
+  Crank–Nicolson, BDF2/3, IMEX (Strang splitting) — with iterated Newton correction ([DD-044](https://github.com/biface/oxiflow/issues/109),
   v0.7.0) for the implicit methods, configurable per solver (convergence criterion,
   Jacobian refresh strategy, iteration budget)
 - **Spatial schemes** — upwind/centred FD, WENO3/5, conservative FV, Lax–Wendroff,
@@ -66,7 +72,7 @@ plugin API — the engine exposes stable, object-safe extension points for exact
 
 ```toml
 [dependencies]
-oxiflow = "0.8"
+oxiflow = "0.9"
 # oxiflow-chrom = "3.0"    # chromatography framework (available from v3.0)
 ```
 
@@ -149,25 +155,34 @@ third-party frameworks remain compatible across engine versions:
 
 ## Development Status
 
-| Milestone              | Version  | Status       | Theme                                           |
-|------------------------|----------|--------------|-------------------------------------------------|
-| J0 — Foundations       | v0.0.5   | ✅ Published  | Placeholder · CI · project structure            |
-| J1 — Core Architecture | v0.1.0   | ✅ Published  | ContextValue · OxiflowError · Mesh (INV-1)      |
-| J2 — Complete Context  | v0.2.0   | ✅ Published  | Requiring BCs · topological ordering · calculators |
-| J3 — Multi-Component   | v0.3.0   | ✅ Published  | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3) |
-| J4a — Integrators      | v0.4.0   | ✅ Published  | Euler, RK4, DoPri45, Backward Euler, Crank–Nicolson, BDF2, IMEX |
-| J5 — Discretisation    | v0.5.0   | ✅ Published  | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · flux limiters + adaptive selection |
-| J6 — Sparse Algebra & Persistence | v0.6.0 | ✅ Published | faer sparse solver · SimulationSnapshot (checkpoint/on_divergence) · HDF5 loading · VTK export · IntegratorSpec |
-| J7 — Nonlinear Time Integration | v0.7.0 | ✅ Published | Iterated Newton for implicit integrators (DD-044) · `IntegratorSpec` extended to BE/CN/BDF2 |
-| J8 — Computational Optimisation | v0.8.0 | ✅ Published | GPU-readiness (DD-026, DD-045) · `gpu` feature (`wgpu`) · MSRV 1.84 |
-| J9 — Parallelism & Benchmarking | v0.9.0 | ⏳ Planned | Rayon · dirty-flag cache · Criterion benchmarks |
-| J10 — Ecosystem v1.0   | v1.0.0   | ⏳ Planned    | 7 examples · FEM audit · stable API             |
-| J20 — FEM              | v2.0.0   | 🔭 Horizon   | Unstructured meshes · ALE · INV-4 plugin-safe   |
-| J30 — Frameworks       | v3.0.0   | 🔭 Horizon   | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run` |
+| Milestone                              | Version                            | Status       | Theme                                                                                                                                                                                                                                                                                            |
+|----------------------------------------|------------------------------------|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| J0 — Foundations                       | v0.0.5                             | ✅ Published | Placeholder · CI · project structure                                                                                                                                                                                                                                                             |
+| J1 — Core Architecture                 | v0.1.0                             | ✅ Published | ContextValue · OxiflowError · Mesh (INV-1)                                                                                                                                                                                                                                                       |
+| J2 — Complete Context                  | v0.2.0                             | ✅ Published | Requiring BCs · topological ordering · calculators                                                                                                                                                                                                                                               |
+| J3 — Multi-Component                   | v0.3.0                             | ✅ Published | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3)                                                                                                                                                                                                                                   |
+| J4a — Integrators                      | v0.4.0                             | ✅ Published | Euler, RK4, DoPri45, Backward Euler, Crank–Nicolson, BDF2, IMEX                                                                                                                                                                                                                                  |
+| J5 — Discretisation                    | v0.5.0                             | ✅ Published | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · flux limiters + adaptive selection                                                                                                                                                                                                                  |
+| J6 — Sparse Algebra & Persistence      | v0.6.0                             | ✅ Published | faer sparse solver · SimulationSnapshot (checkpoint/on_divergence) · HDF5 loading · VTK export · IntegratorSpec                                                                                                                                                                                  |
+| J7 — Nonlinear Time Integration        | v0.7.0                             | ✅ Published | Iterated Newton for implicit integrators ([DD-044](https://github.com/biface/oxiflow/issues/109)) · `IntegratorSpec` extended to BE/CN/BDF2                                                                                                                                                      |
+| J8 — Computational Optimisation        | v0.8.0                             | ✅ Published | GPU-readiness ([DD-026](https://github.com/biface/oxiflow/issues/73), [DD-045](https://github.com/biface/oxiflow/issues/128)) · `gpu` feature (`wgpu`) · MSRV 1.84                                                                                                                               |
+| J9 — Parallelism & Benchmarking        | v0.9.0                             | ✅ Published | Rayon dispatch ([DD-014](https://github.com/biface/oxiflow/issues/14)/[DD-048](https://github.com/biface/oxiflow/issues/140)) · Criterion benchmark suite (`oxiflow_parallel`, 4 models) · lahar multi-field model ([DD-032](https://github.com/biface/oxiflow/issues/85)) · SVG reference plots |
+| J10 — Ecosystem v1.0                   | v1.0.0                             | ⏳ Planned   | 7 multi-domain examples · `(x,t)` coefficients (`ExternalTabulated`) · stable API ([DD-016](https://github.com/biface/oxiflow/issues/16))                                                                                                                                                        |
+| J11 — nD Mesh Foundations              | v1.1.0 (FEM) / v1.1.5 (structured) | ⏳ Planned   | Mesh foundations for the FEM/structured split ([DD-047](https://github.com/biface/oxiflow/issues/132))                                                                                                                                                                                           |
+| J12 — Velocity-Pressure Discretisation | v1.2.0 / v1.2.5                    | ⏳ Planned   | FEM (Gmsh import, [DD-028](https://github.com/biface/oxiflow/issues/76)) or MAC/collocated+Rhie-Chow (structured)                                                                                                                                                                                |
+| J13 — Saddle-Point Solver              | v1.3.0                             | ⏳ Planned   | `SaddlePointSolver`, shared across both tracks                                                                                                                                                                                                                                                   |
+| J14 — DAE & Navier-Stokes              | v1.4.0                             | ⏳ Planned   | DAE time integration + Navier-Stokes as `PhysicalModel`, shared                                                                                                                                                                                                                                  |
+| J15 — End-to-End Wiring                | v1.5.0 / v1.5.5                    | ⏳ Planned   | Taylor-Hood/MINI (FEM) or full structured pipeline                                                                                                                                                                                                                                               |
+| J16 — Comparison Protocol              | v1.6.0                             | ⏳ Planned   | FEM vs. structured validation (lid-driven cavity, Poiseuille, Ghia et al. 1982)                                                                                                                                                                                                                  |
+| J17 — ALE                              | v1.7.0                             | ⏳ Planned   | Arbitrary Lagrangian-Eulerian formulation                                                                                                                                                                                                                                                        |
+| J18 — Preconditioned Sparse Solvers    | v1.8.0                             | ⏳ Planned   | ILU/AMG preconditioners                                                                                                                                                                                                                                                                          |
+| J19 — Spectral Methods                 | v1.9.0                             | ⏳ Planned   | `Discretization` common ancestor, `Mesh`/`SpectralBasis` siblings ([DD-024](https://github.com/biface/oxiflow/issues/63))                                                                                                                                                                        |
+| J20 — Stabilisation                    | v2.0.0                             | 🔭 Horizon   | SemVer freeze across the full numerical core — no new feature                                                                                                                                                                                                                                    |
+| J30 — Frameworks                       | v3.0.0                             | 🔭 Horizon   | oxiflow-chrom · oxiflow-geo · CLI `oxiflow run`                                                                                                                                                                                                                                                  |
 
-The INV-GPU-1 to INV-GPU-5 sub-invariants (DD-026) have governed GPU-readiness of numerical
+The INV-GPU-1 to INV-GPU-5 sub-invariants ([DD-026](https://github.com/biface/oxiflow/issues/73)) have governed GPU-readiness of numerical
 data structures since v0.3.0; the `gpu` feature itself (backend selection, adapter
-acquisition, CPU↔GPU boundary conversion) landed in v0.8.0 (DD-045) with no breaking API
+acquisition, CPU↔GPU boundary conversion) landed in v0.8.0 ([DD-045](https://github.com/biface/oxiflow/issues/128)) with no breaking API
 changes to any type designed against those invariants.
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the full architectural specification.
@@ -176,15 +191,15 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for the full architectural specification.
 
 ## Feature Flags
 
-| Flag        | Description                                    | Available from |
-|-------------|------------------------------------------------|----------------|
-| *(default)* | Engine core, serial execution                  | v0.2           |
-| `serde`     | Serialisation of states and scenarios          | v0.6           |
-| `hdf5`      | HDF5 import/export for tabulated external data | v0.6           |
-| `vtk`       | VTK (`.vtu`) export of `SimulationResult`      | v0.6           |
-| `sparse`    | `faer` sparse linear solver for implicit integrators | v0.6     |
-| `parallel`  | Rayon parallelism for independent calculators  | v0.9 (planned) |
-| `gpu`       | GPU acceleration via `wgpu` (Vulkan/Metal/DX12)| v0.8           |
+| Flag        | Description                                          | Available from |
+|-------------|------------------------------------------------------|----------------|
+| *(default)* | Engine core, serial execution                        | v0.2           |
+| `serde`     | Serialisation of states and scenarios                | v0.6           |
+| `hdf5`      | HDF5 import/export for tabulated external data       | v0.6           |
+| `vtk`       | VTK (`.vtu`) export of `SimulationResult`            | v0.6           |
+| `sparse`    | `faer` sparse linear solver for implicit integrators | v0.6           |
+| `parallel`  | Rayon parallelism for independent calculators        | v0.9           |
+| `gpu`       | GPU acceleration via `wgpu` (Vulkan/Metal/DX12)      | v0.8           |
 
 ---
 
