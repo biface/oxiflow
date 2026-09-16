@@ -975,7 +975,18 @@ fn chezy_drag_dominated_matches_analytical() {
 /// friction-overshoot guard (see `examples/lahar_multifield.rs`'s module
 /// doc) is masking real dynamics rather than just preventing an explicit-
 /// Euler artifact.
+///
+/// `#[ignore]`d: 60s of simulated time at dt=5e-4 (120,000 steps, 2001
+/// nodes) -- same reasoning as `gpu_context_acquires_adapter` being
+/// ignored for CI hardware constraints, here for CI *time* cost instead.
+/// Shortening the run isn't a substitute: the slump/stall pattern this
+/// test checks for needs enough simulated time to show more than one
+/// cycle, so cutting the duration would weaken exactly what's being
+/// verified rather than just making it faster. Run explicitly with
+/// `cargo test --release -- --ignored` (release strongly recommended --
+/// this ran 15-27s in release locally; debug would be far slower).
 #[test]
+#[ignore]
 fn coulomb_constant_friction_shows_slump_and_stall_pattern() {
     const STALL_EPS: f64 = 1.0e-6; // front position considered "unchanged"
                                    // below this delta between consecutive
