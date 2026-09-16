@@ -140,8 +140,14 @@ gpu      = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]
 criterion = { version = "0.8", features = ["html_reports"] }
 # plotters — SVG reference plots for the four benchmark models (#145),
 # matching the literature figures / chrom-rs's own chromatogram output
-# each model is validated against.
-plotters = "0.3"
+# each model is validated against. default-features off: the default
+# set pulls in `ttf` (font-kit -> yeslogic-fontconfig-sys), which needs
+# the system `fontconfig` C library + pkg-config at build time -- not
+# installed on CI runners, and not needed for plain SVG text. Only
+# svg_backend (SVGBackend) and line_series (LineSeries) are actually
+# used; Circle/PathElement/RGBColor/the 8 basic named colors are core,
+# not feature-gated.
+plotters = { version = "0.3", default-features = false, features = ["svg_backend", "line_series"] }
 
 [[bench]]
 name    = "oxiflow_parallel"
