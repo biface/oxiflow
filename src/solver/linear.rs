@@ -7,7 +7,7 @@
 //! generic service, not a temporal-integration concern. The implicit
 //! integrators ([`crate::solver::methods::implicit`]) are its first
 //! consumer. DD-013 also anticipates further consumers unrelated to time
-//! integration — sparse FEM systems at v2.0/J7 among them — but any sparse
+//! integration — sparse FEM systems from v0.12.0 (J12) among them — but any sparse
 //! backend is a sibling trait (see below), never a second implementation
 //! of `LinearSolver` itself.
 //!

@@ -9,11 +9,11 @@
 //! - **Rank** (algebraic): scalar (rank 0), vector (rank 1), matrix (rank 2 tensor).
 //! - **Distribution**: pointwise algebraic object vs. nodal field (one value per mesh node).
 //!
-//! ## Reserved variants (J7)
+//! ## Reserved variants (v0.14.0 (J14), DD-057 #159)
 //!
 //! `Tensor4` (rank-4 tensor C_ijkl) and `TensorField` (rank-2 tensor per node) are
 //! deliberately absent. They require `DiscreteOperator` (INV-2, J5) for covariant
-//! transformation semantics and will be added at J7. Tensors of rank > 4 are out of
+//! transformation semantics and will be added at v0.14.0 (J14) (DD-057, #159). Tensors of rank > 4 are out of
 //! scope for all target physics; extension for third-party frameworks follows INV-4.
 //!
 //! ## Distinction from `PhysicalData`
@@ -46,7 +46,7 @@ use crate::context::error::OxiflowError;
 /// | `ScalarField` | `DVector` — one scalar per node | porosity(x), T(x) |
 /// | `VectorField` | `DMatrix` — n_nodes × dim | velocity field u(x,y) |
 ///
-/// # Reserved (J7 — requires INV-2 / DiscreteOperator)
+/// # Reserved (v0.14.0 (J14), DD-057 — requires INV-2 / DiscreteOperator)
 ///
 /// ```text
 /// // Tensor4(Array4<f64>)  — rank-4 tensor C_ijkl (elastic stiffness)
@@ -89,7 +89,7 @@ pub enum ContextValue {
     /// Rank-2 tensor: diffusion tensor D_ij, stress σ_ij, permeability K_ij.
     ///
     /// Covariant transformation is the caller's responsibility
-    /// via `DiscreteOperator` (INV-2, J7):
+    /// via `DiscreteOperator` (INV-2, v0.14.0 (J14), DD-057):
     ///
     /// $$D'_{ij} = J_{ik}\,D_{kl}\,J_{jl}^{\top}$$
     ///
@@ -118,7 +118,7 @@ pub enum ContextValue {
     /// is row-major; any transposition is resolved at the future GPU upload
     /// boundary, never in this type.
     VectorField(DMatrix<f64>),
-    // Reserved for J7 — requires DiscreteOperator (INV-2):
+    // Reserved for v0.14.0 (J14) (DD-057) — requires DiscreteOperator (INV-2):
     // Tensor4(ndarray::Array4<f64>)  — rank-4 tensor C_ijkl
     // TensorField(...)               — rank-2 tensor per node D_ij(x)
     // Rank > 4: out of scope; extension via INV-4 for third-party frameworks.
@@ -138,7 +138,7 @@ impl ContextValue {
             Self::Matrix(_) => "Matrix",
             Self::ScalarField(_) => "ScalarField",
             Self::VectorField(_) => "VectorField",
-            // J7 variants (Tensor4, TensorField) return their name when added
+            // v0.14.0 variants (Tensor4, TensorField, DD-057) return their name when added
             #[allow(unreachable_patterns)]
             _ => "Unknown",
         }

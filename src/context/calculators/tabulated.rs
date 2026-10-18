@@ -19,14 +19,14 @@ use crate::model::traits::RequiresContext;
 ///
 /// # Reserved
 ///
-/// `PiecewiseCubic` (natural cubic spline, 4th-order accurate) is planned for
-/// J5 (v0.7.0) and requires the `spline` feature flag.
+/// `PiecewiseCubic` (natural cubic spline, 4th-order accurate) is reserved, with
+/// no milestone assigned; it would require a `spline` feature flag.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Interpolation {
     /// Piecewise linear interpolation: `f(t) = f_i + (f_{i+1} − f_i) · (t − t_i) / (t_{i+1} − t_i)`.
     Linear,
-    // PiecewiseCubic — RESERVED J5 (v0.7.0), requires feature `spline`.
+    // PiecewiseCubic — RESERVED, no milestone assigned (would require feature `spline`).
 }
 
 // ── ExternalTabulated ─────────────────────────────────────────────────────────
@@ -208,9 +208,9 @@ impl ExternalTabulated {
 
         match self.interpolation {
             Interpolation::Linear => v0 + (v1 - v0) * (t - t0) / (t1 - t0),
-            // J5+: PiecewiseCubic will be added here.
+            // PiecewiseCubic would be added here (reserved, no milestone).
             #[allow(unreachable_patterns)]
-            _ => v0, // unreachable at J2
+            _ => v0, // unreachable while `Linear` is the only variant
         }
     }
 }

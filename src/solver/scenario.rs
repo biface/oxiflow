@@ -332,8 +332,9 @@ impl Scenario {
 
     /// Validates scenario consistency before solving.
     ///
-    /// At J1: verifies at least one domain is present.
-    /// At J3: will verify interface consistency and coupling coverage.
+    /// Verifies that at least one domain is present and that no domain has an
+    /// empty mesh. Interface consistency and coupling coverage are not checked
+    /// (finding of the #172 audit).
     pub fn validate(&self) -> Result<(), OxiflowError> {
         if self.domains.is_empty() {
             return Err(OxiflowError::InvalidDomain(

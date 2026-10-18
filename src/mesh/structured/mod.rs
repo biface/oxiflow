@@ -6,9 +6,9 @@
 //!
 //! - [`UniformGrid1D`] — 1D uniform grid, the first `Mesh` implementation.
 //!
-//! ## Future (J4b+)
+//! ## Future (v0.11.5 (J11))
 //!
-//! - `UniformGrid2D` — 2D Cartesian grid for 2D FD/FV problems.
+//! - Generalisation of `UniformGrid1D` to nD (DD-051, #152).
 
 use crate::mesh::Mesh;
 

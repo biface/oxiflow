@@ -148,8 +148,8 @@ pub enum JacobianStrategy {
     /// acceptably; re-evaluate it once the residual stops shrinking fast
     /// enough. Refreshed whenever
     /// `residual_norm_k / residual_norm_{k-1} > stagnation_ratio` — an
-    /// explicit extension point for J8 (v0.8.0) cost/robustness tuning,
-    /// not yet auto-tuned.
+    /// explicit extension point for cost/robustness tuning, not yet
+    /// auto-tuned.
     ModifiedWithStagnationCheck { stagnation_ratio: f64 },
 }
 

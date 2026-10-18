@@ -24,7 +24,8 @@
 //! Second-order-in-time problems (`∂²u/∂t²`, structural dynamics, wave
 //! propagation) are reduced to this form by introducing `v = ∂u/∂t` as a
 //! second field component: the state `(u, v)` evolves as a first-order
-//! system. Newmark-β and HHT-α integrators are planned for J4+.
+//! system. No dedicated second-order integrator (RKN, Newmark-β, HHT-α) is
+//! planned: order reduction is the retained approach (DD-030, #81).
 //!
 //! ## Physical domains
 //!
@@ -38,7 +39,7 @@
 //! | Flow in porous media (Darcy) | water content `θ` | J2+ |
 //! | Shallow water (Saint-Venant) | depth `h`, momentum `hv` | J3 |
 //! | Electrochemical (Nernst-Planck) | ionic concentrations `cᵢ` | J3+ |
-//! | Resistive magnetic diffusion | flux density `B` | J7 |
+//! | Resistive magnetic diffusion | flux density `B` | J10 (prototype, #179) |
 //! | Structural dynamics | displacement `u`, velocity `v` | J4+ |
 //!
 //! For full equations, physical derivations, and numerical details,
@@ -52,7 +53,7 @@
 //! | Physical concept | Engine abstraction |
 //! |---|---|
 //! | Field `u(x,t)` | `ContextValue::ScalarField` / `VectorField` |
-//! | Spatial domain | `Mesh` (INV-1) — `UniformGrid1D` (J1), FEM (J7) |
+//! | Spatial domain | `Mesh` (INV-1) — `UniformGrid1D` (J1), FEM (J11) |
 //! | Flux F, source S | `PhysicalModel::compute_physics(u, ctx)` |
 //! | Auxiliary quantities | `ComputeContext` ← `ContextCalculator` chain |
 //! | Time integration | `Solver` — Euler, RK4, … (J4) |
@@ -91,15 +92,15 @@
 //!
 //! ## FEM invariants — forward compatibility
 //!
-//! All abstractions from v0.1 are designed to extend naturally to FEM at
-//! v2.0 without any breaking change on existing code.
+//! All abstractions from v0.1 are designed to extend naturally to FEM from
+//! v0.11.0 (J11) without any breaking change on existing code.
 //!
 //! | Invariant | Guarantee | Active from |
 //! |---|---|---|
 //! | INV-1 | No `dx`/`nx` in public API — all spatial access via [`mesh::Mesh`] | v0.1.0 |
 //! | INV-2 | Integrators decoupled from spatial scheme via `DiscreteOperator<M>` | v0.5.0 |
 //! | INV-3 | Inter-domain coupling only via `CouplingOperator` | v0.3.0 |
-//! | INV-4 | All public traits object-safe — external crates can implement them | v2.0.0 |
+//! | INV-4 | All public traits object-safe — external crates can implement them | v0.30.0 (DA-017) |
 //!
 //! ## Getting started (J1)
 //!

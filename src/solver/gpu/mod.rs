@@ -140,7 +140,7 @@ pub fn to_gpu_bytes(value: &ContextValue) -> Result<&[u8], OxiflowError> {
             expected: "numeric ContextValue (Scalar/Vector/Matrix/ScalarField/VectorField)",
             actual: "Boolean",
         }),
-        // `#[non_exhaustive]` on ContextValue: reserved J7 variants
+        // `#[non_exhaustive]` on ContextValue: reserved v0.14.0 (J14) variants (DD-057)
         // (Tensor4/TensorField) are not yet defined in the enum itself, so
         // this arm is unreachable today, not a gap.
         #[allow(unreachable_patterns)]

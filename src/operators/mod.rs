@@ -25,7 +25,7 @@
 //! considered and rejected (DD-012, amendment 2) — it would have imposed that
 //! capability on FD, which never needs it.
 //!
-//! **Selection criterion for future schemes** (FEM, spectral methods, J20):
+//! **Selection criterion for future schemes** (FEM from v0.12.0 (J12), spectral methods at v0.19.0 (J19)):
 //! does the scheme need per-call access to physical context, or does it reduce
 //! to a local differentiation from mesh data alone? The former implements
 //! `FluxDivergenceOperator`; the latter implements `DiscreteOperator`.
@@ -39,7 +39,7 @@
 //! | [`weno::WENO3`], [`weno::WENO5`] | WENO | `FluxDivergenceOperator` | v0.5.0 (#49) ✅ |
 //! | [`limiters::LimitedFlux`] (`MinMod`/`VanLeer`/`Superbee`) | MUSCL | `FluxDivergenceOperator` | v0.5.0 (#99) ✅ |
 //! | [`adaptive::AdaptiveFlux`] (WENO3/limiter blend, Péclet-gated) | — | `FluxDivergenceOperator` | v0.5.0 (#99) ✅ |
-//! | `FiniteElement` | FEM P1/P2 | TBD | J7 — v2.0 |
+//! | `FiniteElement` | FEM P1/P2 | TBD | J12 — v0.12.0 |
 
 pub mod adaptive;
 pub mod fd;

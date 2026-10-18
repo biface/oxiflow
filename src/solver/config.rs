@@ -236,8 +236,9 @@ pub struct SolverConfiguration {
     /// at each time step. Built-in calculators (Time, TimeStep) are always added
     /// automatically; only derived quantities need user-supplied calculators.
     pub calculators: Vec<Box<dyn ContextCalculator>>,
-    // external_data: Option<Arc<dyn ExternalDataProvider>>  — RESERVED J2
-    // parallel_threshold: Option<usize>                     — RESERVED J5 (DD-014)
+    // No `external_data` or `parallel_threshold` field: external data arrives
+    // through calculators (`ExternalTabulated`, DT-027) and dispatch thresholds
+    // live on the components that dispatch (DT-014, DA-048).
 }
 
 impl SolverConfiguration {

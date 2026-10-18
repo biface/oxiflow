@@ -6,7 +6,7 @@
 //!
 //! No public engine API exposes `dx`, `nx` or raw indices as first-class spatial
 //! parameters. All spatial references go through the `Mesh` trait. This guarantees
-//! forward compatibility with FEM unstructured meshes at J7 — zero breaking change
+//! forward compatibility with FEM unstructured meshes (v0.11.0 (J11)) — zero breaking change
 //! on existing code when `unstructured/` is added.
 //!
 //! ## Module hierarchy (DD-019)
@@ -15,8 +15,8 @@
 //! src/mesh/
 //! ├── mod.rs              — Mesh trait + public re-exports
 //! ├── structured/
-//! │   └── mod.rs          — UniformGrid1D (J1); UniformGrid2D (J4b+)
-//! └── unstructured/       — RESERVED J7 (UnstructuredMesh2D, TetrahedralMesh3D)
+//! │   └── mod.rs          — UniformGrid1D (J1); nD generalisation at v0.11.5 (DD-051)
+//! └── unstructured/       — RESERVED v0.11.0 (J11) (UnstructuredMesh2D, TetrahedralMesh3D)
 //! ```
 //!
 //! ## Implementations
@@ -24,12 +24,12 @@
 //! | Type | Family | Description | Milestone |
 //! |---|---|---|---|
 //! | [`UniformGrid1D`] | structured | 1D uniform grid, FD/FV | J1 — v0.1.0 |
-//! | `UnstructuredMesh2D` | unstructured | 2D triangular mesh, FEM | J7 — v2.0.0 |
-//! | `TetrahedralMesh3D` | unstructured | 3D tetrahedral mesh, FEM | J7 — v2.0.0 |
+//! | `UnstructuredMesh2D` | unstructured | 2D triangular mesh, FEM | J11 — v0.11.0 |
+//! | `TetrahedralMesh3D` | unstructured | 3D tetrahedral mesh, FEM | J11 — v0.11.0 |
 
 pub mod structured;
 
-// unstructured/ — RESERVED J7
+// unstructured/ — RESERVED v0.11.0 (J11)
 // pub mod unstructured;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ pub use structured::UniformGrid1D;
 /// # Object safety
 ///
 /// This trait is object-safe: it can be used as `Box<dyn Mesh>` and `&dyn Mesh`.
-/// Required for INV-4 (plugin-safe API, J7).
+/// Required for INV-4 (plugin-safe API, v0.30.0 / J30, DA-017).
 ///
 /// # Implementing `Mesh`
 ///

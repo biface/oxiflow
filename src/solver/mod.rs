@@ -240,7 +240,7 @@ impl SimulationResult {
 ///
 /// # Object safety
 ///
-/// This trait is object-safe to support INV-4 (plugin-safe API, v2.0).
+/// This trait is object-safe to support INV-4 (plugin-safe API, v0.30.0 / J30, DA-017).
 pub trait Solver: Send + Sync {
     /// Runs the simulation and returns the collected states.
     fn solve(

@@ -39,14 +39,14 @@
 //! |---|---|---|
 //! | `required_variables()` | — (required) | Variables that must be present in `ctx` |
 //! | `optional_variables()` | `vec![]` | Variables used if present |
-//! | `depends_on()` | `vec![]` | Ordering relative to other BCs (J3+) |
+//! | `depends_on()` | `vec![]` | Ordering relative to other BCs (reserved) |
 //! | `priority()` | `100` | Execution order when multiple BCs are registered |
 //!
 //! ## Execution order
 //!
 //! Multiple boundary conditions on the same domain are applied in ascending
 //! `priority()` order. `depends_on()` is available but not consumed by the
-//! engine at J2 — it is reserved for complex BC ordering at J3+.
+//! engine — it is reserved for complex BC ordering, with no milestone assigned.
 //!
 //! ## Object safety
 //!
