@@ -150,7 +150,7 @@
 //! // 4. Solve
 //! let result = ForwardEulerSolver.solve(&scenario, &config)?;
 //! assert_eq!(result.states.len(), result.times.len());
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # Ok::<(), OxiflowError>(())
 //! ```
 
 pub mod boundary;

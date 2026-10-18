@@ -60,7 +60,7 @@
 //!     ],
 //!     "advection_reaction",
 //! )?;
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # Ok::<(), OxiflowError>(())
 //! ```
 //!
 //! `Op` is bound to [`FluxDivergenceOperator`] (DD-039), not

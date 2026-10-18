@@ -153,7 +153,7 @@ impl Domain {
     /// let outlet_bc = DanckwertsOutlet::new();
     /// let domain = Domain::new("column", model, mesh)
     ///     .with_boundary_conditions(vec![Box::new(inlet_bc), Box::new(outlet_bc)]);
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// # Ok::<(), OxiflowError>(())
     /// ```
     pub fn with_boundary_conditions(mut self, bcs: Vec<Box<dyn BoundaryCondition>>) -> Self {
         self.boundary_conditions = bcs;
@@ -326,7 +326,7 @@ impl Scenario {
     /// # };
     /// let scenario = Scenario::multi(domains)?
     ///     .with_coupling(Box::new(my_coupling_op));
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// # Ok::<(), OxiflowError>(())
     /// ```
     pub fn with_coupling(mut self, coupling: Box<dyn CouplingOperator>) -> Self {
         self.interfaces.push(coupling.interface().clone());

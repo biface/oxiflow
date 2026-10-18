@@ -83,7 +83,7 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// );
 /// let solver = ForwardEulerSolver;
 /// let result = solver.solve(&scenario, &config)?;
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// # Ok::<(), OxiflowError>(())
 /// ```
 pub struct ForwardEulerSolver;
 

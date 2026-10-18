@@ -103,7 +103,7 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 ///     IntegratorKind::RK4,
 /// );
 /// let result = RK4Solver.solve(&scenario, &config)?;
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// # Ok::<(), OxiflowError>(())
 /// ```
 pub struct RK4Solver;
 

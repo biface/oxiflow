@@ -91,7 +91,7 @@ use crate::context::error::OxiflowError;
 /// let result: SimulationResult = ForwardEulerSolver.solve(&scenario, &config)?;
 /// assert_eq!(result.states.len(), result.times.len());
 /// assert_eq!(result.times[0], 0.0);
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// # Ok::<(), OxiflowError>(())
 /// ```
 #[non_exhaustive]
 #[derive(Debug, Clone)]
