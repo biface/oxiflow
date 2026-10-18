@@ -10,7 +10,7 @@
 //! ## `parallel_threshold` via `solver::parallel::ParallelThreshold` (DD-014, DD-048)
 //!
 //! Both calculators hold a
-//! [`ParallelThreshold`](crate::solver::parallel::ParallelThreshold) field
+//! `ParallelThreshold` field
 //! rather than reimplementing the atomic/sentinel/guard mechanism
 //! themselves — extracted into that shared type after this module wrote
 //! it twice, verbatim, on `FDGradientCalculator` and `FDLaplacianCalculator`.
@@ -117,7 +117,7 @@ impl FDGradientCalculator {
     ///
     /// `parallel_threshold` has no override by default —
     /// [`Self::parallel_threshold`] reports
-    /// [`operators::fd::default_parallel_threshold`](crate::operators::fd::default_parallel_threshold)
+    /// `operators::fd::default_parallel_threshold`
     /// (DD-014, #51) until one is set, at construction with
     /// [`Self::with_parallel_threshold`] or at runtime with
     /// [`Self::set_parallel_threshold`]; both available only when the crate
@@ -145,7 +145,7 @@ impl FDGradientCalculator {
     ///
     /// # Panics
     ///
-    /// Panics when `threshold == 0` — see [`ParallelThreshold::set`].
+    /// Panics when `threshold == 0` — see `ParallelThreshold::set`.
     #[cfg(feature = "parallel")]
     pub fn with_parallel_threshold(self, threshold: usize) -> Self {
         self.parallel_threshold.set(threshold);
@@ -154,13 +154,13 @@ impl FDGradientCalculator {
 
     /// Reconfigures the Rayon dispatch threshold at runtime, through `&self`
     /// — no rebuild required, unlike a consuming builder. Scoped to this
-    /// instance (see [`ParallelThreshold`]'s docs for why, vs. chrom-rs's
+    /// instance (see `ParallelThreshold`'s docs for why, vs. chrom-rs's
     /// process-wide `set_parallel_threshold()`). Only exists when the crate
     /// is built with the `parallel` feature.
     ///
     /// # Panics
     ///
-    /// Panics when `threshold == 0` (see [`ParallelThreshold::set`]).
+    /// Panics when `threshold == 0` (see `ParallelThreshold::set`).
     #[cfg(feature = "parallel")]
     pub fn set_parallel_threshold(&self, threshold: usize) {
         self.parallel_threshold.set(threshold);
@@ -168,7 +168,7 @@ impl FDGradientCalculator {
 
     /// Returns the effective Rayon dispatch threshold — the configured
     /// override if one was set, otherwise
-    /// [`operators::fd::default_parallel_threshold`](crate::operators::fd::default_parallel_threshold)
+    /// `operators::fd::default_parallel_threshold`
     /// resolved on demand. Only exists when the crate is built with the
     /// `parallel` feature.
     #[cfg(feature = "parallel")]
@@ -345,7 +345,7 @@ impl FDLaplacianCalculator {
     ///
     /// `parallel_threshold` has no override by default —
     /// [`Self::parallel_threshold`] reports
-    /// [`operators::fd::default_parallel_threshold`](crate::operators::fd::default_parallel_threshold)
+    /// `operators::fd::default_parallel_threshold`
     /// (DD-014, #51) until one is set, at construction with
     /// [`Self::with_parallel_threshold`] or at runtime with
     /// [`Self::set_parallel_threshold`]; both available only when the crate
@@ -381,7 +381,7 @@ impl FDLaplacianCalculator {
     ///
     /// # Panics
     ///
-    /// Panics when `threshold == 0` — see [`ParallelThreshold::set`].
+    /// Panics when `threshold == 0` — see `ParallelThreshold::set`.
     #[cfg(feature = "parallel")]
     pub fn with_parallel_threshold(self, threshold: usize) -> Self {
         self.parallel_threshold.set(threshold);
@@ -395,7 +395,7 @@ impl FDLaplacianCalculator {
     ///
     /// # Panics
     ///
-    /// Panics when `threshold == 0` (see [`ParallelThreshold::set`]).
+    /// Panics when `threshold == 0` (see `ParallelThreshold::set`).
     #[cfg(feature = "parallel")]
     pub fn set_parallel_threshold(&self, threshold: usize) {
         self.parallel_threshold.set(threshold);
@@ -403,7 +403,7 @@ impl FDLaplacianCalculator {
 
     /// Returns the effective Rayon dispatch threshold — the configured
     /// override if one was set, otherwise
-    /// [`operators::fd::default_parallel_threshold`](crate::operators::fd::default_parallel_threshold)
+    /// `operators::fd::default_parallel_threshold`
     /// resolved on demand. Only exists when the crate is built with the
     /// `parallel` feature.
     #[cfg(feature = "parallel")]

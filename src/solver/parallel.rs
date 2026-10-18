@@ -15,7 +15,7 @@
 //! mirroring the precedent already set twice (DD-012 amendment 2, DD-039
 //! option A): forcing an orthogonal capability onto every implementer of
 //! a shared trait, when only some of them benefit from it. Each site that
-//! wants Rayon dispatch holds a [`ParallelThreshold`] field and reads it
+//! wants Rayon dispatch holds a `ParallelThreshold` field and reads it
 //! itself — a plain data-holding type, not a behavioural contract.
 //!
 //! Entirely gated behind the `parallel` feature, at the module

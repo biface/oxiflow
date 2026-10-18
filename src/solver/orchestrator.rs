@@ -5,7 +5,7 @@
 //! ## Why this exists
 //!
 //! [`Solver`](crate::solver::Solver) is deliberately single-domain — it
-//! drives one [`Domain`](crate::solver::scenario::Domain) through a full
+//! drives one [`Domain`] through a full
 //! time range. Coupled scenarios
 //! (lahar–lake, #40) need several domains advancing together, each
 //! exchanging state with the others via
@@ -39,7 +39,7 @@
 //!    dispatched through Rayon above [`MultiDomainOrchestrator::parallel_threshold`])
 //!    followed by a sequential apply pass that writes the results back
 //!    into [`MultiDomainState`]/history. See
-//!    [`MultiDomainOrchestrator::compute_domain_steps`] for why the split
+//!    `MultiDomainOrchestrator::compute_domain_steps` for why the split
 //!    exists and what it does and does not parallelize.
 //! 2. **Apply every registered `CouplingOperator`**, in declaration order,
 //!    each reading the just-updated [`MultiDomainState`] and returning an
@@ -169,7 +169,7 @@ impl MultiDomainSimulationResult {
 
 // ── MultiDomainOrchestrator ───────────────────────────────────────────────────────
 
-/// Drives multiple coupled [`Domain`](crate::solver::scenario::Domain)s,
+/// Drives multiple coupled [`Domain`]s,
 /// each with its own [`SteppableSolver`].
 ///
 /// See [module documentation](self) for the per-step order and the v1
@@ -222,7 +222,7 @@ impl MultiDomainOrchestrator {
     /// # Panics
     ///
     /// Panics when `threshold == 0` — see
-    /// [`ParallelThreshold::set`](crate::solver::parallel::ParallelThreshold::set).
+    /// `ParallelThreshold::set`.
     #[cfg(feature = "parallel")]
     pub fn with_parallel_threshold(self, threshold: usize) -> Self {
         self.parallel_threshold.set(threshold);
@@ -235,14 +235,14 @@ impl MultiDomainOrchestrator {
     /// # Panics
     ///
     /// Panics when `threshold == 0` (see
-    /// [`ParallelThreshold::set`](crate::solver::parallel::ParallelThreshold::set)).
+    /// `ParallelThreshold::set`).
     #[cfg(feature = "parallel")]
     pub fn set_parallel_threshold(&self, threshold: usize) {
         self.parallel_threshold.set(threshold);
     }
 
     /// Returns the configured Phase-1 dispatch threshold, or
-    /// [`default_parallel_threshold`] (`5_000` — a rough estimate, not
+    /// `default_parallel_threshold` (`5_000` — a rough estimate, not
     /// measured; see its own docs) if none was set.
     #[cfg(feature = "parallel")]
     pub fn parallel_threshold(&self) -> usize {

@@ -44,7 +44,7 @@
 //! and `FDLaplacianCalculator`'s `parallel_threshold` field), mirroring how
 //! `SparseLinearSolver`'s threshold (DD-043, #103) lives on the caller rather
 //! than the callee. [`DiscreteOperator::apply`] has no such caller to draw a
-//! value from, so it uses [`default_parallel_threshold`], calibrated
+//! value from, so it uses `default_parallel_threshold`, calibrated
 //! empirically at 49_999: sequential cost of a single stencil evaluation
 //! here (2-3 flops) is ~1 ns/node, the same order of magnitude as typical
 //! Rayon dispatch overhead well below that count. This does not transfer
