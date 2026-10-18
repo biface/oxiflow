@@ -3,6 +3,11 @@ name        = "oxiflow"
 version     = "0.9.0"
 edition     = "2021"
 rust-version = "1.84"
+# Résolveur sensible au MSRV — DT-067 (#183) : à la résolution, Cargo préfère
+# la version la plus récente compatible avec `rust-version`. Préférence, pas
+# contrainte : une dépendance transitive peut encore exiger davantage, d'où les
+# épinglages du `Cargo.lock` versionné, contrôlés par le job MSRV (#168).
+resolver    = "3"
 
 description = "Generic PDE solving engine for transport, reaction and diffusion phenomena (∂u/∂t + ∇·F = S)"
 license     = "Apache-2.0"
