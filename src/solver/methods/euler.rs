@@ -48,18 +48,42 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust
 /// use oxiflow::solver::methods::euler::ForwardEulerSolver;
-/// use oxiflow::solver::{Scenario, SolverConfiguration, TimeConfiguration, StepControl, IntegratorKind};
+/// use oxiflow::solver::{IntegratorKind, Scenario, Solver, SolverConfiguration,
+///                       StepControl, TimeConfiguration};
 /// use oxiflow::mesh::UniformGrid1D;
-///
+/// # use nalgebra::DVector;
+/// # use oxiflow::context::{ComputeContext, ContextValue, ContextVariable, OxiflowError};
+/// # use oxiflow::mesh::Mesh;
+/// # use oxiflow::model::{PhysicalModel, RequiresContext};
+/// # struct Decay;
+/// # impl RequiresContext for Decay {
+/// #     fn required_variables(&self) -> Vec<ContextVariable> { vec![] }
+/// # }
+/// # impl PhysicalModel for Decay {
+/// #     fn compute_physics(
+/// #         &self,
+/// #         state: &ContextValue,
+/// #         _ctx: &ComputeContext,
+/// #     ) -> Result<ContextValue, OxiflowError> {
+/// #         Ok(ContextValue::ScalarField(-state.as_scalar_field()?.clone()))
+/// #     }
+/// #     fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+/// #         ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+/// #     }
+/// #     fn name(&self) -> &str { "decay" }
+/// # }
+/// # let my_model = Decay;
+/// let mesh = UniformGrid1D::new(50, 0.0, 1.0)?;
 /// let scenario = Scenario::single(Box::new(my_model), Box::new(mesh));
 /// let config = SolverConfiguration::new(
-///     TimeConfiguration::new(100.0, StepControl::Fixed { dt: 0.1 }),
+///     TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }),
 ///     IntegratorKind::Euler,
 /// );
 /// let solver = ForwardEulerSolver;
-/// let result = solver.solve(&scenario, &config).unwrap();
+/// let result = solver.solve(&scenario, &config)?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 pub struct ForwardEulerSolver;
 

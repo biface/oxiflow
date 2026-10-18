@@ -55,17 +55,43 @@ use crate::context::error::OxiflowError;
 ///
 /// # Examples
 ///
-/// ```rust, ignore
-/// use oxiflow::solver::SimulationResult;
-/// use oxiflow::context::value::ContextValue;
-/// use nalgebra::DVector;
-///
-/// let result = SimulationResult {
-///     states: vec![ContextValue::ScalarField(DVector::from_element(10, 0.0))],
-///     times:  vec![0.0],
-///     n_steps: 1,
-/// };
+/// ```rust
+/// use oxiflow::mesh::UniformGrid1D;
+/// use oxiflow::solver::methods::ForwardEulerSolver;
+/// use oxiflow::solver::{IntegratorKind, Scenario, SimulationResult, Solver,
+///                       SolverConfiguration, StepControl, TimeConfiguration};
+/// # use nalgebra::DVector;
+/// # use oxiflow::context::{ComputeContext, ContextValue, ContextVariable, OxiflowError};
+/// # use oxiflow::mesh::Mesh;
+/// # use oxiflow::model::{PhysicalModel, RequiresContext};
+/// # struct Decay;
+/// # impl RequiresContext for Decay {
+/// #     fn required_variables(&self) -> Vec<ContextVariable> { vec![] }
+/// # }
+/// # impl PhysicalModel for Decay {
+/// #     fn compute_physics(
+/// #         &self,
+/// #         state: &ContextValue,
+/// #         _ctx: &ComputeContext,
+/// #     ) -> Result<ContextValue, OxiflowError> {
+/// #         Ok(ContextValue::ScalarField(-state.as_scalar_field()?.clone()))
+/// #     }
+/// #     fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+/// #         ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+/// #     }
+/// #     fn name(&self) -> &str { "decay" }
+/// # }
+/// // `SimulationResult` is `#[non_exhaustive]`: it is obtained from a solver,
+/// // not built by hand.
+/// let scenario = Scenario::single(Box::new(Decay), Box::new(UniformGrid1D::new(10, 0.0, 1.0)?));
+/// let config = SolverConfiguration::new(
+///     TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }),
+///     IntegratorKind::Euler,
+/// );
+/// let result: SimulationResult = ForwardEulerSolver.solve(&scenario, &config)?;
 /// assert_eq!(result.states.len(), result.times.len());
+/// assert_eq!(result.times[0], 0.0);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[non_exhaustive]
 #[derive(Debug, Clone)]

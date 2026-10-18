@@ -129,13 +129,14 @@ impl std::fmt::Display for Interface {
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust
 /// use oxiflow::coupling::{CouplingOperator, Interface};
 /// use oxiflow::context::state::MultiDomainState;
 /// use oxiflow::context::compute::ComputeContext;
 /// use oxiflow::context::error::OxiflowError;
 /// use oxiflow::context::variable::ContextVariable;
 /// use oxiflow::model::traits::RequiresContext;
+/// use oxiflow::solver::DomainId;
 ///
 /// struct MassTransfer { interface: Interface }
 ///
@@ -154,6 +155,11 @@ impl std::fmt::Display for Interface {
 ///     }
 ///     fn interface(&self) -> &Interface { &self.interface }
 /// }
+///
+/// let coupling: Box<dyn CouplingOperator> = Box::new(MassTransfer {
+///     interface: Interface::new(DomainId::new("lahar"), DomainId::new("lake")),
+/// });
+/// assert_eq!(coupling.interface().source(), &DomainId::new("lahar"));
 /// ```
 pub trait CouplingOperator: RequiresContext + Send + Sync {
     /// Applies the coupling and returns the updated multi-domain state.

@@ -257,7 +257,14 @@ impl MultiDomainOrchestrator {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
+    /// ```rust
+    /// use oxiflow::context::PhysicalQuantity;
+    /// use oxiflow::solver::methods::{ForwardEulerSolver, RK4Solver};
+    /// use oxiflow::solver::orchestrator::MultiDomainOrchestrator;
+    /// use oxiflow::solver::DomainId;
+    ///
+    /// let lahar_id = DomainId::new("lahar");
+    /// let lake_id = DomainId::new("lake");
     /// let orchestrator = MultiDomainOrchestrator::new()
     ///     .with_domain(lahar_id, Box::new(ForwardEulerSolver), PhysicalQuantity::concentration())
     ///     .with_domain(lake_id, Box::new(RK4Solver), PhysicalQuantity::concentration());

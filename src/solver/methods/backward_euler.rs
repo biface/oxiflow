@@ -45,16 +45,22 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust
 /// use oxiflow::solver::methods::backward_euler::BackwardEulerSolver;
 ///
+/// // Dense path (default).
 /// let solver = BackwardEulerSolver::new();
-/// // Sparse backend (v0.6.0, DD-013 second phase, DD-043) — dense path
-/// // stays untouched unless all three are configured explicitly:
-/// // let solver = BackwardEulerSolver::new()
-/// //     .with_jacobian_bandwidth(scheme.stencil_radius())
-/// //     .with_sparse_solver(Box::new(FaerSparseSolver))
-/// //     .with_sparse_threshold(100); // default
+///
+/// // Sparse backend (feature `sparse`, v0.6.0, DD-013 second phase, DD-043):
+/// // the dense path stays untouched unless all three are configured explicitly.
+/// # #[cfg(feature = "sparse")]
+/// # {
+/// use oxiflow::solver::sparse::FaerSparseSolver;
+/// let sparse = BackwardEulerSolver::new()
+///     .with_jacobian_bandwidth(1) // e.g. scheme.stencil_radius()
+///     .with_sparse_solver(Box::new(FaerSparseSolver))
+///     .with_sparse_threshold(100); // default
+/// # }
 /// ```
 pub struct BackwardEulerSolver {
     linear_solver: Box<dyn LinearSolver>,
