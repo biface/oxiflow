@@ -7,6 +7,23 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** `UniformGrid1D::new` returns `Result<Self, OxiflowError>`
+  (`OxiflowError::PreconditionFailed`, context `"UniformGrid1D"`) instead of
+  `Result<Self, String>`. `?` now works directly in functions returning
+  `OxiflowError`; the `.map_err(OxiflowError::InvalidDomain)` workaround is
+  gone from `examples/lahar_multifield.rs` and its test.
+
+### Fixed
+
+- `UniformGrid1D::new` rejects non-finite bounds: a NaN bound used to pass
+  the `x_end > x_start` check and yield a grid of NaN nodes.
+
+---
+
 ## [0.9.0] - 2026-09-16
 
 ### Added

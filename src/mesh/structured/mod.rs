@@ -10,6 +10,7 @@
 //!
 //! - Generalisation of `UniformGrid1D` to nD (DD-051, #152).
 
+use crate::context::error::OxiflowError;
 use crate::mesh::Mesh;
 
 /// 1D uniform grid — first concrete implementation of [`Mesh`] (INV-1, J1).
@@ -62,8 +63,9 @@ impl UniformGrid1D {
     ///
     /// # Errors
     ///
-    /// Returns `Err` if:
-    /// - `n_points < 2` — a grid must have at least 2 nodes.
+    /// Returns [`OxiflowError::PreconditionFailed`] (context `"UniformGrid1D"`) if:
+    /// - `n_points < 2` — a grid must have at least 2 nodes;
+    /// - `x_start` or `x_end` is not finite (NaN or infinite);
     /// - `x_end <= x_start` — the domain must be non-degenerate.
     ///
     /// # Examples
@@ -76,19 +78,29 @@ impl UniformGrid1D {
     ///
     /// assert!(UniformGrid1D::new(1, 0.0, 1.0).is_err()); // n_points < 2
     /// assert!(UniformGrid1D::new(10, 1.0, 0.0).is_err()); // x_end <= x_start
+    /// assert!(UniformGrid1D::new(10, 0.0, f64::NAN).is_err()); // non-finite bound
     /// ```
-    pub fn new(n_points: usize, x_start: f64, x_end: f64) -> Result<Self, String> {
+    pub fn new(n_points: usize, x_start: f64, x_end: f64) -> Result<Self, OxiflowError> {
+        let invalid = |message: String| OxiflowError::PreconditionFailed {
+            context: "UniformGrid1D",
+            message,
+        };
         if n_points < 2 {
-            return Err(format!(
-                "UniformGrid1D requires at least 2 nodes, got {}",
-                n_points
-            ));
+            return Err(invalid(format!(
+                "requires at least 2 nodes, got {n_points}"
+            )));
+        }
+        // NaN fails every comparison: without this check, `x_end <= x_start`
+        // would let a NaN bound through and produce a grid of NaN nodes.
+        if !x_start.is_finite() || !x_end.is_finite() {
+            return Err(invalid(format!(
+                "requires finite bounds, got [{x_start}, {x_end}]"
+            )));
         }
         if x_end <= x_start {
-            return Err(format!(
-                "UniformGrid1D requires x_end > x_start, got [{}, {}]",
-                x_start, x_end
-            ));
+            return Err(invalid(format!(
+                "requires x_end > x_start, got [{x_start}, {x_end}]"
+            )));
         }
 
         let dx = (x_end - x_start) / (n_points - 1) as f64;
@@ -165,11 +177,29 @@ mod tests {
     }
 
     #[test]
-    fn error_message_mentions_constraint() {
-        let err = UniformGrid1D::new(1, 0.0, 1.0).unwrap_err();
-        assert!(err.contains("2"));
-        let err = UniformGrid1D::new(10, 1.0, 0.0).unwrap_err();
-        assert!(err.contains("x_end"));
+    fn new_with_non_finite_bounds_fails() {
+        for (a, b) in [
+            (f64::NAN, 1.0),
+            (0.0, f64::NAN),
+            (f64::NEG_INFINITY, 1.0),
+            (0.0, f64::INFINITY),
+        ] {
+            assert!(UniformGrid1D::new(10, a, b).is_err(), "[{a}, {b}] accepted");
+        }
+    }
+
+    #[test]
+    fn errors_are_precondition_failures_naming_the_constraint() {
+        let message_of = |result: Result<UniformGrid1D, OxiflowError>| match result {
+            Err(OxiflowError::PreconditionFailed { context, message }) => {
+                assert_eq!(context, "UniformGrid1D");
+                message
+            }
+            other => panic!("expected PreconditionFailed, got {other:?}"),
+        };
+        assert!(message_of(UniformGrid1D::new(1, 0.0, 1.0)).contains('2'));
+        assert!(message_of(UniformGrid1D::new(10, 1.0, 0.0)).contains("x_end"));
+        assert!(message_of(UniformGrid1D::new(10, 0.0, f64::NAN)).contains("finite"));
     }
 
     // ── n_dof ─────────────────────────────────────────────────────────────────

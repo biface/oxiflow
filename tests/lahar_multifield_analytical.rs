@@ -855,14 +855,11 @@ fn run_regime(
     const DT: f64 = 5.0e-4;
     const Q: f64 = 1.0; // paper's own q = 1 m^2/s (Sec. 4.1)
 
-    let source_mesh = UniformGrid1D::new(n_points, -x_half_width, x_half_width)
-        .map_err(OxiflowError::InvalidDomain)?;
+    let source_mesh = UniformGrid1D::new(n_points, -x_half_width, x_half_width)?;
     let source = build_source(&source_mesh, regime, Q);
 
-    let flux_mesh: Arc<UniformGrid1D> = Arc::new(
-        UniformGrid1D::new(n_points, -x_half_width, x_half_width)
-            .map_err(OxiflowError::InvalidDomain)?,
-    );
+    let flux_mesh: Arc<UniformGrid1D> =
+        Arc::new(UniformGrid1D::new(n_points, -x_half_width, x_half_width)?);
     let flux = ShallowLayerFlux {
         physics: LaharPhysics {
             rho_f: 1000.0,
@@ -879,10 +876,8 @@ fn run_regime(
         "lahar_multifield",
     )?;
 
-    let grad_mesh: Arc<dyn Mesh> = Arc::new(
-        UniformGrid1D::new(n_points, -x_half_width, x_half_width)
-            .map_err(OxiflowError::InvalidDomain)?,
-    );
+    let grad_mesh: Arc<dyn Mesh> =
+        Arc::new(UniformGrid1D::new(n_points, -x_half_width, x_half_width)?);
     let config = SolverConfiguration::new(
         TimeConfiguration::new(t_end, StepControl::Fixed { dt: DT }).saving_every(save_every),
         IntegratorKind::Euler,
@@ -894,8 +889,7 @@ fn run_regime(
         FDScheme::Central,
     )));
 
-    let scenario_mesh = UniformGrid1D::new(n_points, -x_half_width, x_half_width)
-        .map_err(OxiflowError::InvalidDomain)?;
+    let scenario_mesh = UniformGrid1D::new(n_points, -x_half_width, x_half_width)?;
     let x_coords: Vec<f64> = (0..n_points)
         .map(|i| scenario_mesh.coordinates(i)[0])
         .collect();
