@@ -1,188 +1,163 @@
+# =============================================================================
+# CI — oxiflow
+# =============================================================================
+# Fast checks on every push, heavy suites on pull requests (#171):
+#
+#   push, any branch          fmt → clippy → unit tests + doctests
+#   PR → staging/**, main     the same, then the full test suite per feature
+#   push to main              the same as any push, then the doc deployment
+#
+# Jobs are ordered with `needs:` inside this one workflow: quality gates run
+# before tests, and tests are skipped when a gate fails. The toolchain and the
+# cache come from the shared `setup-rust` action (#184).
+# =============================================================================
+
 name: CI
 
 on:
   push:
     branches: ["**"]
   pull_request:
-    branches: ["**"]
+    branches: ["staging/**", "main"]
+
+permissions:
+  contents: read
+
+# A newer push on the same branch or PR cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  # ────────────────────────────────────────────────────────────────────────────
-  # Format — checks that code conforms to rustfmt
-  # ────────────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # Format — rustfmt, no cache needed
+  # ──────────────────────────────────────────────────────────────────────────
   fmt:
     name: Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v5
+      - uses: ./.github/actions/setup-rust
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-
+          components: rustfmt
       - name: cargo fmt --check
         run: cargo fmt --check
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # Clippy — zero warnings allowed
-  # ────────────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # Clippy — zero warnings, one matrix entry per feature
+  # ──────────────────────────────────────────────────────────────────────────
   clippy:
-    name: Clippy
+    name: Clippy (${{ matrix.name }})
     runs-on: ubuntu-latest
     needs: fmt
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            args: ""
+          # faer sparse backend — DD-013 (#13), DD-043 (#50).
+          - name: sparse
+            args: --features sparse
+          # hdf5-metno needs libhdf5's C headers via pkg-config — DD-027 (#75), #79.
+          - name: hdf5
+            args: --features hdf5
+            hdf5: true
+          # wgpu needs a driver at run time only, not to build — DD-026 (#73), DD-045 (#127).
+          - name: gpu
+            args: --features gpu
+          # Rayon dispatch behind the threshold — DD-014 (#14), DD-048.
+          - name: parallel
+            args: --features parallel --all-targets
     steps:
       - uses: actions/checkout@v7
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v5
+      - uses: ./.github/actions/setup-rust
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/
-          key: ${{ runner.os }}-clippy-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-clippy-
+          components: clippy
+          hdf5: ${{ matrix.hdf5 || false }}
+          cache-key: clippy-${{ matrix.name }}
+      - name: cargo clippy ${{ matrix.args }}
+        run: cargo clippy --locked ${{ matrix.args }} -- -D warnings
 
-      - name: cargo clippy — default features
-        run: cargo clippy -- -D warnings
-
-      # DD-043 (#50) — sparse linear algebra backend (faer). No system
-      # dependency needed. faer 0.24's own MSRV (1.84) now matches this
-      # crate's rust-version exactly (raised from 1.80 to 1.84 by DD-045,
-      # #127, for wgpu's sake) — no remaining tension to revisit here.
-      - name: cargo clippy — feature sparse
-        run: cargo clippy --features sparse -- -D warnings
-
-      # DD-027 (#75, migrated to hdf5-metno per #79) — needs libhdf5's C
-      # headers, discovered via pkg-config. No code uses this feature yet
-      # (ExternalTabulated not implemented) — this only guards against the
-      # dependency itself becoming unbuildable.
-      - name: Install system dependencies (HDF5)
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends libhdf5-dev pkg-config
-
-      - name: cargo clippy — feature hdf5
-        run: cargo clippy --features hdf5 -- -D warnings
-
-      # DD-026 (#73) / DD-045 (#127) — no system dependency needed to
-      # compile: the vulkan/metal/dx12 wgpu backends only need a driver at
-      # runtime, not at build time. `gpu_context_acquires_adapter` is
-      # `#[ignore]`d (no GPU hardware on CI runners) — this step only
-      # guards against `wgpu`/`pollster`/`bytemuck` becoming unbuildable
-      # or the boundary-conversion code regressing.
-      - name: cargo clippy — feature gpu
-        run: cargo clippy --features gpu -- -D warnings
-
-      # DD-014/DD-048, #51/#136-#139 (v0.9.0) — genuinely exercised now
-      # (fd.rs, langmuir_multi, lahar_multifield all gate real dispatch
-      # code behind this feature), unlike when this job was first stubbed
-      # out at J5. `serde` remains commented out below: still declared but
-      # not yet consumed by any real code path.
-      - name: cargo clippy — feature parallel
-        run: cargo clippy --features parallel --all-targets -- -D warnings
-
-      # J5 (v0.7) — activate when consumed for real:
-      # - name: cargo clippy — feature serde
-      #   run: cargo clippy --features serde -- -D warnings
-
-  # ────────────────────────────────────────────────────────────────────────────
-  # Test — unit and integration test suite
-  # ────────────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # Test — unit tests and doctests, default features, every push.
+  # `--doc` cannot be combined with another target selector: two steps.
+  # ──────────────────────────────────────────────────────────────────────────
   test:
-    name: Test
+    name: Unit and doc tests
     runs-on: ubuntu-latest
-    needs: fmt
+    needs: clippy
     steps:
       - uses: actions/checkout@v7
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v5
+      - uses: ./.github/actions/setup-rust
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/
-          key: ${{ runner.os }}-test-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-test-
+          cache-key: test
+      - name: cargo test --lib
+        run: cargo test --locked --lib
+      - name: cargo test --doc
+        run: cargo test --locked --doc
 
-      - name: cargo test — default features
-        run: cargo test
+  # ──────────────────────────────────────────────────────────────────────────
+  # Full test suite — pull requests only: unit, integration (tests/) and
+  # doctests, once per feature. `gpu_context_acquires_adapter` stays
+  # #[ignore]d: CI runners have no GPU.
+  # ──────────────────────────────────────────────────────────────────────────
+  test-full:
+    name: Test (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            args: ""
+          - name: sparse
+            args: --features sparse
+          - name: hdf5
+            args: --features hdf5
+            hdf5: true
+          - name: gpu
+            args: --features gpu
+          - name: parallel
+            args: --features parallel
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-rust
+        with:
+          hdf5: ${{ matrix.hdf5 || false }}
+          cache-key: test-${{ matrix.name }}
+      - name: cargo test ${{ matrix.args }}
+        run: cargo test --locked ${{ matrix.args }}
 
-      # DD-043 (#50) — see the clippy job for the rustc 1.84+ note.
-      - name: cargo test — feature sparse
-        run: cargo test --features sparse
-
-      # DD-027 (#75, migrated to hdf5-metno per #79).
-      - name: Install system dependencies (HDF5)
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends libhdf5-dev pkg-config
-
-      - name: cargo test — feature hdf5
-        run: cargo test --features hdf5
-
-      # DD-026 (#73) / DD-045 (#127) — see the clippy job for why no
-      # system dependency is needed. `gpu_context_acquires_adapter` stays
-      # `#[ignore]`d here (no GPU hardware on CI runners).
-      - name: cargo test — feature gpu
-        run: cargo test --features gpu
-
-      # DD-014/DD-048, #51/#136-#139 (v0.9.0) — see the clippy job for why
-      # this is now genuinely exercised, unlike at J5.
-      - name: cargo test — feature parallel
-        run: cargo test --features parallel
-
-      # J5 (v0.7) — activate when consumed for real (see the clippy job).
-      # - name: cargo test — feature serde
-      #   run: cargo test --features serde
-
-  # ────────────────────────────────────────────────────────────────────────────
-  # Doc — generation and deployment to GitHub Pages
-  # Triggered on push to main only
-  # ────────────────────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # Doc — build and deploy to GitHub Pages, push to main only.
+  # Moves to a separate pages.yml later in this pass (#184), so that this
+  # workflow keeps read-only permissions.
+  # ──────────────────────────────────────────────────────────────────────────
   doc:
     name: Documentation
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    needs: [clippy, test]
+    needs: test
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
-
-      - name: Cache Cargo registry
-        uses: actions/cache@v5
+      - uses: ./.github/actions/setup-rust
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/
-          key: ${{ runner.os }}-doc-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-doc-
-
-      # DD-027 (#75, migrated to hdf5-metno per #79) — `--all-features` below
-      # enables `hdf5`, which needs libhdf5's C headers via pkg-config, same
-      # as the clippy/test jobs. Missing here was the actual cause of the
-      # doc job's CI failure.
-      - name: Install system dependencies (HDF5)
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends libhdf5-dev pkg-config
-
+          hdf5: true
+          cache-key: doc
       - name: cargo doc — build with KaTeX header
-        run: RUSTDOCFLAGS="--html-in-header docs/katex-header.html" cargo doc --no-deps --all-features
-
+        run: RUSTDOCFLAGS="--html-in-header docs/katex-header.html" cargo doc --locked --no-deps --all-features
       - name: Add root redirect to oxiflow/index.html
         run: |
           echo '<meta http-equiv="refresh" content="0; url=oxiflow/index.html">' \
             > target/doc/index.html
-
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
