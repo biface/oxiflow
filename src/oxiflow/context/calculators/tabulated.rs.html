@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/context/calculators/tabulated.rs`."><title>tabulated.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-1ed95124.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.98.1 (48a229cea 2026-09-01)" data-channel="1.98.1" data-search-js="search-9944d736.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/context/calculators/tabulated.rs`."><title>tabulated.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.0 (b940084d7 2026-09-28)" data-channel="1.99.0" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../../static.files/src-script-813739b1.js"></script><script defer src="../../../../src-files.js"></script><script defer src="../../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
         onload="renderMathInElement(document.body, {
@@ -29,14 +29,14 @@
 <a href=#19 id=19 data-nosnippet>19</a>///
 <a href=#20 id=20 data-nosnippet>20</a>/// # Reserved
 <a href=#21 id=21 data-nosnippet>21</a>///
-<a href=#22 id=22 data-nosnippet>22</a>/// `PiecewiseCubic` (natural cubic spline, 4th-order accurate) is planned for
-<a href=#23 id=23 data-nosnippet>23</a>/// J5 (v0.7.0) and requires the `spline` feature flag.
+<a href=#22 id=22 data-nosnippet>22</a>/// `PiecewiseCubic` (natural cubic spline, 4th-order accurate) is reserved, with
+<a href=#23 id=23 data-nosnippet>23</a>/// no milestone assigned; it would require a `spline` feature flag.
 <a href=#24 id=24 data-nosnippet>24</a></span><span class="attr">#[non_exhaustive]
 <a href=#25 id=25 data-nosnippet>25</a>#[derive(Debug, Clone, PartialEq, Eq)]
 <a href=#26 id=26 data-nosnippet>26</a></span><span class="kw">pub enum </span>Interpolation {
 <a href=#27 id=27 data-nosnippet>27</a>    <span class="doccomment">/// Piecewise linear interpolation: `f(t) = f_i + (f_{i+1} − f_i) · (t − t_i) / (t_{i+1} − t_i)`.
 <a href=#28 id=28 data-nosnippet>28</a>    </span>Linear,
-<a href=#29 id=29 data-nosnippet>29</a>    <span class="comment">// PiecewiseCubic — RESERVED J5 (v0.7.0), requires feature `spline`.
+<a href=#29 id=29 data-nosnippet>29</a>    <span class="comment">// PiecewiseCubic — RESERVED, no milestone assigned (would require feature `spline`).
 <a href=#30 id=30 data-nosnippet>30</a></span>}
 <a href=#31 id=31 data-nosnippet>31</a>
 <a href=#32 id=32 data-nosnippet>32</a><span class="comment">// ── ExternalTabulated ─────────────────────────────────────────────────────────
@@ -218,9 +218,9 @@
 <a href=#208 id=208 data-nosnippet>208</a>
 <a href=#209 id=209 data-nosnippet>209</a>        <span class="kw">match </span><span class="self">self</span>.interpolation {
 <a href=#210 id=210 data-nosnippet>210</a>            Interpolation::Linear =&gt; v0 + (v1 - v0) * (t - t0) / (t1 - t0),
-<a href=#211 id=211 data-nosnippet>211</a>            <span class="comment">// J5+: PiecewiseCubic will be added here.
+<a href=#211 id=211 data-nosnippet>211</a>            <span class="comment">// PiecewiseCubic would be added here (reserved, no milestone).
 <a href=#212 id=212 data-nosnippet>212</a>            </span><span class="attr">#[allow(unreachable_patterns)]
-<a href=#213 id=213 data-nosnippet>213</a>            </span><span class="kw">_ </span>=&gt; v0, <span class="comment">// unreachable at J2
+<a href=#213 id=213 data-nosnippet>213</a>            </span><span class="kw">_ </span>=&gt; v0, <span class="comment">// unreachable while `Linear` is the only variant
 <a href=#214 id=214 data-nosnippet>214</a>        </span>}
 <a href=#215 id=215 data-nosnippet>215</a>    }
 <a href=#216 id=216 data-nosnippet>216</a>}
