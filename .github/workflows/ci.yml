@@ -86,23 +86,23 @@ jobs:
         include:
           - name: default
             args: ""
-          # faer sparse backend — DD-013 (#13), DD-043 (#50).
+          # faer sparse backend — DT-013 (#13), DA-043 (#103), #50.
           - name: sparse
             args: --features sparse
-          # hdf5-metno needs libhdf5's C headers via pkg-config — DD-027 (#75), #79.
+          # hdf5-metno needs libhdf5's C headers via pkg-config — DT-027 (#75), #79.
           - name: hdf5
             args: --features hdf5
             hdf5: true
-          # wgpu needs a driver at run time only, not to build — DD-026 (#73), DD-045 (#127).
+          # wgpu needs a driver at run time only, not to build — DA-026 (#73), DT-045 (#128).
           - name: gpu
             args: --features gpu
-          # Rayon dispatch behind the threshold — DD-014 (#14), DD-048.
+          # Rayon dispatch behind the threshold — DT-014 (#14), DA-048 (#140).
           - name: parallel
             args: --features parallel
           # Public types serialisation, SimulationSnapshot — DT-025 (#66), #71.
           - name: serde
             args: --features serde
-          # VTK (.vtu) export of SimulationResult — DD-027 (#78).
+          # VTK (.vtu) export of SimulationResult — DT-027 (#75), #78.
           - name: vtk
             args: --features vtk
           - name: all-features

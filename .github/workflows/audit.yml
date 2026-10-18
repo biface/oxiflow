@@ -34,5 +34,18 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit
+      # Ignored advisories, each pending a tracked fix. All three come from
+      # vtkio 0.6.3 (optional `vtk` feature), which pins these versions: no
+      # lockfile update can fix them. oxiflow only writes .vtu files, while
+      # the flaws sit in read paths (LZ4 decompression, XML parsing). Fix
+      # tracked in #191; remove these flags with it. Any other advisory
+      # still fails the check.
+      #   RUSTSEC-2026-0041  lz4_flex 0.7.5   uninitialised memory on invalid input
+      #   RUSTSEC-2026-0194  quick-xml 0.22.0 quadratic duplicate-attribute check
+      #   RUSTSEC-2026-0195  quick-xml 0.22.0 unbounded NsReader allocation
       - name: cargo audit
-        run: cargo-audit audit
+        run: >-
+          cargo-audit audit
+          --ignore RUSTSEC-2026-0041
+          --ignore RUSTSEC-2026-0194
+          --ignore RUSTSEC-2026-0195

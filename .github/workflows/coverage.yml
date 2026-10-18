@@ -40,17 +40,17 @@ jobs:
         include:
           - flag: default
             args: --all-targets
-          # faer sparse backend — DD-013 (#13), DD-043 (#50).
+          # faer sparse backend — DT-013 (#13), DA-043 (#103), #50.
           - flag: sparse
             args: --all-targets --features sparse
-          # ExternalTabulated reads HDF5 files — DD-027 (#75), #79.
+          # ExternalTabulated reads HDF5 files — DT-027 (#75), #79.
           - flag: hdf5
             args: --all-targets --features hdf5
             hdf5: true
-          # Rayon dispatch branches — DD-014 (#14), DD-048.
+          # Rayon dispatch branches — DT-014 (#14), DA-048 (#140).
           - flag: parallel
             args: --all-targets --features parallel
-          # SimulationResult::write_vtk — DD-027 (#78).
+          # SimulationResult::write_vtk — DT-027 (#75), #78.
           - flag: vtk
             args: --all-targets --features vtk
           # Serialisation and SimulationSnapshot — DT-025 (#66), #71.

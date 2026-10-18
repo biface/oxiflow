@@ -28,7 +28,7 @@ inputs:
     required: false
     default: ""
   hdf5:
-    description: Install libhdf5-dev and pkg-config, needed by the `hdf5` feature (DD-027, #75).
+    description: Install libhdf5-dev and pkg-config, needed by the `hdf5` feature (DT-027, #75).
     required: false
     default: "false"
   cache-key:
