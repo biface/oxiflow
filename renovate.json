@@ -1,0 +1,23 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "oxiflow — trial setup (#184). Every update waits for approval on the Dependency Dashboard, and targets the open sprint branch (update/x.y.z) only: when no sprint is open, nothing is proposed.",
+  "extends": ["config:recommended"],
+  "baseBranchPatterns": ["/^update\\//"],
+  "dependencyDashboard": true,
+  "dependencyDashboardApproval": true,
+  "timezone": "Europe/Paris",
+  "schedule": ["before 6am on monday"],
+  "labels": ["type: chore"],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"]
+  },
+  "packageRules": [
+    {
+      "description": "nalgebra and faer types appear in oxiflow's public API (DVector, DMatrix, SparseColMat): a new release breaks downstream crates without cargo-semver-checks seeing it. Grouped, and approved in minor sprints only (DQ-016 note of 2026-10-18).",
+      "matchManagers": ["cargo"],
+      "matchPackageNames": ["nalgebra", "faer"],
+      "groupName": "public API dependencies (nalgebra, faer)"
+    }
+  ]
+}

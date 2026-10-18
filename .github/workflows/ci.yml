@@ -5,12 +5,15 @@
 #
 #   push, any branch          fmt + version check → clippy → unit tests + doctests
 #   PR → staging/**, main     the same, then the full test suite per feature,
-#                             the MSRV build and cargo-semver-checks (#168)
-#   push to main              the same as any push, then the doc deployment
+#                             the MSRV build, cargo-semver-checks (#168), the
+#                             doc build and the reference examples (#184)
+#   PR → main                 all of the above, plus a packaging dry run
 #
 # Jobs are ordered with `needs:` inside this one workflow: quality gates run
 # before tests, and tests are skipped when a gate fails. The toolchain and the
-# cache come from the shared `setup-rust` action (#184).
+# cache come from the shared `setup-rust` action (#184). This workflow is
+# read-only: the doc deployment lives in pages.yml, triggered by its success
+# on main. Coverage (coverage.yml) and cargo audit (audit.yml) run alongside.
 # =============================================================================
 
 name: CI
@@ -70,7 +73,8 @@ jobs:
         run: sh scripts/check-version.sh pr "$BASE" "$HEAD"
 
   # ──────────────────────────────────────────────────────────────────────────
-  # Clippy — zero warnings, one matrix entry per feature
+  # Clippy — zero warnings, every target (lib, tests, examples, benches), one
+  # matrix entry per feature declared in Cargo.toml plus --all-features
   # ──────────────────────────────────────────────────────────────────────────
   clippy:
     name: Clippy (${{ matrix.name }})
@@ -94,7 +98,16 @@ jobs:
             args: --features gpu
           # Rayon dispatch behind the threshold — DD-014 (#14), DD-048.
           - name: parallel
-            args: --features parallel --all-targets
+            args: --features parallel
+          # Public types serialisation, SimulationSnapshot — DT-025 (#66), #71.
+          - name: serde
+            args: --features serde
+          # VTK (.vtu) export of SimulationResult — DD-027 (#78).
+          - name: vtk
+            args: --features vtk
+          - name: all-features
+            args: --all-features
+            hdf5: true
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-rust
@@ -102,8 +115,8 @@ jobs:
           components: clippy
           hdf5: ${{ matrix.hdf5 || false }}
           cache-key: clippy-${{ matrix.name }}
-      - name: cargo clippy ${{ matrix.args }}
-        run: cargo clippy --locked ${{ matrix.args }} -- -D warnings
+      - name: cargo clippy --all-targets ${{ matrix.args }}
+        run: cargo clippy --locked --all-targets ${{ matrix.args }} -- -D warnings
 
   # ──────────────────────────────────────────────────────────────────────────
   # Test — unit tests and doctests, default features, every push.
@@ -148,6 +161,13 @@ jobs:
             args: --features gpu
           - name: parallel
             args: --features parallel
+          - name: serde
+            args: --features serde
+          - name: vtk
+            args: --features vtk
+          - name: all-features
+            args: --all-features
+            hdf5: true
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-rust
@@ -218,32 +238,75 @@ jobs:
         run: cargo semver-checks --all-features --release-type patch
 
   # ──────────────────────────────────────────────────────────────────────────
-  # Doc — build and deploy to GitHub Pages, push to main only.
-  # Moves to a separate pages.yml later in this pass (#184), so that this
-  # workflow keeps read-only permissions.
+  # Doc — rustdoc with warnings denied, all features, on pull requests, so a
+  # broken intra-doc link fails before merging rather than after. Default
+  # features are not checked: links to items behind `parallel`/`serde` only
+  # resolve with those features on. Deployment: pages.yml.
   # ──────────────────────────────────────────────────────────────────────────
   doc:
     name: Documentation
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: test
-    permissions:
-      contents: write
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-rust
         with:
           hdf5: true
           cache-key: doc
-      - name: cargo doc — build with KaTeX header
-        run: RUSTDOCFLAGS="--html-in-header docs/katex-header.html" cargo doc --locked --no-deps --all-features
-      - name: Add root redirect to oxiflow/index.html
-        run: |
-          echo '<meta http-equiv="refresh" content="0; url=oxiflow/index.html">' \
-            > target/doc/index.html
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: cargo doc --all-features, warnings denied
+        env:
+          RUSTDOCFLAGS: -D warnings --html-in-header docs/katex-header.html
+        run: cargo doc --locked --no-deps --all-features
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Reference examples — each one checks itself and exits with an error
+  # beyond its tolerance (#173). Names are added to REFERENCE_EXAMPLES as
+  # #174–#180 land; prototypes such as lahar_lake_proto stay out. Examples
+  # that only serve benchmarks are compile-checked by clippy --all-targets.
+  # The job always exists, so it can be a required check before the list
+  # has its first entry.
+  # ──────────────────────────────────────────────────────────────────────────
+  examples:
+    name: Reference examples
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+    env:
+      REFERENCE_EXAMPLES: ""
+    steps:
+      - name: No reference example yet
+        if: env.REFERENCE_EXAMPLES == ''
+        run: echo "REFERENCE_EXAMPLES is empty, nothing to run."
+      - uses: actions/checkout@v7
+        if: env.REFERENCE_EXAMPLES != ''
+      - uses: ./.github/actions/setup-rust
+        if: env.REFERENCE_EXAMPLES != ''
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./target/doc
-          enable_jekyll: false
+          hdf5: true
+          cache-key: examples
+      - name: cargo run --release --example …
+        if: env.REFERENCE_EXAMPLES != ''
+        run: |
+          for example in $REFERENCE_EXAMPLES; do
+            echo "::group::$example"
+            cargo run --locked --release --all-features --example "$example"
+            echo "::endgroup::"
+          done
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Packaging rehearsal — pull requests to main only, the last step before
+  # the tag. The same dry run is replayed by publish.yml.
+  # ──────────────────────────────────────────────────────────────────────────
+  publish-dry-run:
+    name: Publish dry run
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: publish-dry-run
+      - name: cargo publish --dry-run
+        run: cargo publish --dry-run --locked
