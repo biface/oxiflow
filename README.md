@@ -62,7 +62,7 @@ exposes stable, object-safe extension points for exactly this purpose.
 - **Spatial schemes** — upwind/centred FD, WENO3/5, conservative FV, Lax–Wendroff,
   flux limiters (MinMod, Van Leer, Superbee)
 - **Plugin-safe API** — all public traits are object-safe, enabling third-party niche
-  frameworks to extend the engine without touching its internals (v2.0 — INV-4)
+  frameworks to extend the engine without touching its internals (v0.30.0 — INV-4)
 - **Computation optimisation** — opt-in Rayon parallelism (`parallel` feature) and
   GPU acceleration via `wgpu` (post-v0.5.0, `gpu` feature)
 
@@ -141,15 +141,16 @@ See the [oxiflow wiki](https://github.com/biface/oxiflow/wiki) for introductory 
 
 ## Design Invariants
 
-Four constraints guarantee a non-breaking evolution from v1.0 to v3.0, and ensure that
-third-party frameworks remain compatible across engine versions:
+Four constraints guarantee that finite element support (from v0.11.0) and third-party
+frameworks (v0.30.0) arrive without breaking existing code, and that those frameworks
+remain compatible across engine versions:
 
 | Invariant | Description                                                               | Introduced |
 |-----------|---------------------------------------------------------------------------|------------|
-| **INV-1** | `Mesh` is abstract — `PhysicalState` carries no grid assumptions          | v0.2       |
+| **INV-1** | `Mesh` is abstract — no public API exposes `dx`, `nx` or raw indices      | v0.1       |
 | **INV-2** | `DiscreteOperator` is abstract — integrators are generic over the scheme  | v0.5       |
-| **INV-3** | `CouplingOperator` supports distinct domains with moving interfaces       | v0.3       |
-| **INV-4** | All public traits are object-safe — third-party crates can implement them | v2.0       |
+| **INV-3** | Inter-domain coupling only through `CouplingOperator`, never in a solver  | v0.3       |
+| **INV-4** | All public traits are object-safe — third-party crates can implement them | v0.30      |
 
 ---
 

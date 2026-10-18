@@ -67,12 +67,12 @@ Every pull request must satisfy all of the following before merging.
 Any contribution touching `src/mesh/`, `src/coupling/`, `src/solver/spatial/`, or any
 public trait must preserve the four design invariants:
 
-- **INV-1** — `Mesh` remains abstract; `PhysicalState` must not gain grid assumptions.
+- **INV-1** — `Mesh` remains abstract; no public API exposes `dx`, `nx` or raw indices.
 - **INV-2** — `DiscreteOperator` remains abstract; integrators stay generic over the scheme.
-- **INV-3** — `CouplingOperator` supports distinct domains with moving interfaces.
+- **INV-3** — Inter-domain coupling goes through `CouplingOperator` only, never into a solver.
 - **INV-4** — All public traits remain object-safe; no breaking change for external crates.
 
-INV-4 is critical from v2.0 onwards: niche frameworks published by third parties on
+INV-4 is critical from v0.30.0 onwards: niche frameworks published by third parties on
 crates.io depend on the engine's public API being stable and object-safe. Violations block
 merging regardless of test results.
 

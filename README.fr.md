@@ -64,7 +64,7 @@ points d'extension stables et object-safe précisément dans ce but.
 - **Schémas spatiaux** — FD décentrées/centrées, WENO3/5, FV conservatifs, Lax–Wendroff,
   limiteurs de flux (MinMod, Van Leer, Superbee)
 - **API plugin-safe** — tous les traits publics sont object-safe, permettant à des crates
-  tierces d'implémenter des frameworks de niche (v2.0 — INV-4)
+  tierces d'implémenter des frameworks de niche (v0.30.0 — INV-4)
 - **Optimisation des calculs** — parallélisme Rayon opt-in (feature `parallel`) et
   accélération GPU via `wgpu` (post-v0.5.0, feature `gpu`)
 
@@ -144,15 +144,16 @@ Consultez le [wiki oxiflow](https://github.com/biface/oxiflow/wiki) pour les not
 
 ## Invariants de conception
 
-Quatre contraintes garantissent une évolution sans breaking change de v1.0 à v3.0 et
-assurent la compatibilité des frameworks tiers entre les versions du moteur :
+Quatre contraintes garantissent que la méthode des éléments finis (à partir de v0.11.0) et
+les frameworks tiers (v0.30.0) arrivent sans breaking change pour le code existant, et que
+ces frameworks restent compatibles d'une version du moteur à l'autre :
 
 | Invariant | Description                                                                           | Introduit en |
 |-----------|---------------------------------------------------------------------------------------|--------------|
-| **INV-1** | `Mesh` est abstrait — `PhysicalState` ne présuppose aucune structure de grille        | v0.2         |
+| **INV-1** | `Mesh` est abstrait — aucune API publique n'expose `dx`, `nx` ou des indices bruts    | v0.1         |
 | **INV-2** | `DiscreteOperator` est abstrait — les intégrateurs sont génériques sur le schéma      | v0.5         |
-| **INV-3** | `CouplingOperator` supporte des domaines distincts avec interfaces mobiles            | v0.3         |
-| **INV-4** | Tous les traits publics sont object-safe — des crates tierces peuvent les implémenter | v2.0         |
+| **INV-3** | Couplage inter-domaines uniquement par `CouplingOperator`, jamais dans un solveur     | v0.3         |
+| **INV-4** | Tous les traits publics sont object-safe — des crates tierces peuvent les implémenter | v0.30        |
 
 ---
 

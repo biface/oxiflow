@@ -66,7 +66,7 @@ diffusive electromagnetism, and any domain a third party wishes to address.
 - **Anticipated FEM compatibility** — v1.0 abstractions are designed to not presuppose
   structured grids (INV-1/2/3)
 - **Plugin-safe API** — all public traits are object-safe so third-party framework crates
-  can implement them without accessing engine internals (INV-4, from v2.0)
+  can implement them without accessing engine internals (INV-4, from v0.30.0)
 
 ### Positioning
 
@@ -430,7 +430,7 @@ refinement for the wave front — both impossible with finite differences.
 
 ### 13.2 INV-4 — Plugin-safe API
 
-**Introduced at v2.0.** All public traits must be object-safe and fully accessible from
+**Introduced at v0.30.0 [J30]** (DA-017, #17). All public traits must be object-safe and fully accessible from
 an external crate without depending on engine internals.
 
 Verification: a dedicated integration test crate `oxiflow-test-plugin` (external, not
@@ -445,7 +445,7 @@ impl PhysicalModel for ExternalModel { /* ... */ }
 impl RequiresContext for ExternalModel { /* ... */ }
 ```
 
-INV-4 is the prerequisite for v3.0. No niche framework can be developed before it is in
+INV-4 is the prerequisite for the niche frameworks of v0.30.0. No niche framework can be developed before it is in
 place and verified.
 
 ### 13.3 v2.0 scope
@@ -591,7 +591,7 @@ Requirements for a third-party framework:
 | Caching | Dirty flag + temporal invalidation | Systematic recomputation | J9 | |
 | API stability | SemVer + `cargo-semver-checks` + FEM audit | Informal convention | J10 | |
 | Ergonomics | `oxiflow-prelude`, separate crate | Builder integrated into the engine | J10 | |
-| Plugin architecture | Object-safe traits + `PluginRegistry` | Monolithic crate | J20 | INV-4 |
+| Plugin architecture | Object-safe traits + `PluginRegistry` | Monolithic crate | J30 | INV-4 |
 | Framework config | TOML + runtime registry | proc-macro DSL | J30 | |
 | License | Apache 2.0 only | MIT or dual MIT/Apache | J0 | |
 
@@ -610,7 +610,7 @@ Requirements for a third-party framework:
 | R7 | Breaking change forced before v1.0 | Low | Accepted pre-1.0 but documented |
 | R8 | INV-1/2/3 silently violated | Medium | Formal audit at J10; dedicated integration tests |
 | R9 | ALE incompatible with CouplingOperator design | Low | Proto lahar–lake at J3 is the test bench |
-| R10 | INV-4 violated — third-party frameworks break on engine update | Medium | `oxiflow-test-plugin` external crate in CI from v2.0; `cargo-semver-checks` in release pipeline |
+| R10 | INV-4 violated — third-party frameworks break on engine update | Medium | `oxiflow-test-plugin` external crate in CI from v0.30.0; `cargo-semver-checks` in release pipeline |
 | R11 | Fragmentation — incompatible third-party frameworks | Low | INV-4 + stable public API is the only compatibility contract; framework authors are responsible for their own SemVer |
 | R12 | FV/WENO insertion point (DD-038) chosen wrong, costly to undo | Low | Internal calculator kept private (reserved `instance_id` field) — additive extension toward J6, no restructuring |
 

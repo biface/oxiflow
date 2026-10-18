@@ -68,7 +68,7 @@ transfert thermique, électromagnétisme diffusif, et tout domaine qu'un tiers s
   structurée (INV-1/2/3)
 - **API plugin-safe** — tous les traits publics sont object-safe afin que des crates de
   frameworks tiers puissent les implémenter sans accéder aux internals du moteur (INV-4,
-  à partir de v2.0)
+  à partir de v0.30.0)
 
 ### Positionnement
 
@@ -440,7 +440,7 @@ différences finies.
 
 ### 13.2 INV-4 — API plugin-safe
 
-**Introduit en v2.0.** Tous les traits publics doivent être object-safe et entièrement
+**Introduit en v0.30.0 [J30]** (DA-017, #17). Tous les traits publics doivent être object-safe et entièrement
 accessibles depuis une crate externe sans dépendre des internals du moteur.
 
 Vérification : une crate d'intégration dédiée `oxiflow-test-plugin` (externe, hors
@@ -455,7 +455,7 @@ impl PhysicalModel for ModeleExterne { /* ... */ }
 impl RequiresContext for ModeleExterne { /* ... */ }
 ```
 
-INV-4 est le prérequis de v3.0. Aucun framework de niche ne peut être développé avant
+INV-4 est le prérequis des frameworks de niche de v0.30.0. Aucun framework de niche ne peut être développé avant
 qu'il soit en place et vérifié.
 
 ### 13.3 Périmètre v2.0
@@ -602,7 +602,7 @@ Conditions pour un framework tiers :
 | Cache | Dirty flag + invalidation temporelle | Recalcul systématique | J9 | |
 | Stabilité API | SemVer + `cargo-semver-checks` + audit FEM | Convention informelle | J10 | |
 | Ergonomie | `oxiflow-prelude`, crate séparée | Builder intégré au moteur | J10 | |
-| Architecture plugin | Traits object-safe + `PluginRegistry` | Crate monolithique | J20 | INV-4 |
+| Architecture plugin | Traits object-safe + `PluginRegistry` | Crate monolithique | J30 | INV-4 |
 | Config framework | TOML + registre runtime | DSL proc-macro | J30 | |
 | Licence | Apache 2.0 seule | MIT ou double MIT/Apache | J0 | |
 
@@ -621,7 +621,7 @@ Conditions pour un framework tiers :
 | R7 | Breaking change forcé avant v1.0 | Faible | Accepté pre-1.0 mais documenté |
 | R8 | INV-1/2/3 silencieusement violés | Moyenne | Audit formel à J10 ; tests d'intégration dédiés |
 | R9 | ALE incompatible avec CouplingOperator | Faible | Proto lahar–lac à J3 est le banc d'essai |
-| R10 | INV-4 violé — frameworks tiers cassés lors d'une mise à jour du moteur | Moyenne | Crate `oxiflow-test-plugin` externe en CI dès v2.0 ; `cargo-semver-checks` dans le pipeline |
+| R10 | INV-4 violé — frameworks tiers cassés lors d'une mise à jour du moteur | Moyenne | Crate `oxiflow-test-plugin` externe en CI dès v0.30.0 ; `cargo-semver-checks` dans le pipeline |
 | R11 | Fragmentation — frameworks tiers incompatibles entre eux | Faible | INV-4 + API publique stable est le seul contrat de compatibilité ; les auteurs de frameworks sont responsables de leur propre SemVer |
 | R12 | Point de branchement FV/WENO (DD-038) mal choisi et coûteux à défaire | Faible | Calculateur interne gardé privé (champ `instance_id` réservé) — extension additive vers J6 sans restructuration |
 

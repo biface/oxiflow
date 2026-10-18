@@ -70,15 +70,16 @@ Toute pull request doit satisfaire l'ensemble des points suivants avant d'être 
 Toute contribution touchant `src/mesh/`, `src/coupling/`, `src/solver/spatial/`, ou
 tout trait public doit préserver les quatre invariants de conception :
 
-- **INV-1** — `Mesh` reste abstrait ; `PhysicalState` ne doit pas acquérir d'hypothèses
-  de grille.
+- **INV-1** — `Mesh` reste abstrait ; aucune API publique n'expose `dx`, `nx` ou des
+  indices bruts.
 - **INV-2** — `DiscreteOperator` reste abstrait ; les intégrateurs restent génériques
   sur le schéma.
-- **INV-3** — `CouplingOperator` supporte des domaines distincts avec interfaces mobiles.
+- **INV-3** — Le couplage inter-domaines passe uniquement par `CouplingOperator`, jamais
+  par un solveur.
 - **INV-4** — Tous les traits publics restent object-safe ; aucun breaking change pour
   les crates externes.
 
-INV-4 est critique à partir de v2.0 : les frameworks de niche publiés par des tiers sur
+INV-4 est critique à partir de v0.30.0 : les frameworks de niche publiés par des tiers sur
 crates.io dépendent de la stabilité et de l'object-safety de l'API publique du moteur.
 La violation de cet invariant bloque le merge indépendamment des résultats des tests.
 
