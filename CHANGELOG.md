@@ -42,6 +42,9 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Solver::on_divergence` before returning `SolverDivergence`, like every
   other solver. The snapshot is built by one shared helper in all solver
   loops (#134).
+- Time integrators advance `VectorField` states (n nodes × d components)
+  as they do `ScalarField` states, instead of failing with `TypeMismatch`:
+  `RK4Solver`. `ScalarField` results are bit-identical (#192).
 
 ### Security
 

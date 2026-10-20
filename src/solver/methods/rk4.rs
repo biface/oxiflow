@@ -37,6 +37,14 @@
 //! *outer* step size for all four stages — it identifies the configured
 //! step, not a per-stage time delta.
 //!
+//! ## State variants
+//!
+//! The stages and the final combination go through
+//! `ContextValue::add_scaled` and the crate's linear combination of states,
+//! so a `VectorField` state (n nodes × d components) is advanced exactly
+//! like a `ScalarField` (#192). For a `ScalarField`, results are
+//! bit-identical to the former `DVector` arithmetic.
+//!
 //! ## Scope at J4a
 //!
 //! - Single-domain scenarios only (`n_domains() == 1`) — same restriction
@@ -52,8 +60,6 @@
 //! imaginary axis, but is still explicit: the CFL condition
 //! $\text{CFL} = v\,\Delta t / \Delta x \leq 1$ still bounds the usable
 //! step size. The solver does not enforce this automatically.
-
-use nalgebra::DVector;
 
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
@@ -136,15 +142,15 @@ impl SteppableSolver for RK4Solver {
         let k1 = evaluate_derivative(domain, chain, state, t, dt)?;
 
         // Stage 2: k2 = f(t + dt/2, u + dt/2 * k1)
-        let mut u2 = combine(state, &k1, half_dt)?;
+        let mut u2 = state.add_scaled(half_dt, &k1)?;
         let k2 = evaluate_derivative(domain, chain, &mut u2, t + half_dt, dt)?;
 
         // Stage 3: k3 = f(t + dt/2, u + dt/2 * k2)
-        let mut u3 = combine(state, &k2, half_dt)?;
+        let mut u3 = state.add_scaled(half_dt, &k2)?;
         let k3 = evaluate_derivative(domain, chain, &mut u3, t + half_dt, dt)?;
 
         // Stage 4: k4 = f(t + dt, u + dt * k3)
-        let mut u4 = combine(state, &k3, dt)?;
+        let mut u4 = state.add_scaled(dt, &k3)?;
         let k4 = evaluate_derivative(domain, chain, &mut u4, t + dt, dt)?;
 
         // Weighted combination: u_next = u + dt/6 * (k1 + 2k2 + 2k3 + k4)
@@ -152,29 +158,17 @@ impl SteppableSolver for RK4Solver {
     }
 }
 
-/// Computes `u + scale * k` for `ScalarField` states.
+/// Computes the RK4 weighted combination `u + dt/6 * (k1 + 2k2 + 2k3 + k4)`,
+/// for `ScalarField` and `VectorField` states alike.
 ///
-/// Returns `OxiflowError::TypeMismatch` if either operand is not
-/// `ScalarField`, or `InvalidDomain` if their lengths differ.
-fn combine(u: &ContextValue, k: &ContextValue, scale: f64) -> Result<ContextValue, OxiflowError> {
-    let u_field = u.as_scalar_field()?;
-    let k_field = k.as_scalar_field()?;
-
-    if u_field.len() != k_field.len() {
-        return Err(OxiflowError::InvalidDomain(format!(
-            "state length {} != stage derivative length {}",
-            u_field.len(),
-            k_field.len()
-        )));
-    }
-
-    Ok(ContextValue::ScalarField(u_field + k_field * scale))
-}
-
-/// Computes the RK4 weighted combination `u + dt/6 * (k1 + 2k2 + 2k3 + k4)`.
+/// The weighted sum is formed first, then scaled once by `dt/6`: the same
+/// order of operations as the former `DVector` expression, so a
+/// `ScalarField` result is bit-identical to it.
 ///
-/// Returns `OxiflowError::InvalidDomain` if any stage derivative's length
-/// differs from `u`'s.
+/// # Errors
+///
+/// `OxiflowError::TypeMismatch` if the stage derivatives are not the same
+/// variant as `u`, `InvalidDomain` if a shape differs from `u`'s.
 fn rk4_combine(
     u: &ContextValue,
     k1: &ContextValue,
@@ -183,32 +177,8 @@ fn rk4_combine(
     k4: &ContextValue,
     dt: f64,
 ) -> Result<ContextValue, OxiflowError> {
-    let u_field = u.as_scalar_field()?;
-    let k1_field = k1.as_scalar_field()?;
-    let k2_field = k2.as_scalar_field()?;
-    let k3_field = k3.as_scalar_field()?;
-    let k4_field = k4.as_scalar_field()?;
-
-    let n = u_field.len();
-    if k1_field.len() != n || k2_field.len() != n || k3_field.len() != n || k4_field.len() != n {
-        return Err(OxiflowError::InvalidDomain(
-            "RK4 stage derivative length mismatch with state".into(),
-        ));
-    }
-
-    // Use fully-owned DVector operands throughout: avoids relying on
-    // nalgebra's reference/owned operator-overload resolution across a long
-    // expression chain — every `+`/`*` here is owned-op-owned, the most
-    // basic and unambiguous combination.
-    let k1_owned = k1_field.clone();
-    let k2_owned = k2_field.clone();
-    let k3_owned = k3_field.clone();
-    let k4_owned = k4_field.clone();
-
-    let weighted: DVector<f64> = k1_owned + k2_owned * 2.0 + k3_owned * 2.0 + k4_owned;
-    let result: DVector<f64> = u_field.clone() + weighted * (dt / 6.0);
-
-    Ok(ContextValue::ScalarField(result))
+    let weighted = k1.linear_combination(&[(2.0, k2), (2.0, k3), (1.0, k4)])?;
+    u.add_scaled(dt / 6.0, &weighted)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -595,24 +565,30 @@ mod tests {
         assert!(matches!(err, OxiflowError::MissingCalculator(_)));
     }
 
-    // ── combine / rk4_combine ─────────────────────────────────────────────────
+    // ── rk4_combine ───────────────────────────────────────────────────────────
 
     #[test]
-    fn combine_computes_correctly() {
-        let u = ContextValue::ScalarField(DVector::from_vec(vec![1.0, 2.0, 3.0]));
-        let k = ContextValue::ScalarField(DVector::from_vec(vec![0.1, 0.2, 0.3]));
-        let result = combine(&u, &k, 0.5).unwrap();
-        let field = result.as_scalar_field().unwrap();
-        assert!((field[0] - 1.05).abs() < 1e-12);
-        assert!((field[1] - 2.10).abs() < 1e-12);
-        assert!((field[2] - 3.15).abs() < 1e-12);
-    }
+    fn rk4_combine_is_bit_identical_to_the_former_dvector_expression() {
+        // Values chosen so that rounding actually happens.
+        let u = DVector::from_vec(vec![0.1, 1.0 / 3.0, 1.0e16, -7.0e-3]);
+        let k1 = DVector::from_vec(vec![0.7, -2.0 / 3.0, 3.3, 1.0e-9]);
+        let k2 = DVector::from_vec(vec![0.71, -0.66, 3.31, 1.1e-9]);
+        let k3 = DVector::from_vec(vec![0.69, -0.67, 3.29, 0.9e-9]);
+        let k4 = DVector::from_vec(vec![0.72, -0.65, 3.3, 1.2e-9]);
+        let dt = 0.013;
 
-    #[test]
-    fn combine_mismatched_length_returns_error() {
-        let u = ContextValue::ScalarField(DVector::from_element(3, 1.0));
-        let k = ContextValue::ScalarField(DVector::from_element(2, 0.1));
-        assert!(combine(&u, &k, 0.1).is_err());
+        let former = &u + (&k1 + &k2 * 2.0 + &k3 * 2.0 + &k4) * (dt / 6.0);
+        let field = |v: &DVector<f64>| ContextValue::ScalarField(v.clone());
+        let result = rk4_combine(
+            &field(&u),
+            &field(&k1),
+            &field(&k2),
+            &field(&k3),
+            &field(&k4),
+            dt,
+        )
+        .unwrap();
+        assert_eq!(result.as_scalar_field().unwrap(), &former);
     }
 
     #[test]
@@ -624,7 +600,7 @@ mod tests {
         let dt = 0.2;
 
         let rk4_result = rk4_combine(&u, &k, &k, &k, &k, dt).unwrap();
-        let euler_result = combine(&u, &k, dt).unwrap();
+        let euler_result = u.add_scaled(dt, &k).unwrap();
 
         let rk4_field = rk4_result.as_scalar_field().unwrap();
         let euler_field = euler_result.as_scalar_field().unwrap();

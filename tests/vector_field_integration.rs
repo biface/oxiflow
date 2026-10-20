@@ -18,7 +18,7 @@ use oxiflow::{
     model::traits::{PhysicalModel, RequiresContext},
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
-        methods::{ForwardEulerSolver, SteppableSolver},
+        methods::{ForwardEulerSolver, RK4Solver, SteppableSolver},
         scenario::{Domain, Scenario},
         snapshot::SimulationSnapshot,
         SimulationResult, Solver, SolverConfiguration,
@@ -121,6 +121,18 @@ fn coupled_matrix() -> Matrix2<f64> {
     Matrix2::new(-2.0, 1.0, 1.0, -2.0)
 }
 
+/// `exp(t A)` for [`coupled_matrix`], from its eigen-decomposition
+/// (eigenvectors `(1, 1)` and `(1, −1)`).
+fn coupled_exact_propagator(t: f64) -> Matrix2<f64> {
+    let (slow, fast) = ((-t).exp(), (-3.0 * t).exp());
+    Matrix2::new(slow + fast, slow - fast, slow - fast, slow + fast) * 0.5
+}
+
+/// `n_steps` applications of the one-step matrix `step`.
+fn power(step: Matrix2<f64>, n_steps: usize) -> Matrix2<f64> {
+    (0..n_steps).fold(Matrix2::identity(), |p, _| step * p)
+}
+
 // ── Forward Euler ─────────────────────────────────────────────────────────────
 
 #[test]
@@ -134,10 +146,47 @@ fn forward_euler_matches_its_discrete_solution_on_a_coupled_system() {
             &fixed_step(dt * n_steps as f64, dt, IntegratorKind::Euler),
         )
         .unwrap();
-    let step = Matrix2::identity() + a * dt;
-    let propagator = (0..n_steps).fold(Matrix2::identity(), |p, _| step * p);
+    let propagator = power(Matrix2::identity() + a * dt, n_steps);
     let error = max_error(&result, |x| propagator * LinearSystem2::initial_row(x));
     assert!(error < 1e-12, "max error = {error:e}");
+}
+
+// ── Classical Runge–Kutta ─────────────────────────────────────────────────────
+
+#[test]
+fn rk4_matches_its_discrete_solution_on_a_coupled_system() {
+    // On a linear system, one RK4 step is the degree-4 Taylor polynomial of
+    // exp(dt A).
+    let (dt, n_steps) = (0.05, 20);
+    let a = coupled_matrix();
+    let result = RK4Solver
+        .solve(
+            &scenario(a),
+            &fixed_step(dt * n_steps as f64, dt, IntegratorKind::RK4),
+        )
+        .unwrap();
+    let h = a * dt;
+    let step = Matrix2::identity() + h + h * h / 2.0 + h * h * h / 6.0 + h * h * h * h / 24.0;
+    let propagator = power(step, n_steps);
+    let error = max_error(&result, |x| propagator * LinearSystem2::initial_row(x));
+    assert!(error < 1e-12, "max error = {error:e}");
+}
+
+#[test]
+fn rk4_converges_to_the_exact_solution_at_fourth_order() {
+    let a = coupled_matrix();
+    let t_end = 1.0;
+    let error_at = |dt: f64| {
+        let result = RK4Solver
+            .solve(&scenario(a), &fixed_step(t_end, dt, IntegratorKind::RK4))
+            .unwrap();
+        max_error(&result, |x| {
+            coupled_exact_propagator(t_end) * LinearSystem2::initial_row(x)
+        })
+    };
+    let (coarse, fine) = (error_at(0.1), error_at(0.05));
+    let order = (coarse / fine).log2();
+    assert!((3.8..4.2).contains(&order), "observed order = {order:.3}");
 }
 
 // ── Divergence detection ──────────────────────────────────────────────────────
