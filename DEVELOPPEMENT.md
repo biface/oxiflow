@@ -283,7 +283,7 @@ livrée.
 ## 8. J6 — Algèbre creuse & persistance (v0.6)
 
 Solveur linéaire creux `faer-sparse` pour les systèmes implicites (#50, DD-013 phase 2).
-Export des résultats : VTK (`vtkio`) comme pivot interop pour `SimulationResult` (#78,
+Export des résultats : VTK (`vtkio` à l'époque, remplacé par une écriture `.vtu` interne en v0.10.0, #191) comme pivot interop pour `SimulationResult` (#78,
 DD-027), HDF5 (`hdf5-metno`, migration de dépendance #79) pour les données volumineuses,
 incluant le chargement HDF5 pour `ExternalTabulated` (#105, scindée de #75).
 `SimulationSnapshot` généralisé au-delà de la reprise sur crash vers un checkpoint/reprise

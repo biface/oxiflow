@@ -22,6 +22,17 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `UniformGrid1D::new` rejects non-finite bounds: a NaN bound used to pass
   the `x_end > x_start` check and yield a grid of NaN nodes.
 
+### Security
+
+- The `vtk` feature no longer depends on `vtkio`. `SimulationResult::write_vtk`
+  now writes the `.vtu` file itself, with an unchanged signature and the same
+  inline `binary` (base64) data arrays as before, so NaN and infinities in a
+  diverged state are still exported bit for bit. This removes
+  RUSTSEC-2026-0041 (`lz4_flex 0.7.5`), RUSTSEC-2026-0194 and
+  RUSTSEC-2026-0195 (`quick-xml 0.22.0`) from the dependency tree, along with
+  the future-incompatibility warning `nom 3.2.1` raised on builds with `vtk`
+  (#191).
+
 ---
 
 ## [0.9.0] - 2026-09-16

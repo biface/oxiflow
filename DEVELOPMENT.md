@@ -279,7 +279,7 @@ delivered.
 ## 8. J6 — Sparse Algebra & Persistence (v0.6)
 
 Sparse `faer-sparse` linear solver for implicit systems (#50, DD-013 phase 2). Results export:
-VTK (`vtkio`) as the interop pivot for `SimulationResult` (#78, DD-027), HDF5 (`hdf5-metno`,
+VTK (`vtkio` at the time, replaced by an in-crate `.vtu` writer in v0.10.0, #191) as the interop pivot for `SimulationResult` (#78, DD-027), HDF5 (`hdf5-metno`,
 dependency migration #79) for bulk datasets, including HDF5-backed loading for
 `ExternalTabulated` (#105, split from #75). `SimulationSnapshot` generalised beyond crash
 recovery to normal checkpoint/resume (DD-029, extends #71, #77) — no `Solver::checkpoint()`
