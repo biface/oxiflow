@@ -158,8 +158,8 @@ impl BackwardEulerSolver {
         self
     }
 
-    /// System size above which the sparse path is used (default 100) —
-    /// see [`Self::with_sparse_solver`].
+    /// Number of unknowns (nodes × components) above which the sparse path
+    /// is used (default 100) — see [`Self::with_sparse_solver`].
     #[cfg(feature = "sparse")]
     pub fn with_sparse_threshold(mut self, sparse_threshold: usize) -> Self {
         self.sparse_threshold = sparse_threshold;
@@ -168,6 +168,10 @@ impl BackwardEulerSolver {
 
     /// Declares the Jacobian's half-bandwidth (e.g.
     /// `scheme.stencil_radius()`, DD-039) — see [`Self::with_sparse_solver`].
+    ///
+    /// Counted in flat unknowns. For a `ScalarField` state this is the
+    /// stencil half-width `s`; for a `VectorField` state of `d` components,
+    /// whose unknowns are interleaved by node, it is `d·(s + 1) − 1` (#192).
     #[cfg(feature = "sparse")]
     pub fn with_jacobian_bandwidth(mut self, jacobian_bandwidth: usize) -> Self {
         self.jacobian_bandwidth = Some(jacobian_bandwidth);

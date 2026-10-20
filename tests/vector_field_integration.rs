@@ -18,7 +18,10 @@ use oxiflow::{
     model::traits::{PhysicalModel, RequiresContext},
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
-        methods::{DoPri45Solver, ForwardEulerSolver, RK4Solver, SteppableSolver},
+        methods::{
+            BackwardEulerSolver, CrankNicolsonSolver, DoPri45Solver, ForwardEulerSolver, RK4Solver,
+            SteppableSolver,
+        },
         scenario::{Domain, Scenario},
         snapshot::SimulationSnapshot,
         SimulationResult, Solver, SolverConfiguration,
@@ -215,6 +218,167 @@ fn dopri45_follows_the_exact_solution_within_its_tolerance() {
         coupled_exact_propagator(t_end) * LinearSystem2::initial_row(x)
     });
     assert!(error < 1e-7, "max error = {error:e}");
+}
+
+// ── θ-method: Backward Euler and Crank–Nicolson ──────────────────────────────
+
+/// Tolerance of the implicit runs against their discrete solution: the
+/// single Newton correction is exact for a linear model, up to the
+/// finite-difference Jacobian's cancellation error.
+const IMPLICIT_TOLERANCE: f64 = 1e-8;
+
+#[test]
+fn backward_euler_matches_its_discrete_solution_on_a_coupled_system() {
+    // Backward Euler is exactly u_{k+1} = (I − dt A)⁻¹ u_k on a linear system.
+    let (dt, n_steps) = (0.1, 10);
+    let a = coupled_matrix();
+    let result = BackwardEulerSolver::new()
+        .solve(
+            &scenario(a),
+            &fixed_step(dt * n_steps as f64, dt, IntegratorKind::BackwardEuler),
+        )
+        .unwrap();
+    let step = (Matrix2::identity() - a * dt).try_inverse().unwrap();
+    let propagator = power(step, n_steps);
+    let error = max_error(&result, |x| propagator * LinearSystem2::initial_row(x));
+    assert!(error < IMPLICIT_TOLERANCE, "max error = {error:e}");
+}
+
+#[test]
+fn crank_nicolson_matches_its_discrete_solution_on_a_coupled_system() {
+    // Crank–Nicolson is u_{k+1} = (I − dt/2 A)⁻¹ (I + dt/2 A) u_k.
+    let (dt, n_steps) = (0.1, 10);
+    let a = coupled_matrix();
+    let result = CrankNicolsonSolver::new()
+        .solve(
+            &scenario(a),
+            &fixed_step(dt * n_steps as f64, dt, IntegratorKind::CrankNicolson),
+        )
+        .unwrap();
+    let half = a * (dt / 2.0);
+    let step = (Matrix2::identity() - half).try_inverse().unwrap() * (Matrix2::identity() + half);
+    let propagator = power(step, n_steps);
+    let error = max_error(&result, |x| propagator * LinearSystem2::initial_row(x));
+    assert!(error < IMPLICIT_TOLERANCE, "max error = {error:e}");
+}
+
+// ── Banded Jacobian on a VectorField (feature `sparse`) ──────────────────────
+
+/// Two-component reaction–diffusion: `∂u_c/∂t = D_c ∂²u_c/∂x² + (A u)_c`,
+/// second-order centred differences (stencil half-width 1) with zero-flux
+/// ends. Couples neighbouring nodes *and* the two components of a node, so
+/// its Jacobian in node-interleaved order has half-bandwidth
+/// `d·(s + 1) − 1 = 3`.
+#[cfg(feature = "sparse")]
+struct ReactionDiffusion2 {
+    diffusion: [f64; 2],
+    reaction: Matrix2<f64>,
+    step: f64,
+}
+
+#[cfg(feature = "sparse")]
+impl RequiresContext for ReactionDiffusion2 {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(feature = "sparse")]
+impl PhysicalModel for ReactionDiffusion2 {
+    fn compute_physics(
+        &self,
+        state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let u = state.as_vector_field()?;
+        let n = u.nrows();
+        let mut du = DMatrix::zeros(n, 2);
+        for i in 0..n {
+            // Zero flux: mirror the neighbour across each end.
+            let left = if i == 0 { 1 } else { i - 1 };
+            let right = if i == n - 1 { n - 2 } else { i + 1 };
+            for c in 0..2 {
+                let laplacian =
+                    (u[(left, c)] - 2.0 * u[(i, c)] + u[(right, c)]) / (self.step * self.step);
+                let reaction =
+                    self.reaction[(c, 0)] * u[(i, 0)] + self.reaction[(c, 1)] * u[(i, 1)];
+                du[(i, c)] = self.diffusion[c] * laplacian + reaction;
+            }
+        }
+        Ok(ContextValue::VectorField(du))
+    }
+
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        let n = mesh.n_dof();
+        let mut u = DMatrix::zeros(n, 2);
+        for i in 0..n {
+            let x = mesh.coordinates(i)[0];
+            u[(i, 0)] = (std::f64::consts::PI * x).cos();
+            u[(i, 1)] = x * x;
+        }
+        ContextValue::VectorField(u)
+    }
+
+    fn name(&self) -> &str {
+        "reaction_diffusion_2"
+    }
+}
+
+/// Final state of 5 Backward Euler steps on [`ReactionDiffusion2`], 30 nodes
+/// (60 unknowns), with the sparse path forced when `bandwidth` is given.
+#[cfg(feature = "sparse")]
+fn reaction_diffusion_backward_euler(bandwidth: Option<usize>) -> DMatrix<f64> {
+    use oxiflow::solver::sparse::FaerSparseSolver;
+
+    let n_nodes = 30;
+    let mesh = UniformGrid1D::new(n_nodes, 0.0, 1.0).unwrap();
+    let model = ReactionDiffusion2 {
+        diffusion: [1e-2, 5e-3],
+        reaction: Matrix2::new(-1.0, 0.5, 0.3, -2.0),
+        step: mesh.characteristic_length(),
+    };
+    let scenario = Scenario::single(Box::new(model), Box::new(mesh));
+    let mut solver = BackwardEulerSolver::new();
+    if let Some(k) = bandwidth {
+        solver = solver
+            .with_jacobian_bandwidth(k)
+            .with_sparse_solver(Box::new(FaerSparseSolver))
+            .with_sparse_threshold(0);
+    }
+    let result = solver
+        .solve(
+            &scenario,
+            &fixed_step(0.05, 0.01, IntegratorKind::BackwardEuler),
+        )
+        .unwrap();
+    result
+        .states
+        .last()
+        .unwrap()
+        .as_vector_field()
+        .unwrap()
+        .clone()
+}
+
+#[cfg(feature = "sparse")]
+#[test]
+fn banded_path_with_bandwidth_d_times_s_plus_one_minus_one_matches_dense_path() {
+    let dense = reaction_diffusion_backward_euler(None);
+    let banded = reaction_diffusion_backward_euler(Some(3));
+    let gap = (&dense - &banded).amax();
+    assert!(gap < 1e-10, "dense vs banded gap = {gap:e}");
+}
+
+#[cfg(feature = "sparse")]
+#[test]
+fn banded_path_with_the_scalar_stencil_width_misses_the_component_coupling() {
+    // k = s = 1 is the ScalarField rule: on 2 interleaved components it
+    // drops entries of the Jacobian, and the result drifts from the dense
+    // path. This is why the bandwidth is counted in flat unknowns.
+    let dense = reaction_diffusion_backward_euler(None);
+    let too_narrow = reaction_diffusion_backward_euler(Some(1));
+    let gap = (&dense - &too_narrow).amax();
+    assert!(gap > 1e-6, "dense vs too-narrow gap = {gap:e}");
 }
 
 // ── Divergence detection ──────────────────────────────────────────────────────

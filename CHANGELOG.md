@@ -44,7 +44,12 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   loops (#134).
 - Time integrators advance `VectorField` states (n nodes × d components)
   as they do `ScalarField` states, instead of failing with `TypeMismatch`:
-  `RK4Solver`, `DoPri45Solver` (error norm over every component).
+  `RK4Solver`, `DoPri45Solver` (error norm over every component),
+  `BackwardEulerSolver` and `CrankNicolsonSolver`, dense and banded paths.
+  The implicit solvers order the unknowns of a `VectorField` by node, so
+  `with_jacobian_bandwidth` takes `d·(s + 1) − 1` for `d` components and a
+  stencil of half-width `s`, and `with_sparse_threshold` counts unknowns
+  (nodes × components).
   `ScalarField` results are bit-identical (#192).
 
 ### Security

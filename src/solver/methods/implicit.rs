@@ -57,6 +57,16 @@
 //! the same solver silently keeps the sparse path single-shot. Tracked as
 //! a follow-up, mirroring the existing BDF2/sparse gap.
 //!
+//! ## State variants
+//!
+//! Newton and both finite-difference Jacobians work on the flat vector of
+//! unknowns given by `StateLayout` (`super::state_layout`): a `ScalarField`
+//! as is, a `VectorField` interleaved by node, so a `VectorField` state is
+//! advanced like a `ScalarField` (#192). The banded path therefore takes a
+//! half-bandwidth counted in flat unknowns, `d·(s + 1) − 1` for `d`
+//! components and a stencil of half-width `s`. For a `ScalarField`,
+//! results are bit-identical to the former code.
+//!
 //! ## Boundary conditions × the perturbed Jacobian
 //!
 //! `finite_difference_jacobian` perturbs each component of the state and
@@ -75,6 +85,7 @@ use nalgebra::{DMatrix, DVector};
 
 use super::evaluate_derivative;
 use super::newton::{self, JacobianStrategy, NewtonConvergence};
+use super::state_layout::StateLayout;
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
@@ -97,6 +108,9 @@ const FD_EPSILON: f64 = 1e-7;
 /// against), forward differences are exact regardless of step size — no
 /// truncation error from the linear approximation itself.
 ///
+/// Rows and columns follow the flat ordering of [`StateLayout`]: for a
+/// `VectorField` state, unknowns are interleaved by node (#192).
+///
 /// See [boundary conditions × the perturbed Jacobian](self#boundary-conditions--the-perturbed-jacobian).
 pub(crate) fn finite_difference_jacobian(
     domain: &Domain,
@@ -105,22 +119,23 @@ pub(crate) fn finite_difference_jacobian(
     t: f64,
     dt: f64,
 ) -> Result<DMatrix<f64>, OxiflowError> {
-    let base_field = state.as_scalar_field()?.clone();
+    let layout = StateLayout::of(state)?;
+    let base_field = layout.flatten(state)?.into_owned();
     let n = base_field.len();
 
     let mut base_state = state.clone();
     let f0 = evaluate_derivative(domain, chain, &mut base_state, t, dt)?;
-    let f0_field = f0.as_scalar_field()?.clone();
+    let f0_field = layout.flatten(&f0)?.into_owned();
 
     let mut jacobian = DMatrix::<f64>::zeros(n, n);
 
     for j in 0..n {
         let mut perturbed_field = base_field.clone();
         perturbed_field[j] += FD_EPSILON;
-        let mut perturbed_state = ContextValue::ScalarField(perturbed_field);
+        let mut perturbed_state = layout.rebuild(perturbed_field)?;
 
         let f_j = evaluate_derivative(domain, chain, &mut perturbed_state, t, dt)?;
-        let f_j_field = f_j.as_scalar_field()?;
+        let f_j_field = layout.flatten(&f_j)?;
 
         for i in 0..n {
             jacobian[(i, j)] = (f_j_field[i] - f0_field[i]) / FD_EPSILON;
@@ -227,8 +242,10 @@ pub(crate) fn theta_method_step_newton(
     // f(u^n, t) -- BCs applied in-place to `state` itself, consistent with
     // the explicit solvers' contract (same as `theta_method_step`).
     let f_n = evaluate_derivative(domain, chain, state, t, dt)?;
-    let u_n_field = state.as_scalar_field()?.clone();
-    let f_n_field = f_n.as_scalar_field()?.clone();
+    // Newton works on the flat vector of unknowns (#192).
+    let layout = StateLayout::of(state)?;
+    let u_n_field = layout.flatten(state)?.into_owned();
+    let f_n_field = layout.flatten(&f_n)?.into_owned();
 
     let u0 = u_n_field.clone();
     let u_star: DVector<f64> = u_n_field + f_n_field * (dt * (1.0 - theta));
@@ -241,12 +258,12 @@ pub(crate) fn theta_method_step_newton(
         1.0,
         coeff,
         move |candidate: &DVector<f64>| {
-            let mut candidate_state = ContextValue::ScalarField(candidate.clone());
+            let mut candidate_state = layout.rebuild(candidate.clone())?;
             let f = evaluate_derivative(domain, chain, &mut candidate_state, t_target, dt)?;
-            Ok(f.as_scalar_field()?.clone())
+            Ok(layout.flatten(&f)?.into_owned())
         },
         move |candidate: &DVector<f64>| {
-            let candidate_state = ContextValue::ScalarField(candidate.clone());
+            let candidate_state = layout.rebuild(candidate.clone())?;
             finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt)
         },
         linear_solver,
@@ -257,7 +274,7 @@ pub(crate) fn theta_method_step_newton(
         },
     )?;
 
-    Ok(ContextValue::ScalarField(u_next))
+    layout.rebuild(u_next)
 }
 
 // ── Sparse / banded path (DD-013 second phase, DD-043) ─────────────────────────
@@ -288,7 +305,9 @@ type BandedJacobianResult = Result<(usize, Vec<SparseEntry>), OxiflowError>;
 
 /// Assembles the nonzero entries of $\partial f/\partial u$ within a band of
 /// half-width `bandwidth` around the diagonal, via Curtis-Powell-Reid (CPR)
-/// graph coloring: for a genuinely banded Jacobian, columns more than
+/// graph coloring, in the flat ordering of [`StateLayout`] (#192): for a
+/// `VectorField` of d components and a stencil of half-width `s`, the band
+/// half-width is `d·(s + 1) − 1`. For a genuinely banded Jacobian, columns more than
 /// `2*bandwidth + 1` apart never share a nonzero row, so all columns of the
 /// same color can be perturbed **simultaneously** in a single
 /// [`evaluate_derivative`] call — `2*bandwidth + 1` evaluations total,
@@ -308,12 +327,13 @@ pub(crate) fn banded_jacobian_entries(
     dt: f64,
     bandwidth: usize,
 ) -> BandedJacobianResult {
-    let base_field = state.as_scalar_field()?.clone();
+    let layout = StateLayout::of(state)?;
+    let base_field = layout.flatten(state)?.into_owned();
     let n = base_field.len();
 
     let mut base_state = state.clone();
     let f0 = evaluate_derivative(domain, chain, &mut base_state, t, dt)?;
-    let f0_field = f0.as_scalar_field()?.clone();
+    let f0_field = layout.flatten(&f0)?.into_owned();
 
     let n_colors = 2 * bandwidth + 1;
     let mut triplets = Vec::new();
@@ -328,10 +348,10 @@ pub(crate) fn banded_jacobian_entries(
         for &j in &columns {
             perturbed_field[j] += FD_EPSILON;
         }
-        let mut perturbed_state = ContextValue::ScalarField(perturbed_field);
+        let mut perturbed_state = layout.rebuild(perturbed_field)?;
 
         let f_c = evaluate_derivative(domain, chain, &mut perturbed_state, t, dt)?;
-        let f_c_field = f_c.as_scalar_field()?;
+        let f_c_field = layout.flatten(&f_c)?;
 
         // Columns of the same color are spaced `n_colors > 2*bandwidth`
         // apart, so their bands ([j-bandwidth, j+bandwidth]) never
@@ -407,13 +427,14 @@ pub(crate) fn theta_method_step_adaptive(
     sparse_threshold: usize,
     jacobian_bandwidth: Option<usize>,
 ) -> Result<ContextValue, OxiflowError> {
-    let n = state.as_scalar_field()?.len();
+    let layout = StateLayout::of(state)?;
+    let n = layout.len();
 
     match jacobian_bandwidth {
         Some(k) if n > sparse_threshold => {
             let f_n = evaluate_derivative(domain, chain, state, t, dt)?;
-            let u_n_field = state.as_scalar_field()?.clone();
-            let f_n_field = f_n.as_scalar_field()?.clone();
+            let u_n_field = layout.flatten(state)?.into_owned();
+            let f_n_field = layout.flatten(&f_n)?.into_owned();
 
             // Jacobian frozen at the (now BC-corrected) u^n, evaluated at
             // t + dt — same convention as theta_method_step.
@@ -449,7 +470,7 @@ pub(crate) fn theta_method_step_adaptive(
             let delta_u = sparse_solver.solve(&system_matrix, &rhs)?;
 
             let u_next: DVector<f64> = u_n_field + delta_u;
-            Ok(ContextValue::ScalarField(u_next))
+            layout.rebuild(u_next)
         }
         _ => theta_method_step(domain, chain, state, t, dt, theta, dense_solver),
     }

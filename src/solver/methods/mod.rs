@@ -72,6 +72,7 @@ pub mod imex;
 pub mod implicit;
 pub mod newton;
 pub mod rk4;
+mod state_layout;
 pub mod step_control;
 
 pub use backward_euler::BackwardEulerSolver;
