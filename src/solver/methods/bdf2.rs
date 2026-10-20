@@ -46,6 +46,14 @@
 //! coefficients used here (3/2, -2, 1/2) would need to become
 //! ratio-dependent for a varying step size between `u^{n-1}` and `u^n`.
 //!
+//! ## State variants
+//!
+//! The update works on the flat vector of unknowns given by `StateLayout`
+//! (`super::state_layout`), as the θ-method does: a `VectorField` state,
+//! interleaved by node, is advanced like a `ScalarField`, and so is the
+//! Backward Euler startup step (#192). For a `ScalarField`, results are
+//! bit-identical to the former code.
+//!
 //! ## Stability
 //!
 //! A-stable and, unlike Crank-Nicolson, L-stable — strong damping on
@@ -62,6 +70,7 @@ use crate::solver::methods::implicit::{
     finite_difference_jacobian, stiff_jacobian_convergence, theta_method_step,
 };
 use crate::solver::methods::newton::{self, JacobianStrategy, NewtonConvergence};
+use crate::solver::methods::state_layout::StateLayout;
 use crate::solver::methods::{evaluate_derivative, SteppableSolver};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
@@ -228,16 +237,19 @@ pub(crate) fn bdf2_step_newton(
     // needed: unlike theta-method's u_star, BDF2's u_star (below) carries
     // no f(u^n) term, only u^n and u^{n-1}.
     let _f_n = evaluate_derivative(domain, chain, state, t, dt)?;
-    let u_n_field = state.as_scalar_field()?.clone();
-    let u_prev_field = u_prev.as_scalar_field()?.clone();
-
-    let n = u_n_field.len();
-    if u_prev_field.len() != n {
-        return Err(OxiflowError::InvalidDomain(format!(
-            "history state length {} != current state length {n}",
-            u_prev_field.len()
-        )));
-    }
+    // Newton works on the flat vector of unknowns (#192); `u^{n-1}` must
+    // have the layout of `u^n`.
+    let layout = StateLayout::of(state)?;
+    let u_n_field = layout.flatten(state)?.into_owned();
+    let u_prev_field = layout
+        .flatten(u_prev)
+        .map_err(|e| match e {
+            OxiflowError::InvalidDomain(message) => {
+                OxiflowError::InvalidDomain(format!("history state: {message}"))
+            }
+            other => other,
+        })?
+        .into_owned();
 
     let u0 = u_n_field.clone();
     let u_star: DVector<f64> = (u_n_field * 4.0 - u_prev_field) / 3.0;
@@ -251,12 +263,12 @@ pub(crate) fn bdf2_step_newton(
         alpha,
         coeff,
         move |candidate: &DVector<f64>| {
-            let mut candidate_state = ContextValue::ScalarField(candidate.clone());
+            let mut candidate_state = layout.rebuild(candidate.clone())?;
             let f = evaluate_derivative(domain, chain, &mut candidate_state, t_target, dt)?;
-            Ok(f.as_scalar_field()?.clone())
+            Ok(layout.flatten(&f)?.into_owned())
         },
         move |candidate: &DVector<f64>| {
-            let candidate_state = ContextValue::ScalarField(candidate.clone());
+            let candidate_state = layout.rebuild(candidate.clone())?;
             finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt)
         },
         linear_solver,
@@ -267,7 +279,7 @@ pub(crate) fn bdf2_step_newton(
         },
     )?;
 
-    Ok(ContextValue::ScalarField(u_next))
+    layout.rebuild(u_next)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

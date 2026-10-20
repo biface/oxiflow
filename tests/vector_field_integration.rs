@@ -19,8 +19,8 @@ use oxiflow::{
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::{
-            BackwardEulerSolver, CrankNicolsonSolver, DoPri45Solver, ForwardEulerSolver, RK4Solver,
-            SteppableSolver,
+            BDF2Solver, BackwardEulerSolver, CrankNicolsonSolver, DoPri45Solver,
+            ForwardEulerSolver, RK4Solver, SteppableSolver,
         },
         scenario::{Domain, Scenario},
         snapshot::SimulationSnapshot,
@@ -259,6 +259,35 @@ fn crank_nicolson_matches_its_discrete_solution_on_a_coupled_system() {
     let step = (Matrix2::identity() - half).try_inverse().unwrap() * (Matrix2::identity() + half);
     let propagator = power(step, n_steps);
     let error = max_error(&result, |x| propagator * LinearSystem2::initial_row(x));
+    assert!(error < IMPLICIT_TOLERANCE, "max error = {error:e}");
+}
+
+// ── BDF2 ──────────────────────────────────────────────────────────────────────
+
+#[test]
+fn bdf2_matches_its_discrete_solution_on_a_coupled_system() {
+    // Startup: one Backward Euler step, u₁ = (I − dt A)⁻¹ u₀; then
+    // u_{k+1} = (3/2 I − dt A)⁻¹ (2 u_k − 1/2 u_{k−1}).
+    let (dt, n_steps) = (0.1, 10);
+    let a = coupled_matrix();
+    let result = BDF2Solver::new()
+        .solve(
+            &scenario(a),
+            &fixed_step(dt * n_steps as f64, dt, IntegratorKind::BDF2),
+        )
+        .unwrap();
+    let startup = (Matrix2::identity() - a * dt).try_inverse().unwrap();
+    let implicit = (Matrix2::identity() * 1.5 - a * dt).try_inverse().unwrap();
+    let error = max_error(&result, |x| {
+        let mut previous = LinearSystem2::initial_row(x);
+        let mut current = startup * previous;
+        for _ in 1..n_steps {
+            let next = implicit * (current * 2.0 - previous * 0.5);
+            previous = current;
+            current = next;
+        }
+        current
+    });
     assert!(error < IMPLICIT_TOLERANCE, "max error = {error:e}");
 }
 
