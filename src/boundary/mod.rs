@@ -193,6 +193,17 @@ pub enum BoundaryLocation {
 /// - Variables declared in `required_variables()` are guaranteed to be present
 ///   in `ctx` when `apply` is called.
 ///
+/// # State variants
+///
+/// `apply` receives a single field, so it applies to `ScalarField` states
+/// only: a domain whose state is a `VectorField` and that has boundary
+/// conditions attached fails with `OxiflowError::TypeMismatch` at the first
+/// derivative evaluation. The boundaries of a `VectorField` state are
+/// closed at the operator level instead, through
+/// [`Self::ghost_value`] (as in the `langmuir_multi` and `lahar_multifield`
+/// examples). Conditions applied component by component belong with the
+/// mixed finite-element spaces (#150).
+///
 /// # Classification
 ///
 /// Every implementation must declare its mathematical nature via `boundary_type()`.

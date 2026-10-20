@@ -108,6 +108,8 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// across stages.
 ///
 /// No-op if `domain` has no boundary conditions attached (J1-style scenarios).
+/// Otherwise `state` must be a `ScalarField` — see the *State variants*
+/// section of [`crate::boundary::BoundaryCondition`].
 pub(crate) fn apply_boundary_conditions(
     domain: &Domain,
     state: &mut ContextValue,

@@ -46,12 +46,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   as they do `ScalarField` states, instead of failing with `TypeMismatch`:
   `RK4Solver`, `DoPri45Solver` (error norm over every component),
   `BackwardEulerSolver` and `CrankNicolsonSolver`, dense and banded paths,
-  `BDF2Solver`.
+  `BDF2Solver`, and `OperatorSplittingSolver` through its sub-solvers.
   The implicit solvers order the unknowns of a `VectorField` by node, so
   `with_jacobian_bandwidth` takes `d·(s + 1) − 1` for `d` components and a
   stencil of half-width `s`, and `with_sparse_threshold` counts unknowns
-  (nodes × components).
-  `ScalarField` results are bit-identical (#192).
+  (nodes × components). `ScalarField` results are bit-identical. Boundary
+  conditions applied through `BoundaryCondition::apply` still take a single
+  field: a `VectorField` state with conditions attached is refused with
+  `TypeMismatch`, as documented; its boundaries go through `ghost_value()`
+  (#192).
 
 ### Security
 

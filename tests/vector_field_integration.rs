@@ -1,15 +1,19 @@
 //! # Integration test: time integration of multi-component states (#192)
 //!
-//! Every integrator advances a `VectorField` state (n nodes × d components)
-//! the same way it advances a `ScalarField`, and divergence detection sees a
-//! non-finite value in any component. The reference problem is a pointwise
-//! linear system `du/dt = A u` at every node, whose exact discrete and
-//! continuous solutions are known.
+//! Every integrator (Forward Euler, RK4, DoPri45, Backward Euler,
+//! Crank–Nicolson, BDF2, Strang splitting) advances a `VectorField` state
+//! (n nodes × d components) the same way it advances a `ScalarField`, and
+//! divergence detection sees a non-finite value in any component. The
+//! reference problem is a pointwise linear system `du/dt = A u` at every
+//! node, whose exact discrete and continuous solutions are known; a
+//! reaction–diffusion system checks the banded Jacobian (feature `sparse`).
+//! Boundary conditions applied through `apply()` stay `ScalarField`-only.
 
 use std::sync::Mutex;
 
-use nalgebra::{DMatrix, Matrix2, Vector2};
+use nalgebra::{DMatrix, DVector, Matrix2, Vector2};
 use oxiflow::{
+    boundary::{BoundaryCondition, BoundaryType},
     context::{
         compute::ComputeContext, error::OxiflowError, value::ContextValue,
         variable::ContextVariable, ContextCalculator,
@@ -20,7 +24,7 @@ use oxiflow::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::{
             BDF2Solver, BackwardEulerSolver, CrankNicolsonSolver, DoPri45Solver,
-            ForwardEulerSolver, RK4Solver, SteppableSolver,
+            ForwardEulerSolver, OperatorSplittingSolver, RK4Solver, SteppableSolver,
         },
         scenario::{Domain, Scenario},
         snapshot::SimulationSnapshot,
@@ -289,6 +293,88 @@ fn bdf2_matches_its_discrete_solution_on_a_coupled_system() {
         current
     });
     assert!(error < IMPLICIT_TOLERANCE, "max error = {error:e}");
+}
+
+// ── Operator splitting (Strang) ───────────────────────────────────────────────
+
+/// `A = A₁ + A₂` with non-commuting parts, so the splitting is not exact.
+fn split_matrices() -> (Matrix2<f64>, Matrix2<f64>) {
+    (
+        Matrix2::new(-1.0, 1.0, 0.0, -0.5),
+        Matrix2::new(-1.0, 0.0, 1.0, -1.5),
+    )
+}
+
+fn split_domain(id: &str, matrix: Matrix2<f64>) -> Domain {
+    Domain::new(id, Box::new(LinearSystem2::new(matrix)), Box::new(mesh()))
+}
+
+#[test]
+fn strang_splitting_matches_its_discrete_solution_on_a_coupled_system() {
+    // Explicit half-steps on A₁ around an implicit full step on A₂:
+    // one outer step is (I + dt/2 A₁) (I − dt A₂)⁻¹ (I + dt/2 A₁).
+    let (dt, n_steps) = (0.05, 20);
+    let (a1, a2) = split_matrices();
+    let solver = OperatorSplittingSolver::strang(
+        split_domain("explicit", a1),
+        Box::new(ForwardEulerSolver),
+        split_domain("implicit", a2),
+        Box::new(BackwardEulerSolver::new()),
+    )
+    .unwrap();
+    let result = solver
+        .solve(
+            &scenario(a1 + a2),
+            &fixed_step(dt * n_steps as f64, dt, IntegratorKind::Imex),
+        )
+        .unwrap();
+    let half = Matrix2::identity() + a1 * (dt / 2.0);
+    let full = (Matrix2::identity() - a2 * dt).try_inverse().unwrap();
+    let propagator = power(half * full * half, n_steps);
+    let error = max_error(&result, |x| propagator * LinearSystem2::initial_row(x));
+    assert!(error < IMPLICIT_TOLERANCE, "max error = {error:e}");
+}
+
+// ── Boundary conditions ───────────────────────────────────────────────────────
+
+/// Neumann condition that leaves the state as is.
+#[derive(Debug)]
+struct NoOpCondition;
+
+impl RequiresContext for NoOpCondition {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![]
+    }
+}
+
+impl BoundaryCondition for NoOpCondition {
+    fn boundary_type(&self) -> BoundaryType {
+        BoundaryType::Neumann
+    }
+    fn apply(
+        &self,
+        _state: &mut DVector<f64>,
+        _ctx: &ComputeContext,
+        _mesh: &dyn Mesh,
+    ) -> Result<(), OxiflowError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn boundary_condition_apply_refuses_a_vector_field_state() {
+    // `apply()` takes a single field: a VectorField state with conditions
+    // attached is refused, never silently half-applied. Its boundaries go
+    // through `ghost_value()` at the operator level instead.
+    let model = LinearSystem2::new(coupled_matrix());
+    let mut state = model.initial_state(&mesh());
+    let domain = Domain::new("with_bc", Box::new(model), Box::new(mesh()))
+        .with_boundary_conditions(vec![Box::new(NoOpCondition)]);
+    let result = ForwardEulerSolver.step(&domain, &[], &mut state, &[], 0.0, 0.1);
+    assert!(
+        matches!(result, Err(OxiflowError::TypeMismatch { .. })),
+        "expected TypeMismatch, got {result:?}"
+    );
 }
 
 // ── Banded Jacobian on a VectorField (feature `sparse`) ──────────────────────
