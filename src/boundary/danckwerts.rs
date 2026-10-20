@@ -34,6 +34,16 @@
 //! Applied as a first-order finite-difference approximation: the last node value
 //! is set equal to its immediate predecessor, enforcing zero gradient.
 //!
+//! ## Supported meshes
+//!
+//! Both conditions locate the boundary by DOF index: the inlet is node `0`,
+//! the outlet node `n − 1`, and the outlet copies node `n − 2`. That holds on
+//! an ordered 1D grid only — on an unstructured mesh (#151) node `0` is an
+//! arbitrary node. Both `apply()` methods therefore return
+//! `PreconditionFailed` when `mesh.spatial_dimension() != 1` (#187), as
+//! `TrapezoidalIntegral` does. On a 1D mesh, nodes are assumed ordered from
+//! inlet to outlet.
+//!
 //! ## Souplesse
 //!
 //! The physical parameters $D$ (dispersion) and $v$ (velocity) are struct fields —
@@ -59,6 +69,20 @@ use crate::context::variable::ContextVariable;
 use crate::mesh::Mesh;
 use crate::model::traits::RequiresContext;
 use nalgebra::DVector;
+
+/// Refuses a mesh that is not 1D: both conditions locate the boundary by
+/// DOF index, which only an ordered 1D grid makes meaningful.
+fn require_1d(mesh: &dyn Mesh, context: &'static str) -> Result<(), OxiflowError> {
+    let dimension = mesh.spatial_dimension();
+    if dimension == 1 {
+        Ok(())
+    } else {
+        Err(OxiflowError::PreconditionFailed {
+            context,
+            message: format!("only 1D meshes are supported, got spatial_dimension = {dimension}"),
+        })
+    }
+}
 
 // ── DanckwertsInlet ───────────────────────────────────────────────────────────
 
@@ -88,6 +112,11 @@ use nalgebra::DVector;
 /// - `feed_variable` — the feed concentration $u_{\text{feed}}(t)$.
 ///
 /// The solver validates that both are covered before the first time step.
+///
+/// # Supported meshes
+///
+/// 1D meshes whose nodes are ordered from inlet (node `0`) to outlet; see the
+/// module documentation. `apply()` refuses any other spatial dimension.
 ///
 /// # Serialisation
 ///
@@ -170,14 +199,15 @@ impl BoundaryCondition for DanckwertsInlet {
     /// - [`OxiflowError::MissingCalculator`] if the gradient field or the feed
     ///   variable is absent from the context.
     /// - [`OxiflowError::TypeMismatch`] if the feed variable is not a `Scalar`.
-    /// - [`OxiflowError::PreconditionFailed`] if the mesh has no nodes or if
-    ///   `velocity` is zero (division by zero in $D/v$).
+    /// - [`OxiflowError::PreconditionFailed`] if the mesh is not 1D, has no
+    ///   nodes, or if `velocity` is zero (division by zero in $D/v$).
     fn apply(
         &self,
         state: &mut DVector<f64>,
         ctx: &ComputeContext,
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError> {
+        require_1d(mesh, "DanckwertsInlet")?;
         if mesh.n_dof() == 0 {
             return Err(OxiflowError::PreconditionFailed {
                 context: "DanckwertsInlet",
@@ -214,6 +244,12 @@ impl BoundaryCondition for DanckwertsInlet {
 ///
 /// No context variables are required — the condition depends only on the
 /// current field state and the mesh geometry.
+///
+/// # Supported meshes
+///
+/// 1D meshes whose last node (`n − 1`) is the outlet and whose node `n − 2`
+/// is its neighbour; see the module documentation. `apply()` refuses any
+/// other spatial dimension.
 ///
 /// # Serialisation
 ///
@@ -272,13 +308,15 @@ impl BoundaryCondition for DanckwertsOutlet {
     ///
     /// # Errors
     ///
-    /// - [`OxiflowError::PreconditionFailed`] if the mesh has fewer than two nodes.
+    /// - [`OxiflowError::PreconditionFailed`] if the mesh is not 1D or has
+    ///   fewer than two nodes.
     fn apply(
         &self,
         state: &mut DVector<f64>,
         _ctx: &ComputeContext,
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError> {
+        require_1d(mesh, "DanckwertsOutlet")?;
         let n = mesh.n_dof();
         if n < 2 {
             return Err(OxiflowError::PreconditionFailed {

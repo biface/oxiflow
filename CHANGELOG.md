@@ -29,6 +29,10 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   gradient, a `dimension` beyond the mesh dimension. The check runs once, at
   construction; `new()` keeps its signature and results on `UniformGrid1D`
   are unchanged (#186).
+- `DanckwertsInlet::apply` and `DanckwertsOutlet::apply` return
+  `OxiflowError::PreconditionFailed` on a mesh that is not 1D: both locate
+  the boundary by node index (`0` and `n − 1`), which only an ordered 1D grid
+  makes meaningful (#187).
 
 ### Security
 

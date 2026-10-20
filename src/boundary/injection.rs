@@ -211,6 +211,22 @@ impl BoundaryCondition for InjectionInlet {
 /// differently from chrom-rs (a boundary-flux impulse there).
 ///
 /// Returns a zero vector unchanged if `n_dof == 0`.
+///
+/// # Assumptions
+///
+/// Nothing here is checked, since the function takes a DOF count, not a mesh:
+///
+/// - **1D ordered grid, node `0` = inlet.** On any other mesh (an
+///   unstructured mesh, #151) node `0` is an arbitrary node. Use it with the
+///   same meshes as [`DanckwertsInlet`](crate::boundary::danckwerts::DanckwertsInlet).
+/// - **`amount` is a nodal value, not a mass.** The integral of the result
+///   is `amount` times the control volume of node `0`, which depends on the
+///   mesh.
+///
+/// The signature is kept as is for 0.10.0: a form taking a mesh would also
+/// need an explicit location and a mass-to-nodal-value conversion once
+/// unstructured meshes exist, so it is left to that cycle (#151) rather than
+/// broken twice (#187).
 pub fn dirac_initial_state(n_dof: usize, amount: f64) -> DVector<f64> {
     let mut v = DVector::zeros(n_dof);
     if n_dof > 0 {

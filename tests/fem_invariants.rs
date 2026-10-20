@@ -16,7 +16,7 @@
 //!
 //! Components that accept any `Mesh` but are only correct on a uniform 1D grid
 //! (findings of the #172 audit) are guarded in the tests of the component
-//! itself, starting with `tests/fd_calculators.rs`.
+//! itself: `tests/fd_calculators.rs` and `tests/danckwerts.rs`.
 
 mod common;
 
