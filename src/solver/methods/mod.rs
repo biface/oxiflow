@@ -155,20 +155,27 @@ pub(crate) fn evaluate_derivative(
     domain.model.compute_physics(state, &ctx)
 }
 
-/// Checks that all nodal values in `state` are finite.
+/// Checks that every value in `state` is finite.
 ///
-/// Shared between integrators — returns `OxiflowError::SolverDivergence` on
-/// the first non-finite value found.
+/// Shared between integrators — returns `OxiflowError::SolverDivergence`
+/// when a NaN or an infinity is found, whatever the numeric variant of the
+/// state: a `VectorField` is checked component by component, like a
+/// `ScalarField` (#192). A `Boolean` state has nothing to check.
 pub(crate) fn check_finite(state: &ContextValue, t: f64) -> Result<(), OxiflowError> {
-    if let Ok(field) = state.as_scalar_field() {
-        if field.iter().any(|v| !v.is_finite()) {
-            return Err(OxiflowError::SolverDivergence {
-                time: t,
-                reason: "non-finite value detected in state vector".into(),
-            });
-        }
+    let finite = match state {
+        ContextValue::Scalar(x) => x.is_finite(),
+        ContextValue::Boolean(_) => true,
+        ContextValue::Vector(v) | ContextValue::ScalarField(v) => v.iter().all(|x| x.is_finite()),
+        ContextValue::Matrix(m) | ContextValue::VectorField(m) => m.iter().all(|x| x.is_finite()),
+    };
+    if finite {
+        Ok(())
+    } else {
+        Err(OxiflowError::SolverDivergence {
+            time: t,
+            reason: "non-finite value detected in state vector".into(),
+        })
     }
-    Ok(())
 }
 
 // ── SteppableSolver ───────────────────────────────────────────────────────────
@@ -338,5 +345,68 @@ pub trait SteppableSolver: Solver {
             n_steps,
             metadata: HashMap::new(),
         })
+    }
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use nalgebra::{DMatrix, DVector};
+
+    use super::*;
+
+    fn diverges(state: ContextValue) -> bool {
+        matches!(
+            check_finite(&state, 1.5),
+            Err(OxiflowError::SolverDivergence { time, .. }) if time == 1.5
+        )
+    }
+
+    #[test]
+    fn check_finite_accepts_finite_states_of_every_variant() {
+        for state in [
+            ContextValue::Scalar(1.0),
+            ContextValue::Boolean(false),
+            ContextValue::Vector(DVector::from_element(3, 1.0)),
+            ContextValue::Matrix(DMatrix::from_element(2, 2, 1.0)),
+            ContextValue::ScalarField(DVector::from_element(3, 1.0)),
+            ContextValue::VectorField(DMatrix::from_element(3, 2, 1.0)),
+        ] {
+            assert!(check_finite(&state, 0.0).is_ok(), "{state:?}");
+        }
+    }
+
+    #[test]
+    fn check_finite_detects_nan_and_infinity_in_scalar_field() {
+        assert!(diverges(ContextValue::ScalarField(DVector::from_vec(
+            vec![0.0, f64::NAN]
+        ))));
+        assert!(diverges(ContextValue::ScalarField(DVector::from_vec(
+            vec![f64::NEG_INFINITY, 0.0]
+        ))));
+    }
+
+    #[test]
+    fn check_finite_detects_non_finite_value_in_any_vector_field_component() {
+        // Before #192, a VectorField state was never inspected.
+        for (row, col) in [(0, 0), (2, 1)] {
+            let mut m = DMatrix::from_element(3, 2, 1.0);
+            m[(row, col)] = f64::INFINITY;
+            assert!(diverges(ContextValue::VectorField(m)), "({row}, {col})");
+        }
+    }
+
+    #[test]
+    fn check_finite_detects_non_finite_scalar_vector_and_matrix() {
+        assert!(diverges(ContextValue::Scalar(f64::NAN)));
+        assert!(diverges(ContextValue::Vector(DVector::from_vec(vec![
+            f64::INFINITY
+        ]))));
+        assert!(diverges(ContextValue::Matrix(DMatrix::from_element(
+            1,
+            1,
+            f64::NAN
+        ))));
     }
 }

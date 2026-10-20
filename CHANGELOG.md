@@ -33,6 +33,11 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `OxiflowError::PreconditionFailed` on a mesh that is not 1D: both locate
   the boundary by node index (`0` and `n − 1`), which only an ordered 1D grid
   makes meaningful (#187).
+- Divergence detection covers every numeric state variant. A NaN or an
+  infinity in a `VectorField` state used to go unnoticed: the run ended with
+  `Ok` and non-finite states, and `Solver::on_divergence` was never called.
+  It now raises `OxiflowError::SolverDivergence` with a snapshot, as for a
+  `ScalarField` (#192).
 
 ### Security
 
