@@ -46,7 +46,7 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
-use crate::solver::methods::{check_finite, SteppableSolver};
+use crate::solver::methods::{check_finite, divergence_snapshot, SteppableSolver};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -252,7 +252,10 @@ impl Solver for OperatorSplittingSolver {
     /// a `SteppableSolver` (same posture as DD-036 for DoPri45 — avoiding
     /// reopening multi-domain orchestration for a need #45 doesn't raise).
     /// The loop below deliberately mirrors `solve_fixed_step`'s shape to
-    /// stay consistent with the other fixed-step solvers.
+    /// stay consistent with the other fixed-step solvers, divergence
+    /// included: a non-finite state hands a `SimulationSnapshot` to
+    /// [`Solver::on_divergence`] before `SolverDivergence` is returned
+    /// (DD-025, #134).
     fn solve(
         &self,
         scenario: &Scenario,
@@ -306,7 +309,18 @@ impl Solver for OperatorSplittingSolver {
 
             u = self.apply_step(&chain, &mut u, t, dt)?;
 
-            check_finite(&u, t_next)?;
+            if let Err(e) = check_finite(&u, t_next) {
+                self.on_divergence(&divergence_snapshot(
+                    config,
+                    &u,
+                    t_next,
+                    step + 1,
+                    e.to_string(),
+                    &states,
+                    &times,
+                ));
+                return Err(e);
+            }
 
             if (step + 1) % save_every == 0 {
                 states.push(u.clone());
@@ -457,5 +471,29 @@ mod tests {
         let json = serde_json::to_string(&SplittingScheme::Strang).unwrap();
         let restored: SplittingScheme = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, SplittingScheme::Strang);
+    }
+
+    #[test]
+    fn solve_reports_divergence_of_the_split_state() {
+        // Forward Euler half-steps on a rate of 1e200 multiply the state by
+        // 1 − 0.5e200 twice per outer step (the full step on rate 0.5 only
+        // halves it): the state overflows to infinity on the first step.
+        let solver = OperatorSplittingSolver::strang(
+            make_domain(1e200),
+            Box::new(ForwardEulerSolver),
+            make_domain(0.5),
+            Box::new(ForwardEulerSolver),
+        )
+        .unwrap();
+        let scenario = Scenario::single(Box::new(Decay { rate: 1.0 }), Box::new(make_mesh()));
+        let config = SolverConfiguration::new(
+            TimeConfiguration::new(10.0, StepControl::Fixed { dt: 1.0 }),
+            IntegratorKind::Euler,
+        );
+        let result = solver.solve(&scenario, &config);
+        assert!(
+            matches!(result, Err(OxiflowError::SolverDivergence { .. })),
+            "expected SolverDivergence, got {result:?}"
+        );
     }
 }

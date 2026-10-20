@@ -64,7 +64,7 @@ use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
 use crate::solver::methods::step_control::StepSizeController;
-use crate::solver::methods::{check_finite, evaluate_derivative};
+use crate::solver::methods::{check_finite, divergence_snapshot, evaluate_derivative};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -214,20 +214,15 @@ impl Solver for DoPri45Solver {
                     accepted_since_save += 1;
 
                     if let Err(e) = check_finite(&u, t) {
-                        self.on_divergence(&crate::solver::snapshot::SimulationSnapshot {
-                            time_config: config.time.clone(),
-                            integrator: config.integrator.clone(),
-                            state: u.clone(),
+                        self.on_divergence(&divergence_snapshot(
+                            config,
+                            &u,
                             t,
-                            n_steps: accepted_steps,
-                            error: Some(e.to_string()),
-                            partial: Some(SimulationResult {
-                                states: states.clone(),
-                                times: times.clone(),
-                                n_steps: accepted_steps,
-                                metadata: HashMap::new(),
-                            }),
-                        });
+                            accepted_steps,
+                            e.to_string(),
+                            &states,
+                            &times,
+                        ));
                         return Err(e);
                     }
 
@@ -253,20 +248,15 @@ impl Solver for DoPri45Solver {
                          satisfy rtol/atol even at dt_min={}",
                         controller.dt_min()
                     );
-                    self.on_divergence(&crate::solver::snapshot::SimulationSnapshot {
-                        time_config: config.time.clone(),
-                        integrator: config.integrator.clone(),
-                        state: u.clone(),
+                    self.on_divergence(&divergence_snapshot(
+                        config,
+                        &u,
                         t,
-                        n_steps: accepted_steps,
-                        error: Some(reason.clone()),
-                        partial: Some(SimulationResult {
-                            states: states.clone(),
-                            times: times.clone(),
-                            n_steps: accepted_steps,
-                            metadata: HashMap::new(),
-                        }),
-                    });
+                        accepted_steps,
+                        reason.clone(),
+                        &states,
+                        &times,
+                    ));
                     return Err(OxiflowError::SolverDivergence { time: t, reason });
                 }
 

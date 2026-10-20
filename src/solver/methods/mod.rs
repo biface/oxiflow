@@ -93,6 +93,7 @@ use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
 use crate::solver::scenario::{Domain, Scenario};
+use crate::solver::snapshot::SimulationSnapshot;
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
 /// Applies every boundary condition attached to `domain` to `state`, in
@@ -175,6 +176,38 @@ pub(crate) fn check_finite(state: &ContextValue, t: f64) -> Result<(), OxiflowEr
             time: t,
             reason: "non-finite value detected in state vector".into(),
         })
+    }
+}
+
+/// Snapshot handed to [`Solver::on_divergence`] when a run stops on
+/// divergence after `n_steps` steps: the offending `state` at time `t`, the
+/// `error` that stopped the run, and the states saved so far as a partial
+/// result.
+///
+/// Shared by every solver loop (fixed-step, DoPri45, operator splitting) so
+/// that the snapshot contract stays the same everywhere (DD-025, #134).
+pub(crate) fn divergence_snapshot(
+    config: &SolverConfiguration,
+    state: &ContextValue,
+    t: f64,
+    n_steps: usize,
+    error: String,
+    states: &[ContextValue],
+    times: &[f64],
+) -> SimulationSnapshot {
+    SimulationSnapshot {
+        time_config: config.time.clone(),
+        integrator: config.integrator.clone(),
+        state: state.clone(),
+        t,
+        n_steps,
+        error: Some(error),
+        partial: Some(SimulationResult {
+            states: states.to_vec(),
+            times: times.to_vec(),
+            n_steps,
+            metadata: HashMap::new(),
+        }),
     }
 }
 
@@ -316,20 +349,15 @@ pub trait SteppableSolver: Solver {
             }
 
             if let Err(e) = check_finite(&u, t_next) {
-                self.on_divergence(&crate::solver::snapshot::SimulationSnapshot {
-                    time_config: config.time.clone(),
-                    integrator: config.integrator.clone(),
-                    state: u.clone(),
-                    t: t_next,
-                    n_steps: step + 1,
-                    error: Some(e.to_string()),
-                    partial: Some(SimulationResult {
-                        states: states.clone(),
-                        times: times.clone(),
-                        n_steps: step + 1,
-                        metadata: HashMap::new(),
-                    }),
-                });
+                self.on_divergence(&divergence_snapshot(
+                    config,
+                    &u,
+                    t_next,
+                    step + 1,
+                    e.to_string(),
+                    &states,
+                    &times,
+                ));
                 return Err(e);
             }
 
@@ -408,5 +436,30 @@ mod tests {
             1,
             f64::NAN
         ))));
+    }
+
+    #[test]
+    fn divergence_snapshot_carries_state_error_and_partial_result() {
+        use crate::solver::config::{IntegratorKind, StepControl, TimeConfiguration};
+
+        let config = SolverConfiguration::new(
+            TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }),
+            IntegratorKind::Euler,
+        );
+        let state = ContextValue::VectorField(DMatrix::from_element(2, 2, f64::NAN));
+        let saved = vec![ContextValue::VectorField(DMatrix::from_element(2, 2, 1.0))];
+        let snapshot =
+            divergence_snapshot(&config, &state, 0.3, 3, "diverged".into(), &saved, &[0.0]);
+
+        assert_eq!(snapshot.t, 0.3);
+        assert_eq!(snapshot.n_steps, 3);
+        assert_eq!(snapshot.error.as_deref(), Some("diverged"));
+        assert_eq!(snapshot.integrator, IntegratorKind::Euler);
+        assert_eq!(snapshot.time_config.t_end, 1.0);
+        assert!(snapshot.state.as_vector_field().unwrap()[(0, 0)].is_nan());
+        let partial = snapshot.partial.unwrap();
+        assert_eq!(partial.states, saved);
+        assert_eq!(partial.times, vec![0.0]);
+        assert_eq!(partial.n_steps, 3);
     }
 }

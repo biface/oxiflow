@@ -38,6 +38,10 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Ok` and non-finite states, and `Solver::on_divergence` was never called.
   It now raises `OxiflowError::SolverDivergence` with a snapshot, as for a
   `ScalarField` (#192).
+- `OperatorSplittingSolver::solve` hands a `SimulationSnapshot` to
+  `Solver::on_divergence` before returning `SolverDivergence`, like every
+  other solver. The snapshot is built by one shared helper in all solver
+  loops (#134).
 
 ### Security
 
