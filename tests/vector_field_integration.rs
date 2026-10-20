@@ -18,7 +18,7 @@ use oxiflow::{
     model::traits::{PhysicalModel, RequiresContext},
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
-        methods::{ForwardEulerSolver, RK4Solver, SteppableSolver},
+        methods::{DoPri45Solver, ForwardEulerSolver, RK4Solver, SteppableSolver},
         scenario::{Domain, Scenario},
         snapshot::SimulationSnapshot,
         SimulationResult, Solver, SolverConfiguration,
@@ -187,6 +187,34 @@ fn rk4_converges_to_the_exact_solution_at_fourth_order() {
     let (coarse, fine) = (error_at(0.1), error_at(0.05));
     let order = (coarse / fine).log2();
     assert!((3.8..4.2).contains(&order), "observed order = {order:.3}");
+}
+
+// ── Dormand–Prince 4(5) ───────────────────────────────────────────────────────
+
+#[test]
+fn dopri45_follows_the_exact_solution_within_its_tolerance() {
+    let a = coupled_matrix();
+    let t_end = 2.0;
+    let config = SolverConfiguration::new(
+        TimeConfiguration::new(
+            t_end,
+            StepControl::Adaptive {
+                dt_init: 0.1,
+                dt_min: 1e-8,
+                dt_max: 0.5,
+                rtol: 1e-8,
+                atol: 1e-10,
+            },
+        ),
+        IntegratorKind::DoPri45,
+    );
+    let result = DoPri45Solver.solve(&scenario(a), &config).unwrap();
+    assert!((result.times.last().unwrap() - t_end).abs() < 1e-12);
+    assert!(result.metadata["solver.accepted_steps"] > 1.0);
+    let error = max_error(&result, |x| {
+        coupled_exact_propagator(t_end) * LinearSystem2::initial_row(x)
+    });
+    assert!(error < 1e-7, "max error = {error:e}");
 }
 
 // ── Divergence detection ──────────────────────────────────────────────────────

@@ -353,7 +353,7 @@ impl ContextValue {
     /// stages, θ-method and BDF2 predictors), kept in one place instead of
     /// repeated per method (#192).
     ///
-    /// Terms are accumulated in order, each as `acc ← cᵢ·termᵢ + acc`, so
+    /// Terms are accumulated in order, each as `acc ← acc + cᵢ·termᵢ`, so
     /// `u.linear_combination(&[(dt, du)])` is bit-identical to `u + du * dt`.
     /// An empty `terms` returns a copy of `self`.
     ///
@@ -371,13 +371,60 @@ impl ContextValue {
         terms: &[(f64, &ContextValue)],
     ) -> Result<ContextValue, OxiflowError> {
         match self {
-            Self::ScalarField(u) => {
-                let mut acc = u.clone();
-                for (index, &(coefficient, term)) in terms.iter().enumerate() {
-                    let v = match term {
-                        Self::ScalarField(v) => v,
-                        other => return Err(Self::term_mismatch(self, other)),
-                    };
+            Self::ScalarField(_) | Self::VectorField(_) => self.clone().accumulate(terms, 0),
+            other => Err(OxiflowError::TypeMismatch {
+                expected: "ScalarField or VectorField",
+                actual: other.variant_name(),
+            }),
+        }
+    }
+
+    /// Computes `Σ cᵢ · termᵢ` for `ScalarField` and `VectorField` terms,
+    /// without a base state: the error estimate of an embedded Runge–Kutta
+    /// pair is the typical use (#192).
+    ///
+    /// The first term is scaled, then the others are accumulated in order
+    /// as in [`Self::linear_combination`], so the result is bit-identical
+    /// to `k₁ * c₁ + k₂ * c₂ + …` written with `DVector` arithmetic.
+    ///
+    /// # Errors
+    ///
+    /// - `OxiflowError::PreconditionFailed` if `terms` is empty.
+    /// - `OxiflowError::TypeMismatch` / `InvalidDomain` as for
+    ///   [`Self::linear_combination`], against the first term.
+    pub(crate) fn weighted_sum(
+        terms: &[(f64, &ContextValue)],
+    ) -> Result<ContextValue, OxiflowError> {
+        let Some((&(coefficient, first), rest)) = terms.split_first() else {
+            return Err(OxiflowError::PreconditionFailed {
+                context: "ContextValue::weighted_sum",
+                message: "at least one term is required".to_string(),
+            });
+        };
+        let scaled = match first {
+            Self::ScalarField(v) => Self::ScalarField(v * coefficient),
+            Self::VectorField(m) => Self::VectorField(m * coefficient),
+            other => {
+                return Err(OxiflowError::TypeMismatch {
+                    expected: "ScalarField or VectorField",
+                    actual: other.variant_name(),
+                })
+            }
+        };
+        scaled.accumulate(rest, 1)
+    }
+
+    /// Adds `Σ cᵢ · termᵢ` to `self` in place, in order. `first_index` is
+    /// the position of `terms[0]` in the caller's list, for error messages.
+    fn accumulate(
+        mut self,
+        terms: &[(f64, &ContextValue)],
+        first_index: usize,
+    ) -> Result<ContextValue, OxiflowError> {
+        for (offset, &(coefficient, term)) in terms.iter().enumerate() {
+            let index = first_index + offset;
+            match (&mut self, term) {
+                (Self::ScalarField(acc), Self::ScalarField(v)) => {
                     if v.len() != acc.len() {
                         return Err(OxiflowError::InvalidDomain(format!(
                             "state length {} != length {} of term {index}",
@@ -387,15 +434,7 @@ impl ContextValue {
                     }
                     acc.zip_apply(v, |a, b| *a += coefficient * b);
                 }
-                Ok(Self::ScalarField(acc))
-            }
-            Self::VectorField(u) => {
-                let mut acc = u.clone();
-                for (index, &(coefficient, term)) in terms.iter().enumerate() {
-                    let v = match term {
-                        Self::VectorField(v) => v,
-                        other => return Err(Self::term_mismatch(self, other)),
-                    };
+                (Self::VectorField(acc), Self::VectorField(v)) => {
                     if v.shape() != acc.shape() {
                         return Err(OxiflowError::InvalidDomain(format!(
                             "state shape {:?} != shape {:?} of term {index}",
@@ -405,13 +444,10 @@ impl ContextValue {
                     }
                     acc.zip_apply(v, |a, b| *a += coefficient * b);
                 }
-                Ok(Self::VectorField(acc))
+                (state, term) => return Err(Self::term_mismatch(state, term)),
             }
-            other => Err(OxiflowError::TypeMismatch {
-                expected: "ScalarField or VectorField",
-                actual: other.variant_name(),
-            }),
         }
+        Ok(self)
     }
 
     /// `TypeMismatch` for a linear-combination term whose variant differs
@@ -799,6 +835,39 @@ mod tests {
     #[test]
     fn linear_combination_rejects_non_field_state() {
         let result = ContextValue::Scalar(1.0).linear_combination(&[]);
+        assert!(matches!(result, Err(OxiflowError::TypeMismatch { .. })));
+    }
+
+    #[test]
+    fn weighted_sum_is_bit_identical_to_direct_arithmetic() {
+        let k1 = DVector::from_vec(vec![0.1, 1.0 / 3.0, -2.5e-9]);
+        let k2 = DVector::from_vec(vec![0.7, -2.0 / 3.0, 1.0e16]);
+        let k3 = DVector::from_vec(vec![-0.3, 0.2, 3.3]);
+        let (c1, c2, c3) = (0.013 * 71.0 / 57600.0, -0.013 * 71.0 / 16695.0, 0.017);
+        let direct = &k1 * c1 + &k2 * c2 + &k3 * c3;
+        let field = |v: &DVector<f64>| ContextValue::ScalarField(v.clone());
+        let sum =
+            ContextValue::weighted_sum(&[(c1, &field(&k1)), (c2, &field(&k2)), (c3, &field(&k3))])
+                .unwrap();
+        assert_eq!(sum.as_scalar_field().unwrap(), &direct);
+    }
+
+    #[test]
+    fn weighted_sum_of_vector_fields() {
+        let a = field_by_rows(2, &[1.0, 2.0, 3.0, 4.0]);
+        let b = field_by_rows(2, &[1.0, 1.0, 1.0, 1.0]);
+        let sum = ContextValue::weighted_sum(&[(2.0, &a), (-1.0, &b)]).unwrap();
+        assert_eq!(sum, field_by_rows(2, &[1.0, 3.0, 5.0, 7.0]));
+    }
+
+    #[test]
+    fn weighted_sum_rejects_empty_terms_and_mixed_variants() {
+        assert!(matches!(
+            ContextValue::weighted_sum(&[]),
+            Err(OxiflowError::PreconditionFailed { .. })
+        ));
+        let a = field_by_rows(2, &[1.0, 2.0, 3.0, 4.0]);
+        let result = ContextValue::weighted_sum(&[(1.0, &a), (1.0, &field(&[1.0, 2.0]))]);
         assert!(matches!(result, Err(OxiflowError::TypeMismatch { .. })));
     }
 }
