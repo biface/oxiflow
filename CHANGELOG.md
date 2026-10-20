@@ -21,6 +21,14 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `UniformGrid1D::new` rejects non-finite bounds: a NaN bound used to pass
   the `x_end > x_start` check and yield a grid of NaN nodes.
+- `FDGradientCalculator` and `FDLaplacianCalculator` return
+  `OxiflowError::PreconditionFailed` from `compute()` on a mesh their
+  stencils cannot handle, instead of a silently wrong field: a mesh that is
+  not 1D, a 1D mesh whose node spacing is not uniform or differs from
+  `characteristic_length()` (relative tolerance `1e-6`), and, for the
+  gradient, a `dimension` beyond the mesh dimension. The check runs once, at
+  construction; `new()` keeps its signature and results on `UniformGrid1D`
+  are unchanged (#186).
 
 ### Security
 

@@ -106,3 +106,149 @@ pub trait Mesh: Send + Sync {
     /// the minimum element diameter or average edge length.
     fn characteristic_length(&self) -> f64;
 }
+
+// ── Uniform spacing ───────────────────────────────────────────────────────────
+
+/// Relative tolerance of [`uniform_spacing`] on each node gap.
+///
+/// `UniformGrid1D` builds its nodes as `x_start + i·dx`, so a gap differs from
+/// `dx` by about `ε·|x| / dx` (ε the `f64` machine epsilon): below `1e-6` as
+/// long as `|x| / dx < 1e9`. A spacing defect of `1e-6` relative is also far
+/// below the truncation error of the stencils that rely on this check.
+pub(crate) const SPACING_TOLERANCE: f64 = 1e-6;
+
+/// Node spacing of a 1D mesh whose nodes are equally spaced in index order.
+///
+/// Returns `Some(characteristic_length())` when the mesh is one-dimensional,
+/// has at least two nodes, and every gap `x[i+1] − x[i]` lies within
+/// [`SPACING_TOLERANCE`] (relative) of `characteristic_length()`. Returns
+/// `None` otherwise, including when `characteristic_length()` is not a
+/// positive finite number.
+///
+/// The gaps are compared with `characteristic_length()`, not with their mean:
+/// callers use the returned value as the stencil step, so a mesh with uniform
+/// nodes but a different declared length must be rejected as well. A positive
+/// reference also rules out nodes in decreasing order.
+///
+/// Cost is `O(n_dof)`; callers on a hot path resolve it once and store the
+/// result, which is sound as long as a mesh does not change after
+/// construction.
+pub(crate) fn uniform_spacing(mesh: &dyn Mesh) -> Option<f64> {
+    let n = mesh.n_dof();
+    let step = mesh.characteristic_length();
+    if mesh.spatial_dimension() != 1 || n < 2 || !step.is_finite() || step <= 0.0 {
+        return None;
+    }
+    let bound = SPACING_TOLERANCE * step;
+    let uniform = (0..n - 1).all(|i| {
+        let gap = mesh.coordinates(i + 1)[0] - mesh.coordinates(i)[0];
+        (gap - step).abs() <= bound
+    });
+    uniform.then_some(step)
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 1D mesh built from an explicit node list and a declared length.
+    struct NodeList {
+        nodes: Vec<[f64; 1]>,
+        length: f64,
+    }
+
+    impl NodeList {
+        fn new(xs: &[f64], length: f64) -> Self {
+            Self {
+                nodes: xs.iter().map(|&x| [x]).collect(),
+                length,
+            }
+        }
+    }
+
+    impl Mesh for NodeList {
+        fn n_dof(&self) -> usize {
+            self.nodes.len()
+        }
+        fn coordinates(&self, i: usize) -> &[f64] {
+            &self.nodes[i]
+        }
+        fn spatial_dimension(&self) -> usize {
+            1
+        }
+        fn characteristic_length(&self) -> f64 {
+            self.length
+        }
+    }
+
+    /// Two nodes in 2D, uniform in x if projected.
+    struct TwoNodes2D([[f64; 2]; 2]);
+
+    impl Mesh for TwoNodes2D {
+        fn n_dof(&self) -> usize {
+            2
+        }
+        fn coordinates(&self, i: usize) -> &[f64] {
+            &self.0[i]
+        }
+        fn spatial_dimension(&self) -> usize {
+            2
+        }
+        fn characteristic_length(&self) -> f64 {
+            1.0
+        }
+    }
+
+    #[test]
+    fn uniform_grid_returns_its_step() {
+        let grid = UniformGrid1D::new(11, -3.0, 2.0).unwrap();
+        assert_eq!(uniform_spacing(&grid), Some(grid.characteristic_length()));
+    }
+
+    #[test]
+    fn uniform_grid_far_from_origin_is_accepted() {
+        // |x| / dx = 1e7: rounding of x_start + i·dx stays within tolerance.
+        let grid = UniformGrid1D::new(1001, 1.0e4, 1.0e4 + 1.0).unwrap();
+        assert!(uniform_spacing(&grid).is_some());
+    }
+
+    #[test]
+    fn non_uniform_nodes_are_rejected() {
+        let mesh = NodeList::new(&[0.0, 0.25, 0.5, 1.0], 0.25);
+        assert_eq!(uniform_spacing(&mesh), None);
+    }
+
+    #[test]
+    fn length_inconsistent_with_nodes_is_rejected() {
+        let mesh = NodeList::new(&[0.0, 0.25, 0.5, 0.75], 0.5);
+        assert_eq!(uniform_spacing(&mesh), None);
+    }
+
+    #[test]
+    fn decreasing_nodes_are_rejected() {
+        let mesh = NodeList::new(&[0.75, 0.5, 0.25, 0.0], 0.25);
+        assert_eq!(uniform_spacing(&mesh), None);
+    }
+
+    #[test]
+    fn degenerate_length_is_rejected() {
+        for length in [0.0, -0.25, f64::NAN, f64::INFINITY] {
+            let mesh = NodeList::new(&[0.0, 0.25], length);
+            assert_eq!(uniform_spacing(&mesh), None, "length = {length}");
+        }
+    }
+
+    #[test]
+    fn single_node_is_rejected() {
+        let mesh = NodeList::new(&[0.0], 1.0);
+        assert_eq!(uniform_spacing(&mesh), None);
+    }
+
+    #[test]
+    fn non_1d_mesh_is_rejected() {
+        let mesh = TwoNodes2D([[0.0, 0.0], [1.0, 0.0]]);
+        assert_eq!(uniform_spacing(&mesh), None);
+    }
+}
