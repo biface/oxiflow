@@ -421,6 +421,36 @@ Stabilité API : SemVer strict, `cargo-semver-checks` dans le pipeline de releas
 `quick_config()`/`run()` pour les cas simples — dépendance strictement unidirectionnelle vers
 le moteur.
 
+### 12.1 Exemples, tests, benchmarks et modèles partagés
+
+Chaque modèle de référence est défini une seule fois et utilisé par toutes les cibles qui en
+ont besoin (#194) :
+
+| Répertoire | Rôle | Exécution |
+|---|---|---|
+| `examples/` | Exemples complets et validés, qui montrent comment instancier les outils d'oxiflow | À la main ; les exemples de référence de #173 tournent aussi en CI, les autres sont seulement compilés par `clippy --all-targets` |
+| `tests/` | Tests d'intégration sur de vrais enchaînements de modèles ; les comparaisons à l'epsilon aux solutions analytiques et à la littérature (`*_analytical.rs`, `*_reference.rs`) y vivent | CI (`cargo test`) |
+| `benches/` | Parangonnage, comparaison à la littérature et abaques de dispatch : conditions d'emploi des solveurs, choix d'implémentation, reproductibilité | À la main, en local (configuration `7. Bench`), hors CI |
+| `rsc/models/` | Définitions de modèles partagées, incluses par les trois cibles ci-dessus avec `#[path]` | Par les cibles qui les incluent |
+
+Règles pour `rsc/models/` :
+
+- L'exemple principal d'un modèle porte sa documentation (physique, solution exacte,
+  validation) ; le fichier partagé y renvoie. Constantes de scénario, `main`, tracés et
+  assertions restent propres à chaque cible.
+- Un fichier est inclus comme module de son nom, suffixé `_model` quand il contient un modèle
+  entier (`#[path = "../rsc/models/diffusion_1d.rs"] mod diffusion_1d_model;`), pour ne
+  heurter ni un module du crate (`oxiflow::model`) ni un module de bench du même nom. Les trois
+  fichiers du lahar multi-champ (`lahar_physics`, `lahar_flux`, `lahar_source`) gardent leur
+  nom ; les deux derniers importent depuis un module frère `lahar_physics`.
+- Les éléments partagés sont `pub(crate)` : ils appartiennent à la cible qui les inclut, jamais
+  à l'API publique du crate.
+- Un élément qu'une cible n'utilise pas porte un `#[allow(dead_code)]` local, avec un
+  commentaire qui nomme cette cible ; jamais d'`allow` global sur un fichier partagé.
+- Cargo ne découvre pas `rsc/`, donc `Cargo.toml` ne le mentionne pas. Une future liste
+  `include` pour `cargo publish` devra le contenir, faute de quoi exemples, tests et
+  benchmarks ne compileraient plus depuis le paquet publié.
+
 ---
 
 ## 13. Compatibilité FEM — Trajectoire v2.0 (J20)

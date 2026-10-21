@@ -25,6 +25,20 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Result<Self, String>`. `?` now works directly in functions returning
   `OxiflowError`; the `.map_err(OxiflowError::InvalidDomain)` workaround is
   gone from `examples/lahar_multifield.rs` and its test.
+- Each reference model of the examples, tests and benchmarks (diffusion,
+  viscous Burgers, multi-compound Langmuir, multi-field lahar, lahar–lake)
+  is defined once under `rsc/models/` and included by every target that
+  uses it, instead of up to four copies. Example outputs and test
+  tolerances are unchanged. The `langmuir_multi_plot` example gets back the
+  parallel branch its copy had lost. The dispatch diagnostics of the
+  Langmuir and lahar benchmarks now time the models' own `compute_physics`
+  and `apply` with the threshold forced, instead of partial copies of their
+  loops; their default thresholds stay as measured at v0.9.0. The crate
+  itself and its public API are unchanged (#194).
+- Documentation: `ContextValue::VectorField` holds `d` values per node,
+  either vector components or `d` unknowns unrelated to the mesh dimension;
+  the default dispatch threshold of the finite-difference operators
+  (49 999) is documented as indicative (#140, #194).
 
 ### Fixed
 

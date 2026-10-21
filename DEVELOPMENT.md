@@ -412,6 +412,36 @@ API stability: SemVer strict, `cargo-semver-checks` in the release pipeline, MSR
 `quick_config()`/`run()` for simple cases — strictly one-directional dependency onto the
 engine.
 
+### 12.1 Examples, tests, benchmarks and shared models
+
+Each reference model is defined once and used by every target that needs it (#194):
+
+| Directory | Role | Runs |
+|---|---|---|
+| `examples/` | Complete, validated examples showing how to instantiate oxiflow's tools | By hand; the reference examples of #173 also run in CI, the others are compile-checked by `clippy --all-targets` |
+| `tests/` | Integration tests on real model chains; the epsilon-level comparisons with analytical and literature references (`*_analytical.rs`, `*_reference.rs`) live here | CI (`cargo test`) |
+| `benches/` | Benchmarking against the literature and dispatch charts: conditions of use of the solvers, implementation choices, reproducibility | By hand, locally (`7. Bench` run configuration), not in CI |
+| `rsc/models/` | Shared model definitions, included by the three targets above with `#[path]` | Through the targets that include them |
+
+Rules for `rsc/models/`:
+
+- The main example of a model carries its documentation (physics, exact solution, validation);
+  the shared file points to it. Scenario constants, `main`, plots and assertions stay in each
+  target.
+- A file is included as a module named after it, with a `_model` suffix when the file holds a
+  whole model (`#[path = "../rsc/models/diffusion_1d.rs"] mod diffusion_1d_model;`), so that
+  it clashes neither with a module of the crate (`oxiflow::model`) nor with a bench module of
+  the same name. The three lahar multi-field files (`lahar_physics`, `lahar_flux`,
+  `lahar_source`) keep their own names; the last two import from a sibling module
+  `lahar_physics`.
+- Shared items are `pub(crate)`: they belong to the target that includes them, never to the
+  crate's public API.
+- An item that one target does not use carries a local `#[allow(dead_code)]` with a comment
+  naming that target; never a blanket `allow` on a shared file.
+- `rsc/` is not discovered by Cargo, so `Cargo.toml` does not list it. A future `include`
+  list for `cargo publish` must contain it, otherwise examples, tests and benchmarks would
+  not build from the published package.
+
 ---
 
 ## 13. FEM Compatibility — v2.0 Trajectory (J20)

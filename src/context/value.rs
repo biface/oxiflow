@@ -44,7 +44,7 @@ use crate::context::error::OxiflowError;
 /// | Variant | Content | Example |
 /// |---------|---------|---------|
 /// | `ScalarField` | `DVector` — one scalar per node | porosity(x), T(x) |
-/// | `VectorField` | `DMatrix` — n_nodes × dim | velocity field u(x,y) |
+/// | `VectorField` | `DMatrix` — n_nodes × d | velocity field u(x,y), d species per node |
 ///
 /// # Reserved (v0.14.0 (J14), DD-057 — requires INV-2 / DiscreteOperator)
 ///
@@ -107,11 +107,14 @@ pub enum ContextValue {
     /// Length equals the number of degrees of freedom (`Mesh::n_dof()`).
     ScalarField(DVector<f64>),
 
-    /// One vector per mesh node, stored as `n_nodes × spatial_dim` matrix.
+    /// `d` values per mesh node, stored as an `n_nodes × d` matrix.
     ///
-    /// Row `i` holds the vector at node `i`. Dimensions (`n_nodes`,
-    /// `spatial_dim`) are available via `DMatrix::nrows()`/`ncols()`
-    /// (DD-026 INV-GPU-2).
+    /// Row `i` holds the values at node `i`. The `d` columns are either
+    /// the components of a vector quantity (`d` is then the spatial
+    /// dimension, as for a velocity field) or `d` unknowns carried by each
+    /// node, unrelated to the mesh dimension: two species on a 1D mesh give
+    /// `d = 2` (#192). Dimensions (`n_nodes`, `d`) are available via
+    /// `DMatrix::nrows()`/`ncols()` (DD-026 INV-GPU-2).
     ///
     /// Memory layout: `DMatrix<f64>` is **column-major** (nalgebra default,
     /// Fortran order) — DD-026 INV-GPU-4. WGSL (the `wgpu` shader language)
@@ -276,8 +279,8 @@ impl ContextValue {
     /// full-length copy to every calculator call, on top of the stencil
     /// computation itself. Measured directly: at n=1,000,000, cloning a
     /// buffer this size costs ~650µs, comparable to the ~950µs the
-    /// Laplacian stencil itself measures at that size in `BENCHMARKS.md` --
-    /// close to doubling every number already recorded there). Only the
+    /// Laplacian stencil itself took at that size in the v0.9.0
+    /// measurements (#53) -- close to doubling each of them). Only the
     /// `VectorField` column-extraction case actually copies, since
     /// `compute_from_dx` and friends take `&DVector<f64>` specifically,
     /// not a generic matrix view, and a matrix column isn't stored the
