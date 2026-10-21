@@ -9,6 +9,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `SimulationResult::write_vtk` exports a `VectorField` final state (n nodes
+  × d components) as well as a `ScalarField`: one scalar `Float64` point-data
+  array per component, named `field_0` … `field_{d-1}`, the first one being
+  the active scalars. Each component gets its own colour map in ParaView,
+  values stay bit-for-bit (NaN and infinities included), and the mesh is
+  still 1D. `ScalarField` output is byte-for-byte unchanged (#193).
+
 ### Changed
 
 - **Breaking:** `UniformGrid1D::new` returns `Result<Self, OxiflowError>`

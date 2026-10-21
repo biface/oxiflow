@@ -137,6 +137,22 @@ impl SimulationResult {
     /// coordinates are padded with zeros to the 3 components VTK requires.
     /// 2D/3D meshes are planned for v0.11.0.
     ///
+    /// The state is written as point data, one scalar `Float64` array per
+    /// component:
+    ///
+    /// | Final state | Point-data arrays |
+    /// |---|---|
+    /// | `ScalarField` (n values) | `field` |
+    /// | `VectorField` (n × d) | `field_0`, `field_1`, …, `field_{d-1}` (column `c` → `field_c`) |
+    ///
+    /// As a state, a `VectorField` holds d unknowns per node (several
+    /// species, several physical fields), with d unrelated to the mesh
+    /// dimension: a 1D two-species model has d = 2. One array per component
+    /// gives each its own colour map and range in ParaView, where a single
+    /// `NumberOfComponents = d` array would be shown as a geometric vector
+    /// (magnitude by default). The first array is declared as the
+    /// active scalars (`<PointData Scalars="…">`).
+    ///
     /// The file is UTF-8 XML; data arrays use VTK's inline `binary` format
     /// (little-endian bytes, base64-encoded, `UInt64` size header), so every
     /// `f64` is stored bit for bit — NaN and infinities included, which lets
@@ -153,9 +169,11 @@ impl SimulationResult {
     ///
     /// Returns [`OxiflowError::Persistence`] if: `states` is empty; `mesh`
     /// has `spatial_dimension() != 1` or zero degrees of freedom; the last
-    /// state is not a [`crate::context::value::ContextValue::ScalarField`];
-    /// its length doesn't match `mesh.n_dof()`; or the file cannot be created
-    /// or written.
+    /// state is neither a [`crate::context::value::ContextValue::ScalarField`]
+    /// nor a [`crate::context::value::ContextValue::VectorField`]; a
+    /// `ScalarField` length or a `VectorField` row count doesn't match
+    /// `mesh.n_dof()`; a `VectorField` has no column; or the file cannot be
+    /// created or written.
     #[cfg(feature = "vtk")]
     pub fn write_vtk(
         &self,
@@ -183,27 +201,50 @@ impl SimulationResult {
         let last_state = self.states.last().ok_or_else(|| {
             OxiflowError::Persistence("write_vtk: SimulationResult has no saved states".to_string())
         })?;
-        let values = match last_state {
-            ContextValue::ScalarField(v) => v,
+        // Un tableau `(nom, valeurs)` par composante de l'état.
+        let fields: Vec<(String, &[f64])> = match last_state {
+            ContextValue::ScalarField(v) => {
+                if v.len() != n {
+                    return Err(OxiflowError::Persistence(format!(
+                        "write_vtk: state has {} values, mesh has {n} degrees of freedom",
+                        v.len()
+                    )));
+                }
+                vec![("field".to_string(), v.as_slice())]
+            }
+            ContextValue::VectorField(m) => {
+                if m.nrows() != n {
+                    return Err(OxiflowError::Persistence(format!(
+                        "write_vtk: VectorField state has {} rows, mesh has {n} degrees of freedom",
+                        m.nrows()
+                    )));
+                }
+                if m.ncols() == 0 {
+                    return Err(OxiflowError::Persistence(
+                        "write_vtk: VectorField state has no component".to_string(),
+                    ));
+                }
+                // `DMatrix` est stocké par colonnes (column-major) : la
+                // composante `c` occupe la tranche contiguë `[c·n, (c+1)·n)`.
+                m.as_slice()
+                    .chunks_exact(n)
+                    .enumerate()
+                    .map(|(c, column)| (format!("field_{c}"), column))
+                    .collect()
+            }
             other => {
                 return Err(OxiflowError::Persistence(format!(
-                    "write_vtk currently only supports ScalarField states, got {other:?}"
+                    "write_vtk only supports ScalarField and VectorField states, got {other:?}"
                 )));
             }
         };
-        if values.len() != n {
-            return Err(OxiflowError::Persistence(format!(
-                "write_vtk: state has {} values, mesh has {n} degrees of freedom",
-                values.len()
-            )));
-        }
         let x: Vec<f64> = (0..n).map(|i| mesh.coordinates(i)[0]).collect();
 
         let io_err =
             |e: std::io::Error| OxiflowError::Persistence(format!("VTK export failed: {e}"));
         let file = std::fs::File::create(path).map_err(io_err)?;
         let mut w = std::io::BufWriter::new(file);
-        write_vtu_1d(&mut w, &x, values.as_slice())
+        write_vtu_1d(&mut w, &x, &fields)
             .and_then(|()| w.flush())
             .map_err(io_err)
     }
@@ -211,13 +252,21 @@ impl SimulationResult {
 
 /// Écrit une grille VTK XML `UnstructuredGrid` 1D, tableaux au format
 /// `binary` en ligne — corps de [`SimulationResult::write_vtk`], qui a déjà
-/// validé les entrées (`x.len() == field.len() >= 1`).
+/// validé les entrées (`x.len() >= 1`, au moins un tableau, chacun de
+/// longueur `x.len()`).
+///
+/// `fields` : tableaux scalaires de `PointData`, écrits dans l'ordre donné ;
+/// le premier est déclaré comme scalaires actifs (`Scalars`).
 ///
 /// Nœuds reliés par des cellules `Line` (type VTK 3) dans l'ordre de `x` ;
 /// un seul `Vertex` (type 1) si `x.len() == 1`. Coordonnées complétées par
 /// des zéros (VTK stocke toujours 3 composantes).
 #[cfg(feature = "vtk")]
-fn write_vtu_1d<W: std::io::Write>(w: &mut W, x: &[f64], field: &[f64]) -> std::io::Result<()> {
+fn write_vtu_1d<W: std::io::Write, S: AsRef<str>>(
+    w: &mut W,
+    x: &[f64],
+    fields: &[(S, &[f64])],
+) -> std::io::Result<()> {
     let n = x.len();
     let (n_cells, nodes_per_cell, cell_type) = if n >= 2 { (n - 1, 2, 3u8) } else { (1, 1, 1u8) };
 
@@ -237,7 +286,6 @@ fn write_vtu_1d<W: std::io::Write>(w: &mut W, x: &[f64], field: &[f64]) -> std::
     let offsets: Vec<u8> = (1..=n_cells as i64)
         .flat_map(|c| (c * nodes_per_cell).to_le_bytes())
         .collect();
-    let field: Vec<u8> = field.iter().flat_map(|v| v.to_le_bytes()).collect();
 
     writeln!(w, r#"<?xml version="1.0" encoding="UTF-8"?>"#)?;
     writeln!(
@@ -249,8 +297,12 @@ fn write_vtu_1d<W: std::io::Write>(w: &mut W, x: &[f64], field: &[f64]) -> std::
         w,
         r#"    <Piece NumberOfPoints="{n}" NumberOfCells="{n_cells}">"#
     )?;
-    writeln!(w, r#"      <PointData Scalars="field">"#)?;
-    write_data_array(w, "Float64", "field", 1, &field)?;
+    let active = fields.first().map_or("", |(name, _)| name.as_ref());
+    writeln!(w, r#"      <PointData Scalars="{active}">"#)?;
+    for (name, values) in fields {
+        let bytes: Vec<u8> = values.iter().flat_map(|v| v.to_le_bytes()).collect();
+        write_data_array(w, "Float64", name.as_ref(), 1, &bytes)?;
+    }
     writeln!(w, "      </PointData>")?;
     writeln!(w, "      <Points>")?;
     write_data_array(w, "Float64", "Points", 3, &points)?;
@@ -656,11 +708,103 @@ mod tests {
 
     #[cfg(feature = "vtk")]
     #[test]
+    fn write_vtk_vector_field_one_array_per_component_bit_for_bit() {
+        use crate::mesh::structured::UniformGrid1D;
+        use nalgebra::DMatrix;
+
+        // Deux composantes, valeurs non finies dans chacune : comparaison bit
+        // à bit composante par composante (NaN != NaN).
+        let c0 = vec![1.0 / 3.0, f64::NAN, -0.0, 4.0];
+        let c1 = vec![f64::INFINITY, 2.0e-300, f64::NEG_INFINITY, -1.5];
+        let state =
+            DMatrix::from_columns(&[DVector::from_vec(c0.clone()), DVector::from_vec(c1.clone())]);
+        let mesh = UniformGrid1D::new(4, 0.0, 3.0).unwrap();
+        let result = SimulationResult {
+            states: vec![ContextValue::VectorField(state)],
+            times: vec![1.0],
+            n_steps: 1,
+            metadata: std::collections::HashMap::new(),
+        };
+        let path = std::env::temp_dir().join("oxiflow_test_write_vtk_vector_field.vtu");
+        result.write_vtk(&mesh, &path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        let (piece, arrays) = parse_vtu(&text);
+        assert_eq!(piece, (4, 3));
+        let bits = |v: &[f64]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+        assert_eq!(bits(&arrays["field_0"]), bits(&c0));
+        assert_eq!(bits(&arrays["field_1"]), bits(&c1));
+        assert!(!arrays.contains_key("field"));
+        assert!(text.contains(r#"<PointData Scalars="field_0">"#));
+        for c in 0..2 {
+            assert!(text.contains(&format!(r#"Name="field_{c}" NumberOfComponents="1""#)));
+        }
+    }
+
+    #[cfg(feature = "vtk")]
+    #[test]
+    fn write_vtk_rejects_vector_field_row_mismatch() {
+        use crate::mesh::structured::UniformGrid1D;
+
+        let mesh = UniformGrid1D::new(3, 0.0, 1.0).unwrap();
+        let result = SimulationResult {
+            states: vec![ContextValue::VectorField(nalgebra::DMatrix::zeros(4, 2))],
+            times: vec![0.0],
+            n_steps: 0,
+            metadata: std::collections::HashMap::new(),
+        };
+        let path = std::env::temp_dir().join("oxiflow_test_write_vtk_vector_rows.vtu");
+        let outcome = result.write_vtk(&mesh, &path);
+        assert!(matches!(outcome, Err(OxiflowError::Persistence(m)) if m.contains("4 rows")));
+    }
+
+    #[cfg(feature = "vtk")]
+    #[test]
+    fn write_vtk_rejects_vector_field_without_component() {
+        use crate::mesh::structured::UniformGrid1D;
+
+        let mesh = UniformGrid1D::new(3, 0.0, 1.0).unwrap();
+        let result = SimulationResult {
+            states: vec![ContextValue::VectorField(nalgebra::DMatrix::zeros(3, 0))],
+            times: vec![0.0],
+            n_steps: 0,
+            metadata: std::collections::HashMap::new(),
+        };
+        let path = std::env::temp_dir().join("oxiflow_test_write_vtk_vector_empty.vtu");
+        let outcome = result.write_vtk(&mesh, &path);
+        assert!(matches!(outcome, Err(OxiflowError::Persistence(m)) if m.contains("no component")));
+    }
+
+    #[cfg(feature = "vtk")]
+    #[test]
+    fn write_vtk_rejects_scalar_field_length_mismatch_and_other_variants() {
+        use crate::mesh::structured::UniformGrid1D;
+
+        let mesh = UniformGrid1D::new(3, 0.0, 1.0).unwrap();
+        let path = std::env::temp_dir().join("oxiflow_test_write_vtk_rejects_state.vtu");
+        for state in [
+            ContextValue::ScalarField(DVector::from_element(2, 0.0)),
+            ContextValue::Scalar(1.0),
+        ] {
+            let result = SimulationResult {
+                states: vec![state],
+                times: vec![0.0],
+                n_steps: 0,
+                metadata: std::collections::HashMap::new(),
+            };
+            let outcome = result.write_vtk(&mesh, &path);
+            assert!(matches!(outcome, Err(OxiflowError::Persistence(_))));
+        }
+    }
+
+    #[cfg(feature = "vtk")]
+    #[test]
     fn write_vtu_single_node_writes_a_vertex() {
         // `UniformGrid1D` exige n >= 2 : le cas d'un nœud unique (autre `Mesh`)
         // se teste directement sur l'écrivain interne.
         let mut buf = Vec::new();
-        super::write_vtu_1d(&mut buf, &[0.5], &[7.0]).unwrap();
+        super::write_vtu_1d(&mut buf, &[0.5], &[("field", &[7.0][..])]).unwrap();
         let text = String::from_utf8(buf).unwrap();
         let (piece, arrays) = parse_vtu(&text);
         assert_eq!(piece, (1, 1));
