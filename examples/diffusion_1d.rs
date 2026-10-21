@@ -9,6 +9,11 @@
 //!
 //! Run with: `cargo run --example diffusion_1d`
 //!
+//! The model (`Diffusion1D` and its exact solution) is defined once in
+//! `rsc/models/diffusion_1d.rs`, included below as the
+//! `diffusion_1d_model` module and shared with the plot example, the
+//! analytical test and the benchmark.
+//!
 //! ## Physics and exact solution
 //!
 //! `alpha = lambda / (rho*Cp)` is the thermal diffusivity — the model
@@ -41,14 +46,9 @@
 
 use std::sync::Arc;
 
-use nalgebra::DVector;
 use oxiflow::{
-    context::{
-        calculators::FDLaplacianCalculator, compute::ComputeContext, error::OxiflowError,
-        value::ContextValue, variable::ContextVariable,
-    },
+    context::calculators::FDLaplacianCalculator,
     mesh::{Mesh, UniformGrid1D},
-    model::traits::{PhysicalModel, RequiresContext},
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::ForwardEulerSolver,
@@ -57,69 +57,10 @@ use oxiflow::{
     },
 };
 
-/// The `ContextVariable` slot `FDLaplacianCalculator` publishes its result
-/// under — `External` is the established convention for calculator-provided
-/// quantities with no dedicated `ContextVariable` variant (see
-/// `FDLaplacianCalculator::new`'s own docs).
-fn laplacian_variable() -> ContextVariable {
-    ContextVariable::External {
-        name: "laplacian".into(),
-    }
-}
+#[path = "../rsc/models/diffusion_1d.rs"]
+mod diffusion_1d_model;
 
-/// `rho*Cp*du/dt = lambda*d2u/dx2` — stored as the single ratio `alpha =
-/// lambda/(rho*Cp)`, the only combination `compute_physics` needs.
-struct Diffusion1D {
-    alpha: f64,
-    amplitude: f64,
-    center: f64,
-    sigma0: f64,
-}
-
-impl Diffusion1D {
-    /// Exact solution at `(x, t)` — see the module documentation for the
-    /// derivation. Valid for the infinite-domain problem; the finite-mesh
-    /// approximation here is only as good as the domain is wide relative
-    /// to `sigma(t)`.
-    fn exact(&self, x: f64, t: f64) -> f64 {
-        let sigma_t = (self.sigma0.powi(2) + 2.0 * self.alpha * t).sqrt();
-        let envelope = self.amplitude * self.sigma0 / sigma_t;
-        let exponent = -(x - self.center).powi(2) / (2.0 * sigma_t.powi(2));
-        envelope * exponent.exp()
-    }
-}
-
-impl RequiresContext for Diffusion1D {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![laplacian_variable()]
-    }
-}
-
-impl PhysicalModel for Diffusion1D {
-    fn compute_physics(
-        &self,
-        _state: &ContextValue,
-        ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        let lap = ctx.external(laplacian_variable())?.as_scalar_field()?;
-        Ok(ContextValue::ScalarField(lap.map(|v| self.alpha * v)))
-    }
-
-    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        let u0 = DVector::from_iterator(
-            mesh.n_dof(),
-            (0..mesh.n_dof()).map(|i| {
-                let x = mesh.coordinates(i)[0];
-                self.exact(x, 0.0)
-            }),
-        );
-        ContextValue::ScalarField(u0)
-    }
-
-    fn name(&self) -> &str {
-        "diffusion_1d"
-    }
-}
+use diffusion_1d_model::{laplacian_variable, Diffusion1D};
 
 fn main() {
     // Domain half-width 1.0 against sigma(T_END) ~ 0.08 (see the module
