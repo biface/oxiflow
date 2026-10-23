@@ -41,7 +41,8 @@
 //! `BackwardEulerSolver`/`CrankNicolsonSolver` call it directly (with
 //! `with_newton_convergence`/`with_jacobian_strategy`/
 //! `with_max_newton_iterations` builders); `theta_method_step` itself
-//! stays at its original signature by delegating to it with
+//! keeps its original signature, plus the Jacobian dispatch configuration
+//! (DT-069, #198), by delegating to it with
 //! `k_max = 1`/[`JacobianStrategy::ModifiedFrozen`]
 //! baked in, reproducing its historical output exactly (see
 //! [`super::newton`]'s own docs for why no special-casing is needed for
@@ -80,6 +81,19 @@
 //! `tests::dirichlet_constrained_column_is_exactly_zero_row_keeps_real_coupling`
 //! (#113) — previously documented as a known untested limitation (DD-033,
 //! [#86](https://github.com/biface/oxiflow/issues/86), v0.4.0).
+//!
+//! ## Parallel assembly (DT-069, #198)
+//!
+//! With the `parallel` feature, both finite-difference Jacobians dispatch
+//! their independent evaluations through Rayon — one per column for the
+//! dense one, one per color for the banded one — once the system has at
+//! least as many unknowns as the solver's dispatch threshold. Each worker
+//! perturbs its own work state and writes its columns in place, in the
+//! final matrix. Every column is computed from the same operands with the
+//! same operations in both modes, so the sequential and parallel Jacobians
+//! are bit-for-bit identical. The threshold belongs to each implicit
+//! solver (`JacobianDispatch`); without the feature it does not exist and
+//! the assembly is sequential.
 
 use nalgebra::{DMatrix, DVector};
 
@@ -90,6 +104,8 @@ use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::LinearSolver;
+#[cfg(feature = "parallel")]
+use crate::solver::parallel::ParallelThreshold;
 use crate::solver::scenario::Domain;
 #[cfg(feature = "sparse")]
 use crate::solver::sparse::SparseLinearSolver;
@@ -103,6 +119,102 @@ use faer::sparse::{SparseColMat, SymbolicSparseColMat};
 /// significantly different magnitude scales.
 const FD_EPSILON: f64 = 1e-7;
 
+/// Default Rayon dispatch threshold of the Jacobian assembly, in unknowns
+/// (DT-069, #198) — an indicative value, shared by the three implicit
+/// solvers since they share this assembly. Each dispatched task is a full
+/// derivative evaluation, much heavier than one stencil point, so the
+/// crossover is expected far below
+/// [`crate::operators::fd::default_parallel_threshold`] (49 999). Measure it
+/// on the target workload with the `oxiflow_parallel` benchmarks and set
+/// it through the solver's `with_parallel_threshold`.
+#[cfg(feature = "parallel")]
+pub(crate) fn default_parallel_threshold() -> usize {
+    256
+}
+
+/// Dispatch configuration of the Jacobian assembly, held by each implicit
+/// solver and passed down to [`finite_difference_jacobian`] and, with the
+/// `sparse` feature, `banded_finite_difference_jacobian` (DT-069, #198).
+///
+/// Holds a `ParallelThreshold` only with the `parallel` feature: without
+/// it the type is empty, no threshold is representable, and the assembly
+/// is sequential. Passing this configuration rather than a bare number
+/// keeps the threshold out of the feature-agnostic signatures, without one
+/// version of every θ-method function per feature.
+#[derive(Debug, Default)]
+pub(crate) struct JacobianDispatch {
+    #[cfg(feature = "parallel")]
+    threshold: ParallelThreshold,
+}
+
+impl JacobianDispatch {
+    /// Whether the assembly of a system of `n` unknowns goes through Rayon:
+    /// `n >= threshold`, the comparison used by every dispatch site of the
+    /// crate. Always `false` without the `parallel` feature.
+    pub(crate) fn is_parallel_for(&self, n: usize) -> bool {
+        #[cfg(feature = "parallel")]
+        {
+            n >= self.threshold()
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            let _ = n;
+            false
+        }
+    }
+
+    /// Effective threshold: the override if one was set, otherwise
+    /// [`default_parallel_threshold`].
+    #[cfg(feature = "parallel")]
+    pub(crate) fn threshold(&self) -> usize {
+        self.threshold.get(default_parallel_threshold())
+    }
+
+    /// Overrides the threshold.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` — see `ParallelThreshold::set`.
+    #[cfg(feature = "parallel")]
+    pub(crate) fn set(&self, threshold: usize) {
+        self.threshold.set(threshold);
+    }
+}
+
+/// Runs `fill` on every item, each call with a work state cloned from
+/// `state` that `fill` refills and perturbs itself.
+///
+/// Through Rayon when `parallel`, with one work state per worker;
+/// otherwise in order, with one work state for all items. Items must be
+/// independent of one another: each writes only its own columns, from
+/// its own work state, so the result does not depend on the dispatch.
+fn try_for_each_with_work<T, F>(
+    items: Vec<T>,
+    parallel: bool,
+    state: &ContextValue,
+    fill: F,
+) -> Result<(), OxiflowError>
+where
+    T: Send,
+    F: Fn(&mut ContextValue, T) -> Result<(), OxiflowError> + Sync,
+{
+    #[cfg(feature = "parallel")]
+    if parallel {
+        use rayon::prelude::*;
+        return items
+            .into_par_iter()
+            .try_for_each_init(|| state.clone(), |work, item| fill(work, item));
+    }
+    #[cfg(not(feature = "parallel"))]
+    debug_assert!(
+        !parallel,
+        "no parallel dispatch without the `parallel` feature"
+    );
+
+    let mut work = state.clone();
+    items.into_iter().try_for_each(|item| fill(&mut work, item))
+}
+
 /// Estimates $\partial f/\partial u$ at `state`, `t`, by forward
 /// differences.
 ///
@@ -113,11 +225,12 @@ const FD_EPSILON: f64 = 1e-7;
 /// Rows and columns follow the flat ordering of [`StateLayout`]: for a
 /// `VectorField` state, unknowns are interleaved by node (#192).
 ///
-/// One work state is allocated per Jacobian and refilled from `state`
-/// before each column, then perturbed in place (#197): the boundary
-/// conditions modify the evaluated state in place and do not report which
-/// nodes they changed, so a full refill per column is needed, but no
-/// allocation is.
+/// A work state, cloned from `state`, is refilled before each column and
+/// perturbed in place (#197): the boundary conditions modify the evaluated
+/// state in place and do not report which nodes they changed, so a full
+/// refill per column is needed, but no allocation is. Columns are
+/// dispatched according to `dispatch` — see
+/// [parallel assembly](self#parallel-assembly-dt-069-198).
 ///
 /// See [boundary conditions × the perturbed Jacobian](self#boundary-conditions--the-perturbed-jacobian).
 pub(crate) fn finite_difference_jacobian(
@@ -126,6 +239,7 @@ pub(crate) fn finite_difference_jacobian(
     state: &ContextValue,
     t: f64,
     dt: f64,
+    dispatch: &JacobianDispatch,
 ) -> Result<DMatrix<f64>, OxiflowError> {
     let layout = StateLayout::of(state)?;
     let base = layout.values(state)?;
@@ -136,20 +250,32 @@ pub(crate) fn finite_difference_jacobian(
     let f0_field = layout.flatten(&f0)?.into_owned();
 
     let mut jacobian = DMatrix::<f64>::zeros(n, n);
-    let mut work = state.clone();
-
-    for j in 0..n {
-        let values = layout.values_mut(&mut work)?;
-        values.copy_from_slice(base);
-        values[layout.storage_index(j)] += FD_EPSILON;
-
-        let f_j = evaluate_derivative(domain, chain, &mut work, t, dt)?;
-        let f_j_values = layout.values(&f_j)?;
-
-        for i in 0..n {
-            jacobian[(i, j)] = (f_j_values[layout.storage_index(i)] - f0_field[i]) / FD_EPSILON;
-        }
+    if n == 0 {
+        return Ok(jacobian);
     }
+
+    // Column-major storage: column j is the j-th chunk of n values.
+    let columns: Vec<(usize, &mut [f64])> =
+        jacobian.as_mut_slice().chunks_mut(n).enumerate().collect();
+
+    try_for_each_with_work(
+        columns,
+        dispatch.is_parallel_for(n),
+        state,
+        |work, (j, column)| {
+            let values = layout.values_mut(work)?;
+            values.copy_from_slice(base);
+            values[layout.storage_index(j)] += FD_EPSILON;
+
+            let f_j = evaluate_derivative(domain, chain, work, t, dt)?;
+            let f_j_values = layout.values(&f_j)?;
+
+            for (i, entry) in column.iter_mut().enumerate() {
+                *entry = (f_j_values[layout.storage_index(i)] - f0_field[i]) / FD_EPSILON;
+            }
+            Ok(())
+        },
+    )?;
 
     Ok(jacobian)
 }
@@ -197,7 +323,9 @@ pub(crate) fn stiff_jacobian_convergence() -> NewtonConvergence {
 /// (`k_max = 1`, [`JacobianStrategy::ModifiedFrozen`],
 /// [`stiff_jacobian_convergence`]) baked in — kept at its original
 /// signature (DD-044, #110) for direct callers that don't need the
-/// configurable path.
+/// configurable path, plus the Jacobian dispatch configuration of the
+/// calling solver (DT-069, #198).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn theta_method_step(
     domain: &Domain,
     chain: &[&dyn ContextCalculator],
@@ -206,6 +334,7 @@ pub(crate) fn theta_method_step(
     dt: f64,
     theta: f64,
     linear_solver: &dyn LinearSolver,
+    dispatch: &JacobianDispatch,
 ) -> Result<ContextValue, OxiflowError> {
     theta_method_step_newton(
         domain,
@@ -218,6 +347,7 @@ pub(crate) fn theta_method_step(
         stiff_jacobian_convergence(),
         JacobianStrategy::default(),
         1,
+        dispatch,
     )
 }
 
@@ -247,6 +377,7 @@ pub(crate) fn theta_method_step_newton(
     newton_convergence: NewtonConvergence,
     jacobian_strategy: JacobianStrategy,
     max_iterations: usize,
+    dispatch: &JacobianDispatch,
 ) -> Result<ContextValue, OxiflowError> {
     // f(u^n, t) -- BCs applied in-place to `state` itself, consistent with
     // the explicit solvers' contract (same as `theta_method_step`).
@@ -273,7 +404,7 @@ pub(crate) fn theta_method_step_newton(
         },
         move |candidate: &DVector<f64>| {
             let candidate_state = layout.rebuild(candidate.clone())?;
-            finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt)
+            finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt, dispatch)
         },
         linear_solver,
         &newton::NewtonParams {
@@ -306,8 +437,9 @@ pub(crate) fn theta_method_step_newton(
 /// share a nonzero row, so all columns of the same color are perturbed
 /// **simultaneously** in a single [`evaluate_derivative`] call —
 /// `2*bandwidth + 1` evaluations, instead of [`finite_difference_jacobian`]'s
-/// `n`. As there, one work state is refilled and perturbed in place for
-/// each color (#197).
+/// `n`. As there, a work state is refilled and perturbed in place for each
+/// color (#197), and colors are dispatched according to `dispatch` — the
+/// threshold is compared with the number of unknowns `n`, not of colors.
 ///
 /// The structure is known in advance (DT-069, #198): column `j` holds rows
 /// `max(0, j − bandwidth)` to `min(n, j + bandwidth + 1)`, in increasing
@@ -323,6 +455,7 @@ pub(crate) fn banded_finite_difference_jacobian(
     t: f64,
     dt: f64,
     bandwidth: usize,
+    dispatch: &JacobianDispatch,
 ) -> Result<SparseColMat<usize, f64>, OxiflowError> {
     let layout = StateLayout::of(state)?;
     let base = layout.values(state)?;
@@ -354,15 +487,14 @@ pub(crate) fn banded_finite_difference_jacobian(
         rest = tail;
     }
 
-    let mut work = state.clone();
-    for color in colors {
-        let values = layout.values_mut(&mut work)?;
+    try_for_each_with_work(colors, dispatch.is_parallel_for(n), state, |work, color| {
+        let values = layout.values_mut(work)?;
         values.copy_from_slice(base);
         for (j, _) in &color {
             values[layout.storage_index(*j)] += FD_EPSILON;
         }
 
-        let f_c = evaluate_derivative(domain, chain, &mut work, t, dt)?;
+        let f_c = evaluate_derivative(domain, chain, work, t, dt)?;
         let f_c_values = layout.values(&f_c)?;
 
         // The bands of the columns of one color ([j-bandwidth,
@@ -373,7 +505,8 @@ pub(crate) fn banded_finite_difference_jacobian(
                 *entry = (f_c_values[layout.storage_index(i)] - f0_field[i]) / FD_EPSILON;
             }
         }
-    }
+        Ok(())
+    })?;
 
     let symbolic = SymbolicSparseColMat::new_checked(n, n, col_ptr, None, row_idx);
     Ok(SparseColMat::new(symbolic, values))
@@ -387,9 +520,10 @@ pub(crate) fn banded_finite_difference_jacobian(
 /// bandwidth, or a small enough system that the dense path is cheaper
 /// regardless of bandwidth.
 ///
-/// `jacobian_bandwidth`/`sparse_threshold`/`sparse_solver` are supplied by
-/// the caller's own HOW-side configuration (DD-043, amendment 1) — never
-/// read from `Domain` or `PhysicalModel`.
+/// `jacobian_bandwidth`/`sparse_threshold`/`sparse_solver`/`dispatch` are
+/// supplied by the caller's own HOW-side configuration (DD-043, amendment
+/// 1; DT-069) — never read from `Domain` or `PhysicalModel`. `dispatch`
+/// applies to both paths.
 #[cfg(feature = "sparse")]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn theta_method_step_adaptive(
@@ -403,6 +537,7 @@ pub(crate) fn theta_method_step_adaptive(
     sparse_solver: &dyn SparseLinearSolver,
     sparse_threshold: usize,
     jacobian_bandwidth: Option<usize>,
+    dispatch: &JacobianDispatch,
 ) -> Result<ContextValue, OxiflowError> {
     let layout = StateLayout::of(state)?;
     let n = layout.len();
@@ -416,7 +551,7 @@ pub(crate) fn theta_method_step_adaptive(
             // Jacobian frozen at the (now BC-corrected) u^n, evaluated at
             // t + dt — same convention as theta_method_step.
             let mut system_matrix =
-                banded_finite_difference_jacobian(domain, chain, state, t + dt, dt, k)?;
+                banded_finite_difference_jacobian(domain, chain, state, t + dt, dt, k, dispatch)?;
 
             // I - theta*dt*J, folded in place into the values of J. Column j
             // starts at row max(0, j - k) and always holds its diagonal
@@ -436,7 +571,7 @@ pub(crate) fn theta_method_step_adaptive(
             let u_next: DVector<f64> = u_n_field + delta_u;
             layout.rebuild(u_next)
         }
-        _ => theta_method_step(domain, chain, state, t, dt, theta, dense_solver),
+        _ => theta_method_step(domain, chain, state, t, dt, theta, dense_solver, dispatch),
     }
 }
 
@@ -566,7 +701,15 @@ mod tests {
         let chain = build_calculator_chain(&scenario.context_requirements(), &[]).unwrap();
         let state = domain.model.initial_state(domain.mesh.as_ref());
 
-        let jac = finite_difference_jacobian(domain, &chain, &state, 0.0, 0.1).unwrap();
+        let jac = finite_difference_jacobian(
+            domain,
+            &chain,
+            &state,
+            0.0,
+            0.1,
+            &JacobianDispatch::default(),
+        )
+        .unwrap();
 
         assert_eq!(jac.shape(), (nodes * d, nodes * d));
         for row in 0..nodes * d {
@@ -587,6 +730,227 @@ mod tests {
         }
     }
 
+    // ── Jacobian dispatch (DT-069, #198) ─────────────────────────────────────
+
+    /// Dispatch configuration with the given threshold.
+    #[cfg(feature = "parallel")]
+    pub(super) fn dispatch_with_threshold(threshold: usize) -> JacobianDispatch {
+        let dispatch = JacobianDispatch::default();
+        dispatch.set(threshold);
+        dispatch
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn jacobian_dispatch_compares_the_number_of_unknowns_with_its_threshold() {
+        let dispatch = JacobianDispatch::default();
+        let default = default_parallel_threshold();
+        assert_eq!(dispatch.threshold(), default);
+        assert!(!dispatch.is_parallel_for(default - 1));
+        assert!(dispatch.is_parallel_for(default));
+        dispatch.set(3);
+        assert_eq!(dispatch.threshold(), 3);
+        assert!(!dispatch.is_parallel_for(2));
+        assert!(dispatch.is_parallel_for(3));
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    #[should_panic(expected = "parallel threshold must be at least 1")]
+    fn jacobian_dispatch_rejects_a_zero_threshold() {
+        JacobianDispatch::default().set(0);
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    #[test]
+    fn jacobian_dispatch_is_sequential_without_the_parallel_feature() {
+        assert!(!JacobianDispatch::default().is_parallel_for(usize::MAX));
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn dense_jacobian_is_bit_identical_in_sequential_and_parallel_dispatch() {
+        let scenarios = [
+            Scenario::single(Box::new(ExponentialDecay { lambda: 2.0 }), make_mesh(9)),
+            Scenario::single(Box::new(coupled_reaction_diffusion()), make_mesh(6)),
+        ];
+        for scenario in &scenarios {
+            let domain = scenario.single_domain().unwrap();
+            let chain = build_calculator_chain(&scenario.context_requirements(), &[]).unwrap();
+            let state = domain.model.initial_state(domain.mesh.as_ref());
+            let jacobian = |threshold| {
+                let dispatch = dispatch_with_threshold(threshold);
+                finite_difference_jacobian(domain, &chain, &state, 0.0, 0.1, &dispatch).unwrap()
+            };
+            let (parallel, sequential) = (jacobian(1), jacobian(usize::MAX));
+            assert_eq!(parallel.shape(), sequential.shape());
+            assert!(parallel
+                .iter()
+                .zip(sequential.iter())
+                .all(|(a, b)| a.to_bits() == b.to_bits()));
+        }
+    }
+
+    /// `du/dt = -u`, recording at each evaluation whether it ran on a Rayon
+    /// worker thread.
+    #[cfg(feature = "parallel")]
+    #[derive(Debug)]
+    struct WorkerRecorder {
+        on_worker: std::sync::Arc<std::sync::Mutex<Vec<bool>>>,
+    }
+
+    #[cfg(feature = "parallel")]
+    impl RequiresContext for WorkerRecorder {
+        fn required_variables(&self) -> Vec<ContextVariable> {
+            vec![]
+        }
+    }
+
+    #[cfg(feature = "parallel")]
+    impl PhysicalModel for WorkerRecorder {
+        fn compute_physics(
+            &self,
+            state: &ContextValue,
+            _ctx: &ComputeContext,
+        ) -> Result<ContextValue, OxiflowError> {
+            self.on_worker
+                .lock()
+                .unwrap()
+                .push(rayon::current_thread_index().is_some());
+            Ok(ContextValue::ScalarField(
+                state.as_scalar_field()?.map(|v| -v),
+            ))
+        }
+
+        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+        }
+
+        fn name(&self) -> &str {
+            "worker_recorder"
+        }
+    }
+
+    /// Runs `step` once on a domain of `n` unknowns and reports whether any
+    /// derivative evaluation ran on a Rayon worker thread.
+    #[cfg(feature = "parallel")]
+    fn evaluated_on_a_worker(
+        n: usize,
+        step: impl Fn(
+            &Domain,
+            &[&dyn ContextCalculator],
+            &mut ContextValue,
+        ) -> Result<ContextValue, OxiflowError>,
+    ) -> bool {
+        let on_worker = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let model = WorkerRecorder {
+            on_worker: std::sync::Arc::clone(&on_worker),
+        };
+        let scenario = Scenario::single(Box::new(model), make_mesh(n));
+        let domain = scenario.single_domain().unwrap();
+        let chain = build_calculator_chain(&scenario.context_requirements(), &[]).unwrap();
+        let mut state = domain.model.initial_state(domain.mesh.as_ref());
+        step(domain, &chain, &mut state).unwrap();
+        let recorded = on_worker.lock().unwrap();
+        assert!(!recorded.is_empty());
+        recorded.iter().any(|&on_worker| on_worker)
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn implicit_solvers_hand_their_threshold_to_the_jacobian_assembly() {
+        use crate::solver::methods::backward_euler::BackwardEulerSolver;
+        use crate::solver::methods::bdf2::BDF2Solver;
+        use crate::solver::methods::crank_nicolson::CrankNicolsonSolver;
+        use crate::solver::methods::SteppableSolver;
+
+        let n = 8;
+        let history = [ContextValue::ScalarField(DVector::from_element(n, 1.0))];
+        for threshold in [1, usize::MAX] {
+            let parallel = threshold == 1;
+            let be = BackwardEulerSolver::new().with_parallel_threshold(threshold);
+            let cn = CrankNicolsonSolver::new().with_parallel_threshold(threshold);
+            let bdf2 = BDF2Solver::new().with_parallel_threshold(threshold);
+            let cases: [(&str, &dyn SteppableSolver, &[ContextValue]); 4] = [
+                ("Backward Euler", &be, &[]),
+                ("Crank-Nicolson", &cn, &[]),
+                ("BDF2 startup", &bdf2, &[]),
+                ("BDF2 update", &bdf2, &history),
+            ];
+            for (name, solver, history) in cases {
+                let on_worker = evaluated_on_a_worker(n, |domain, chain, state| {
+                    solver.step(domain, chain, state, history, 0.0, 0.1)
+                });
+                assert_eq!(on_worker, parallel, "{name}, threshold {threshold}");
+            }
+
+            #[cfg(feature = "sparse")]
+            {
+                use crate::solver::sparse::FaerSparseSolver;
+                // Banded path: bandwidth declared, sparse threshold 0.
+                let be = BackwardEulerSolver::new()
+                    .with_sparse_solver(Box::new(FaerSparseSolver))
+                    .with_jacobian_bandwidth(1)
+                    .with_sparse_threshold(0)
+                    .with_parallel_threshold(threshold);
+                let cn = CrankNicolsonSolver::new()
+                    .with_sparse_solver(Box::new(FaerSparseSolver))
+                    .with_jacobian_bandwidth(1)
+                    .with_sparse_threshold(0)
+                    .with_parallel_threshold(threshold);
+                let cases: [(&str, &dyn SteppableSolver); 2] = [
+                    ("banded Backward Euler", &be),
+                    ("banded Crank-Nicolson", &cn),
+                ];
+                for (name, solver) in cases {
+                    let on_worker = evaluated_on_a_worker(n, |domain, chain, state| {
+                        solver.step(domain, chain, state, &[], 0.0, 0.1)
+                    });
+                    assert_eq!(on_worker, parallel, "{name}, threshold {threshold}");
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn implicit_solvers_expose_their_jacobian_dispatch_threshold() {
+        use crate::solver::methods::backward_euler::BackwardEulerSolver;
+        use crate::solver::methods::bdf2::BDF2Solver;
+        use crate::solver::methods::crank_nicolson::CrankNicolsonSolver;
+
+        fn check<S>(
+            new: fn() -> S,
+            with: fn(S, usize) -> S,
+            set: fn(&S, usize),
+            get: fn(&S) -> usize,
+        ) {
+            assert_eq!(get(&new()), default_parallel_threshold());
+            let solver = with(new(), 7);
+            assert_eq!(get(&solver), 7);
+            set(&solver, 9);
+            assert_eq!(get(&solver), 9);
+        }
+        check(
+            BackwardEulerSolver::new,
+            BackwardEulerSolver::with_parallel_threshold,
+            BackwardEulerSolver::set_parallel_threshold,
+            BackwardEulerSolver::parallel_threshold,
+        );
+        check(
+            CrankNicolsonSolver::new,
+            CrankNicolsonSolver::with_parallel_threshold,
+            CrankNicolsonSolver::set_parallel_threshold,
+            CrankNicolsonSolver::parallel_threshold,
+        );
+        check(
+            BDF2Solver::new,
+            BDF2Solver::with_parallel_threshold,
+            BDF2Solver::set_parallel_threshold,
+            BDF2Solver::parallel_threshold,
+        );
+    }
+
     #[test]
     fn jacobian_of_linear_decay_is_minus_lambda_identity() {
         let lambda = 2.5;
@@ -596,7 +960,15 @@ mod tests {
         let chain = build_calculator_chain(&requirements, &[]).unwrap();
 
         let state = domain.model.initial_state(domain.mesh.as_ref());
-        let jac = finite_difference_jacobian(domain, &chain, &state, 0.0, 0.1).unwrap();
+        let jac = finite_difference_jacobian(
+            domain,
+            &chain,
+            &state,
+            0.0,
+            0.1,
+            &JacobianDispatch::default(),
+        )
+        .unwrap();
 
         for i in 0..3 {
             for j in 0..3 {
@@ -630,6 +1002,7 @@ mod tests {
             dt,
             1.0,
             &NalgebraDenseSolver,
+            &JacobianDispatch::default(),
         )
         .unwrap();
 
@@ -660,6 +1033,7 @@ mod tests {
             dt,
             0.5,
             &NalgebraDenseSolver,
+            &JacobianDispatch::default(),
         )
         .unwrap();
 
@@ -690,6 +1064,7 @@ mod tests {
             dt,
             1.0,
             &NalgebraDenseSolver,
+            &JacobianDispatch::default(),
         )
         .unwrap();
 
@@ -812,7 +1187,15 @@ mod tests {
         let chain = build_calculator_chain(&requirements, &[]).unwrap();
 
         let state = domain.model.initial_state(domain.mesh.as_ref());
-        let jac = finite_difference_jacobian(domain, &chain, &state, 0.0, 0.01).unwrap();
+        let jac = finite_difference_jacobian(
+            domain,
+            &chain,
+            &state,
+            0.0,
+            0.01,
+            &JacobianDispatch::default(),
+        )
+        .unwrap();
 
         // Column: perturbing the constrained node itself must leave every
         // row's output exactly unchanged -- the perturbation never
@@ -942,10 +1325,25 @@ mod sparse_tests {
         let chain = build_calculator_chain(&scenario.context_requirements(), &[]).unwrap();
         let state = domain.model.initial_state(domain.mesh.as_ref());
 
-        let dense = finite_difference_jacobian(domain, &chain, &state, 0.0, 0.01).unwrap();
-        let banded =
-            banded_finite_difference_jacobian(domain, &chain, &state, 0.0, 0.01, bandwidth)
-                .unwrap();
+        let dense = finite_difference_jacobian(
+            domain,
+            &chain,
+            &state,
+            0.0,
+            0.01,
+            &JacobianDispatch::default(),
+        )
+        .unwrap();
+        let banded = banded_finite_difference_jacobian(
+            domain,
+            &chain,
+            &state,
+            0.0,
+            0.01,
+            bandwidth,
+            &JacobianDispatch::default(),
+        )
+        .unwrap();
         let n = dense.nrows();
         assert_eq!((banded.nrows(), banded.ncols()), (n, n));
 
@@ -983,6 +1381,52 @@ mod sparse_tests {
             make_mesh(12),
         );
         assert_banded_jacobian_equals_dense(&scenario, 1);
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn banded_jacobian_is_bit_identical_in_sequential_and_parallel_dispatch() {
+        use super::tests::{coupled_reaction_diffusion, dispatch_with_threshold};
+
+        let cases = [
+            (
+                Scenario::single(
+                    Box::new(TridiagonalDiffusion { diffusion: 0.7 }),
+                    make_mesh(12),
+                ),
+                1,
+            ),
+            (
+                Scenario::single(Box::new(coupled_reaction_diffusion()), make_mesh(6)),
+                3,
+            ),
+        ];
+        for (scenario, bandwidth) in &cases {
+            let domain = scenario.single_domain().unwrap();
+            let chain = build_calculator_chain(&scenario.context_requirements(), &[]).unwrap();
+            let state = domain.model.initial_state(domain.mesh.as_ref());
+            let jacobian = |threshold| {
+                let dispatch = dispatch_with_threshold(threshold);
+                banded_finite_difference_jacobian(
+                    domain, &chain, &state, 0.0, 0.01, *bandwidth, &dispatch,
+                )
+                .unwrap()
+            };
+            let (parallel, sequential) = (jacobian(1), jacobian(usize::MAX));
+            assert_eq!(
+                parallel.symbolic().col_ptr(),
+                sequential.symbolic().col_ptr()
+            );
+            assert_eq!(
+                parallel.symbolic().row_idx(),
+                sequential.symbolic().row_idx()
+            );
+            assert!(parallel
+                .val()
+                .iter()
+                .zip(sequential.val())
+                .all(|(a, b)| a.to_bits() == b.to_bits()));
+        }
     }
 
     #[test]
@@ -1031,6 +1475,7 @@ mod sparse_tests {
             &PanicIfCalled,
             100,
             None, // no bandwidth declared -> dense path, unconditionally
+            &JacobianDispatch::default(),
         )
         .unwrap();
 
@@ -1042,6 +1487,7 @@ mod sparse_tests {
             0.05,
             1.0,
             &NalgebraDenseSolver,
+            &JacobianDispatch::default(),
         )
         .unwrap();
 
@@ -1083,6 +1529,7 @@ mod sparse_tests {
             &PanicIfCalled,
             100,
             Some(1),
+            &JacobianDispatch::default(),
         )
         .unwrap();
 
@@ -1124,6 +1571,7 @@ mod sparse_tests {
             &FaerSparseSolver,
             10, // sparse_threshold well below n=40
             Some(1),
+            &JacobianDispatch::default(),
         )
         .unwrap();
 
@@ -1135,6 +1583,7 @@ mod sparse_tests {
             dt,
             1.0,
             &NalgebraDenseSolver,
+            &JacobianDispatch::default(),
         )
         .unwrap();
 

@@ -17,6 +17,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the active scalars. Each component gets its own colour map in ParaView,
   values stay bit-for-bit (NaN and infinities included), and the mesh is
   still 1D. `ScalarField` output is byte-for-byte unchanged (#193).
+- With the `parallel` feature, `BackwardEulerSolver`, `CrankNicolsonSolver`
+  and `BDF2Solver` assemble their finite-difference Jacobians through Rayon:
+  one task per column on the dense path, one per colour on the banded path.
+  Each solver has its own dispatch threshold, in unknowns (nodes ×
+  components), configured with `with_parallel_threshold` or
+  `set_parallel_threshold` and read with `parallel_threshold`. The default,
+  256, is indicative: measure the crossover on your workload. Sequential and
+  parallel assembly give bit-for-bit identical Jacobians, and results are
+  unchanged (#199).
 - `ContextCalculator::compute_shared`, a provided method returning
   `Arc<ContextValue>`. The solver now calls it at every derivative
   evaluation. By default it wraps `compute` in an `Arc`, so existing

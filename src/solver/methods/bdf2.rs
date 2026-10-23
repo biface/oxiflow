@@ -67,7 +67,7 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 use crate::solver::methods::implicit::{
-    finite_difference_jacobian, stiff_jacobian_convergence, theta_method_step,
+    finite_difference_jacobian, stiff_jacobian_convergence, theta_method_step, JacobianDispatch,
 };
 use crate::solver::methods::newton::{self, JacobianStrategy, NewtonConvergence};
 use crate::solver::methods::state_layout::StateLayout;
@@ -96,6 +96,11 @@ pub struct BDF2Solver {
     /// Newton iteration budget (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)). Default `1`: exactly the
     /// pre-DD-044 single frozen-Jacobian correction.
     max_newton_iterations: usize,
+    /// Dispatch configuration of the finite-difference Jacobian assembly
+    /// (DT-069, #198), for the startup step and the BDF2 update alike. Its
+    /// threshold exists only with the `parallel` feature — see
+    /// `with_parallel_threshold`.
+    jacobian_dispatch: JacobianDispatch,
 }
 
 impl Default for BDF2Solver {
@@ -105,6 +110,7 @@ impl Default for BDF2Solver {
             newton_convergence: stiff_jacobian_convergence(),
             jacobian_strategy: JacobianStrategy::default(),
             max_newton_iterations: 1,
+            jacobian_dispatch: JacobianDispatch::default(),
         }
     }
 }
@@ -140,6 +146,45 @@ impl BDF2Solver {
     pub fn with_max_newton_iterations(mut self, max_newton_iterations: usize) -> Self {
         self.max_newton_iterations = max_newton_iterations;
         self
+    }
+
+    /// Overrides the Rayon dispatch threshold of the finite-difference
+    /// Jacobian assembly at construction time (DT-069, #198), in unknowns
+    /// (nodes × components). The Jacobian's columns (dense path) or colors
+    /// (banded path) are dispatched through Rayon once the system has at
+    /// least this many unknowns; the Jacobian is bit-for-bit identical
+    /// either way. Only exists when the crate is built with the `parallel`
+    /// feature.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` — see `ParallelThreshold::set`.
+    #[cfg(feature = "parallel")]
+    pub fn with_parallel_threshold(self, threshold: usize) -> Self {
+        self.jacobian_dispatch.set(threshold);
+        self
+    }
+
+    /// Reconfigures the same threshold at runtime, through `&self` — no
+    /// rebuild required. Scoped to this solver instance. Only exists when
+    /// the crate is built with the `parallel` feature.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` — see `ParallelThreshold::set`.
+    #[cfg(feature = "parallel")]
+    pub fn set_parallel_threshold(&self, threshold: usize) {
+        self.jacobian_dispatch.set(threshold);
+    }
+
+    /// Returns the effective dispatch threshold of the Jacobian assembly —
+    /// the override if one was set, otherwise an indicative default of 256
+    /// unknowns, to be replaced by a value measured on the target workload
+    /// (`oxiflow_parallel` benchmarks). Only exists when the crate is built
+    /// with the `parallel` feature.
+    #[cfg(feature = "parallel")]
+    pub fn parallel_threshold(&self) -> usize {
+        self.jacobian_dispatch.threshold()
     }
 }
 
@@ -183,6 +228,7 @@ impl SteppableSolver for BDF2Solver {
                 dt,
                 1.0,
                 self.linear_solver.as_ref(),
+                &self.jacobian_dispatch,
             ),
             Some(u_prev) => bdf2_step_newton(
                 domain,
@@ -195,6 +241,7 @@ impl SteppableSolver for BDF2Solver {
                 self.newton_convergence,
                 self.jacobian_strategy,
                 self.max_newton_iterations,
+                &self.jacobian_dispatch,
             ),
         }
     }
@@ -231,6 +278,7 @@ pub(crate) fn bdf2_step_newton(
     newton_convergence: NewtonConvergence,
     jacobian_strategy: JacobianStrategy,
     max_iterations: usize,
+    dispatch: &JacobianDispatch,
 ) -> Result<ContextValue, OxiflowError> {
     // Applies calculators + BCs to `state` itself (same contract as
     // `theta_method_step_newton`) -- the returned f(u^n) itself isn't
@@ -269,7 +317,7 @@ pub(crate) fn bdf2_step_newton(
         },
         move |candidate: &DVector<f64>| {
             let candidate_state = layout.rebuild(candidate.clone())?;
-            finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt)
+            finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt, dispatch)
         },
         linear_solver,
         &newton::NewtonParams {
@@ -631,6 +679,7 @@ mod tests {
             stiff_jacobian_convergence(),
             JacobianStrategy::default(),
             1,
+            &JacobianDispatch::default(),
         )
         .unwrap_err();
         assert!(matches!(err, OxiflowError::InvalidDomain(_)));
