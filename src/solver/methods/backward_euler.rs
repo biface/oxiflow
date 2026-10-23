@@ -33,7 +33,9 @@ use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 #[cfg(feature = "sparse")]
 use crate::solver::methods::implicit::theta_method_step_adaptive;
-use crate::solver::methods::implicit::{stiff_jacobian_convergence, theta_method_step_newton};
+use crate::solver::methods::implicit::{
+    stiff_jacobian_convergence, theta_method_step_newton, JacobianDispatch,
+};
 use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence};
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
@@ -45,16 +47,22 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust
 /// use oxiflow::solver::methods::backward_euler::BackwardEulerSolver;
 ///
+/// // Dense path (default).
 /// let solver = BackwardEulerSolver::new();
-/// // Sparse backend (v0.6.0, DD-013 second phase, DD-043) — dense path
-/// // stays untouched unless all three are configured explicitly:
-/// // let solver = BackwardEulerSolver::new()
-/// //     .with_jacobian_bandwidth(scheme.stencil_radius())
-/// //     .with_sparse_solver(Box::new(FaerSparseSolver))
-/// //     .with_sparse_threshold(100); // default
+///
+/// // Sparse backend (feature `sparse`, v0.6.0, DD-013 second phase, DD-043):
+/// // the dense path stays untouched unless all three are configured explicitly.
+/// # #[cfg(feature = "sparse")]
+/// # {
+/// use oxiflow::solver::sparse::FaerSparseSolver;
+/// let sparse = BackwardEulerSolver::new()
+///     .with_jacobian_bandwidth(1) // e.g. scheme.stencil_radius()
+///     .with_sparse_solver(Box::new(FaerSparseSolver))
+///     .with_sparse_threshold(100); // default
+/// # }
 /// ```
 pub struct BackwardEulerSolver {
     linear_solver: Box<dyn LinearSolver>,
@@ -73,6 +81,10 @@ pub struct BackwardEulerSolver {
     /// problems. Raise this (and typically pair with
     /// [`JacobianStrategy::FullNewton`]) for genuinely nonlinear models.
     max_newton_iterations: usize,
+    /// Dispatch configuration of the finite-difference Jacobian assembly
+    /// (DT-069, #198). Its threshold exists only with the `parallel`
+    /// feature — see `with_parallel_threshold`.
+    jacobian_dispatch: JacobianDispatch,
     /// Sparse backend (DD-043) — `None` by default: the dense path
     /// ([`theta_method_step_newton`]) is unconditionally used unless this is
     /// explicitly configured via [`Self::with_sparse_solver`]. Not yet
@@ -100,6 +112,7 @@ impl Default for BackwardEulerSolver {
             newton_convergence: stiff_jacobian_convergence(),
             jacobian_strategy: JacobianStrategy::default(),
             max_newton_iterations: 1,
+            jacobian_dispatch: JacobianDispatch::default(),
             #[cfg(feature = "sparse")]
             sparse_solver: None,
             #[cfg(feature = "sparse")]
@@ -142,6 +155,45 @@ impl BackwardEulerSolver {
         self
     }
 
+    /// Overrides the Rayon dispatch threshold of the finite-difference
+    /// Jacobian assembly at construction time (DT-069, #198), in unknowns
+    /// (nodes × components). The Jacobian's columns (dense path) or colors
+    /// (banded path) are dispatched through Rayon once the system has at
+    /// least this many unknowns; the Jacobian is bit-for-bit identical
+    /// either way. Only exists when the crate is built with the `parallel`
+    /// feature.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` — see `ParallelThreshold::set`.
+    #[cfg(feature = "parallel")]
+    pub fn with_parallel_threshold(self, threshold: usize) -> Self {
+        self.jacobian_dispatch.set(threshold);
+        self
+    }
+
+    /// Reconfigures the same threshold at runtime, through `&self` — no
+    /// rebuild required. Scoped to this solver instance. Only exists when
+    /// the crate is built with the `parallel` feature.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` — see `ParallelThreshold::set`.
+    #[cfg(feature = "parallel")]
+    pub fn set_parallel_threshold(&self, threshold: usize) {
+        self.jacobian_dispatch.set(threshold);
+    }
+
+    /// Returns the effective dispatch threshold of the Jacobian assembly —
+    /// the override if one was set, otherwise an indicative default of 256
+    /// unknowns, to be replaced by a value measured on the target workload
+    /// (`oxiflow_parallel` benchmarks). Only exists when the crate is built
+    /// with the `parallel` feature.
+    #[cfg(feature = "parallel")]
+    pub fn parallel_threshold(&self) -> usize {
+        self.jacobian_dispatch.threshold()
+    }
+
     /// Configures the sparse backend (DD-043). Has no effect on its own —
     /// the sparse path also requires [`Self::with_jacobian_bandwidth`] and
     /// a system larger than [`Self::with_sparse_threshold`] (default 100)
@@ -152,8 +204,8 @@ impl BackwardEulerSolver {
         self
     }
 
-    /// System size above which the sparse path is used (default 100) —
-    /// see [`Self::with_sparse_solver`].
+    /// Number of unknowns (nodes × components) above which the sparse path
+    /// is used (default 100) — see [`Self::with_sparse_solver`].
     #[cfg(feature = "sparse")]
     pub fn with_sparse_threshold(mut self, sparse_threshold: usize) -> Self {
         self.sparse_threshold = sparse_threshold;
@@ -162,6 +214,10 @@ impl BackwardEulerSolver {
 
     /// Declares the Jacobian's half-bandwidth (e.g.
     /// `scheme.stencil_radius()`, DD-039) — see [`Self::with_sparse_solver`].
+    ///
+    /// Counted in flat unknowns. For a `ScalarField` state this is the
+    /// stencil half-width `s`; for a `VectorField` state of `d` components,
+    /// whose unknowns are interleaved by node, it is `d·(s + 1) − 1` (#192).
     #[cfg(feature = "sparse")]
     pub fn with_jacobian_bandwidth(mut self, jacobian_bandwidth: usize) -> Self {
         self.jacobian_bandwidth = Some(jacobian_bandwidth);
@@ -211,6 +267,7 @@ impl SteppableSolver for BackwardEulerSolver {
                 sparse_solver.as_ref(),
                 self.sparse_threshold,
                 self.jacobian_bandwidth,
+                &self.jacobian_dispatch,
             ),
             None => theta_method_step_newton(
                 domain,
@@ -223,6 +280,7 @@ impl SteppableSolver for BackwardEulerSolver {
                 self.newton_convergence,
                 self.jacobian_strategy,
                 self.max_newton_iterations,
+                &self.jacobian_dispatch,
             ),
         }
     }
@@ -252,6 +310,7 @@ impl SteppableSolver for BackwardEulerSolver {
             self.newton_convergence,
             self.jacobian_strategy,
             self.max_newton_iterations,
+            &self.jacobian_dispatch,
         )
     }
 }

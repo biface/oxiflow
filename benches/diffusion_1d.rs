@@ -1,12 +1,13 @@
 //! Criterion benchmarks for the 1D diffusion model (#136, feeds #53).
+//! The model comes from `rsc/models/diffusion_1d.rs`, shared with the
+//! example and the analytical test.
 //!
 //! Two distinct measurements, not one:
 //!
 //! - [`full_run`] — the fixed-size performance target from #53's original
 //!   acceptance table ("1D diffusion, 1000 points, 10 000 steps, < 100
 //!   ms"). Criterion itself does not assert against that target -- compare
-//!   the reported mean against it by hand (or from `BENCHMARKS.md`) once
-//!   results are in.
+//!   the reported mean against it by hand once results are in.
 //! - [`laplacian_dispatch`] — parameterized across problem size via
 //!   `BenchmarkId`, sequential vs. parallel forced through the public
 //!   `with_parallel_threshold` API (`usize::MAX` / `1`) on
@@ -17,6 +18,10 @@
 //!   shipped defaults (statistical rigor: warm-up, repeated samples,
 //!   outlier detection -- a single `Instant::now()` pair does not have
 //!   that).
+//! - [`implicit_jacobian_dispatch`] — dispatch of the implicit solvers'
+//!   finite-difference Jacobian assembly (#199), sequential vs. parallel,
+//!   through one Backward Euler step: dense path, and banded path with the
+//!   `sparse` feature.
 
 use std::hint::black_box;
 use std::sync::Arc;
@@ -24,16 +29,13 @@ use std::sync::Arc;
 #[cfg(feature = "parallel")]
 use criterion::BenchmarkId;
 use criterion::Criterion;
+#[cfg(feature = "parallel")]
 use nalgebra::DVector;
 #[cfg(feature = "parallel")]
-use oxiflow::context::ContextCalculator;
+use oxiflow::context::{compute::ComputeContext, value::ContextValue, ContextCalculator};
 use oxiflow::{
-    context::{
-        calculators::FDLaplacianCalculator, compute::ComputeContext, error::OxiflowError,
-        value::ContextValue, variable::ContextVariable,
-    },
+    context::calculators::FDLaplacianCalculator,
     mesh::{Mesh, UniformGrid1D},
-    model::traits::{PhysicalModel, RequiresContext},
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::ForwardEulerSolver,
@@ -42,63 +44,10 @@ use oxiflow::{
     },
 };
 
-fn laplacian_variable() -> ContextVariable {
-    ContextVariable::External {
-        name: "laplacian".into(),
-    }
-}
+#[path = "../rsc/models/diffusion_1d.rs"]
+mod diffusion_1d_model;
 
-/// Same model as `examples/diffusion_1d.rs`/`tests/diffusion_1d_analytical.rs`
-/// -- duplicated here rather than shared, same convention as
-/// `tests/lahar_lake_proto.rs` vs. its example (the model is not part of
-/// the public library API, so there is no single place to import it from).
-struct Diffusion1D {
-    alpha: f64,
-    amplitude: f64,
-    center: f64,
-    sigma0: f64,
-}
-
-impl Diffusion1D {
-    fn exact(&self, x: f64, t: f64) -> f64 {
-        let sigma_t = (self.sigma0.powi(2) + 2.0 * self.alpha * t).sqrt();
-        let envelope = self.amplitude * self.sigma0 / sigma_t;
-        let exponent = -(x - self.center).powi(2) / (2.0 * sigma_t.powi(2));
-        envelope * exponent.exp()
-    }
-}
-
-impl RequiresContext for Diffusion1D {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![laplacian_variable()]
-    }
-}
-
-impl PhysicalModel for Diffusion1D {
-    fn compute_physics(
-        &self,
-        _state: &ContextValue,
-        ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        let lap = ctx.external(laplacian_variable())?.as_scalar_field()?;
-        Ok(ContextValue::ScalarField(lap.map(|v| self.alpha * v)))
-    }
-
-    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        let u0 = DVector::from_iterator(
-            mesh.n_dof(),
-            (0..mesh.n_dof()).map(|i| {
-                let x = mesh.coordinates(i)[0];
-                self.exact(x, 0.0)
-            }),
-        );
-        ContextValue::ScalarField(u0)
-    }
-
-    fn name(&self) -> &str {
-        "diffusion_1d"
-    }
-}
+use diffusion_1d_model::{laplacian_variable, Diffusion1D};
 
 /// #53's original fixed-size target: 1000 points, 10 000 steps, < 100 ms.
 ///
@@ -152,7 +101,7 @@ pub fn laplacian_dispatch(c: &mut Criterion) {
     let ctx = ComputeContext::new(0.0, 1e-4);
     let mut group = c.benchmark_group("diffusion_1d_laplacian_dispatch");
 
-    // Extended past 1e6, then past 1e7 (see BENCHMARKS.md): crossover
+    // Extended past 1e6, then past 1e7 (measured at v0.9.0, #53): crossover
     // confirmed between 1e7 (still 1.02x slower) and 3e7 (1.03x faster),
     // plateauing around 3-4% by 1e8 -- the signature of a
     // memory-bandwidth-bound kernel, not one still climbing toward a
@@ -233,4 +182,76 @@ pub fn raw_rayon_dispatch_diagnostic(c: &mut Criterion) {
         });
     }
     group.finish();
+}
+
+/// Dispatch of the finite-difference Jacobian assembly of the implicit
+/// solvers (#199, DT-069), sequential vs. parallel, through the public
+/// `BackwardEulerSolver::with_parallel_threshold`. What is timed is one
+/// full Backward Euler step: the threshold changes only the Jacobian
+/// assembly, so the difference between the two timings is the assembly's,
+/// while the rest of the step (the linear solve above all, `O(n³)` on the
+/// dense path) is the same in both. The Laplacian calculator is kept
+/// sequential in both, so that only the Jacobian dispatch differs.
+///
+/// Dense path: one task per column. Banded path (`sparse` feature,
+/// bandwidth 1): one task per colour, so at most 3 tasks whatever the
+/// size — measures how much that limited parallelism still gains. Only
+/// exists when the crate is built with the `parallel` feature.
+#[cfg(feature = "parallel")]
+pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
+    use crate::implicit_dispatch::sequential_vs_parallel;
+    use oxiflow::solver::methods::backward_euler::BackwardEulerSolver;
+
+    let mut group = c.benchmark_group("diffusion_1d_implicit_jacobian_dispatch");
+    group.sample_size(20);
+
+    for &n in &[64usize, 128, 256, 512] {
+        let (scenario, config) = one_backward_euler_step(n);
+        sequential_vs_parallel(&mut group, "dense", n, &scenario, &config, |threshold| {
+            BackwardEulerSolver::new().with_parallel_threshold(threshold)
+        });
+    }
+
+    #[cfg(feature = "sparse")]
+    for &n in &[1_000usize, 10_000, 100_000] {
+        use oxiflow::solver::sparse::FaerSparseSolver;
+
+        let (scenario, config) = one_backward_euler_step(n);
+        sequential_vs_parallel(&mut group, "banded", n, &scenario, &config, |threshold| {
+            BackwardEulerSolver::new()
+                .with_sparse_solver(Box::new(FaerSparseSolver))
+                .with_jacobian_bandwidth(1)
+                .with_sparse_threshold(0)
+                .with_parallel_threshold(threshold)
+        });
+    }
+
+    group.finish();
+}
+
+/// Scenario and configuration of a single Backward Euler step on `n`
+/// nodes, with a sequential Laplacian calculator.
+#[cfg(feature = "parallel")]
+fn one_backward_euler_step(n: usize) -> (Scenario, SolverConfiguration) {
+    const DT: f64 = 1e-3;
+
+    let model = Diffusion1D {
+        alpha: 0.01,
+        amplitude: 1.0,
+        center: 0.0,
+        sigma0: 0.05,
+    };
+    let mesh = UniformGrid1D::new(n, -1.0, 1.0).unwrap();
+    let mesh_arc: Arc<dyn Mesh> = Arc::new(UniformGrid1D::new(n, -1.0, 1.0).unwrap());
+
+    let scenario = Scenario::single(Box::new(model), Box::new(mesh));
+    let config = SolverConfiguration::new(
+        TimeConfiguration::new(DT, StepControl::Fixed { dt: DT }),
+        IntegratorKind::BackwardEuler,
+    )
+    .with_calculator(Box::new(
+        FDLaplacianCalculator::new(mesh_arc, laplacian_variable())
+            .with_parallel_threshold(usize::MAX),
+    ));
+    (scenario, config)
 }

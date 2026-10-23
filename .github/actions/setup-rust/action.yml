@@ -1,0 +1,70 @@
+# =============================================================================
+# setup-rust — shared toolchain and cache setup for every oxiflow workflow
+# =============================================================================
+# One convention for all workflows (#184, point 7): the toolchain is installed
+# with the runner's own `rustup`, no third-party toolchain action, and Cargo's
+# build artefacts are cached with Swatinem/rust-cache.
+#
+# The stable toolchain is pinned here, and only here: @biface bumps it by hand
+# when a newer release is worth having. Jobs that need another toolchain (the
+# MSRV job of #168) pass it explicitly. No nightly toolchain is used (decision
+# of 2026-10-18).
+#
+# Caches are saved from `main` only. Every other ref restores the latest `main`
+# cache for its key and leaves it untouched, so feature and sprint branches
+# cannot evict each other's entries from the 10 GB repository quota.
+# =============================================================================
+
+name: Set up Rust
+description: Install a pinned Rust toolchain with rustup, optionally libhdf5, and restore the Cargo cache.
+
+inputs:
+  toolchain:
+    description: Toolchain to install and make the default (a version such as 1.97.1).
+    required: false
+    default: "1.97.1"
+  components:
+    description: Comma-separated rustup components (e.g. "clippy, rustfmt").
+    required: false
+    default: ""
+  hdf5:
+    description: Install libhdf5-dev and pkg-config, needed by the `hdf5` feature (DT-027, #75).
+    required: false
+    default: "false"
+  cache-key:
+    description: Extra cache key, one per job or matrix entry. Empty disables caching.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install system dependencies (HDF5)
+      if: inputs.hdf5 == 'true'
+      shell: sh
+      run: |
+        sudo apt-get update -q
+        sudo apt-get install -y --no-install-recommends libhdf5-dev pkg-config
+
+    - name: Install Rust ${{ inputs.toolchain }}
+      shell: sh
+      env:
+        TOOLCHAIN: ${{ inputs.toolchain }}
+        COMPONENTS: ${{ inputs.components }}
+      run: |
+        set -eu
+        set --
+        for component in $(printf '%s' "$COMPONENTS" | tr ',' ' '); do
+          set -- "$@" --component "$component"
+        done
+        rustup toolchain install "$TOOLCHAIN" --profile minimal --no-self-update "$@"
+        rustup default "$TOOLCHAIN"
+        rustc --version
+        cargo --version
+
+    - name: Restore Cargo cache
+      if: inputs.cache-key != ''
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.cache-key }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}

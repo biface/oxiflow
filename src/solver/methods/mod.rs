@@ -72,6 +72,7 @@ pub mod imex;
 pub mod implicit;
 pub mod newton;
 pub mod rk4;
+mod state_layout;
 pub mod step_control;
 
 pub use backward_euler::BackwardEulerSolver;
@@ -93,6 +94,7 @@ use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
 use crate::solver::scenario::{Domain, Scenario};
+use crate::solver::snapshot::SimulationSnapshot;
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
 /// Applies every boundary condition attached to `domain` to `state`, in
@@ -106,6 +108,8 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// across stages.
 ///
 /// No-op if `domain` has no boundary conditions attached (J1-style scenarios).
+/// Otherwise `state` must be a `ScalarField` — see the *State variants*
+/// section of [`crate::boundary::BoundaryCondition`].
 pub(crate) fn apply_boundary_conditions(
     domain: &Domain,
     state: &mut ContextValue,
@@ -125,6 +129,11 @@ pub(crate) fn apply_boundary_conditions(
 /// order: build `ComputeContext`, run the calculator chain, apply boundary
 /// conditions, then call `compute_physics`.
 ///
+/// Each calculator runs through
+/// [`ContextCalculator::compute_shared`]: a calculator that keeps its value
+/// hands over the same allocation at every evaluation, without a copy
+/// (DT-068, #195).
+///
 /// `state` is mutated in-place by boundary condition application — this is
 /// intentional (see [`apply_boundary_conditions`]) and mirrors the contract
 /// documented on [`crate::boundary::BoundaryCondition::apply`]. Callers pass
@@ -141,13 +150,13 @@ pub(crate) fn evaluate_derivative(
     let mut ctx = ComputeContext::new(t, dt);
 
     for calc in chain {
-        let value = calc
-            .compute(state, &ctx)
-            .map_err(|e| OxiflowError::ComputationFailed {
-                variable: calc.provides(),
-                source: Box::new(e),
-            })?;
-        ctx.insert(calc.provides(), value);
+        let value =
+            calc.compute_shared(state, &ctx)
+                .map_err(|e| OxiflowError::ComputationFailed {
+                    variable: calc.provides(),
+                    source: Box::new(e),
+                })?;
+        ctx.insert_shared(calc.provides(), value);
     }
 
     apply_boundary_conditions(domain, state, &ctx)?;
@@ -155,20 +164,59 @@ pub(crate) fn evaluate_derivative(
     domain.model.compute_physics(state, &ctx)
 }
 
-/// Checks that all nodal values in `state` are finite.
+/// Checks that every value in `state` is finite.
 ///
-/// Shared between integrators — returns `OxiflowError::SolverDivergence` on
-/// the first non-finite value found.
+/// Shared between integrators — returns `OxiflowError::SolverDivergence`
+/// when a NaN or an infinity is found, whatever the numeric variant of the
+/// state: a `VectorField` is checked component by component, like a
+/// `ScalarField` (#192). A `Boolean` state has nothing to check.
 pub(crate) fn check_finite(state: &ContextValue, t: f64) -> Result<(), OxiflowError> {
-    if let Ok(field) = state.as_scalar_field() {
-        if field.iter().any(|v| !v.is_finite()) {
-            return Err(OxiflowError::SolverDivergence {
-                time: t,
-                reason: "non-finite value detected in state vector".into(),
-            });
-        }
+    let finite = match state {
+        ContextValue::Scalar(x) => x.is_finite(),
+        ContextValue::Boolean(_) => true,
+        ContextValue::Vector(v) | ContextValue::ScalarField(v) => v.iter().all(|x| x.is_finite()),
+        ContextValue::Matrix(m) | ContextValue::VectorField(m) => m.iter().all(|x| x.is_finite()),
+    };
+    if finite {
+        Ok(())
+    } else {
+        Err(OxiflowError::SolverDivergence {
+            time: t,
+            reason: "non-finite value detected in state vector".into(),
+        })
     }
-    Ok(())
+}
+
+/// Snapshot handed to [`Solver::on_divergence`] when a run stops on
+/// divergence after `n_steps` steps: the offending `state` at time `t`, the
+/// `error` that stopped the run, and the states saved so far as a partial
+/// result.
+///
+/// Shared by every solver loop (fixed-step, DoPri45, operator splitting) so
+/// that the snapshot contract stays the same everywhere (DD-025, #134).
+pub(crate) fn divergence_snapshot(
+    config: &SolverConfiguration,
+    state: &ContextValue,
+    t: f64,
+    n_steps: usize,
+    error: String,
+    states: &[ContextValue],
+    times: &[f64],
+) -> SimulationSnapshot {
+    SimulationSnapshot {
+        time_config: config.time.clone(),
+        integrator: config.integrator.clone(),
+        state: state.clone(),
+        t,
+        n_steps,
+        error: Some(error),
+        partial: Some(SimulationResult {
+            states: states.to_vec(),
+            times: times.to_vec(),
+            n_steps,
+            metadata: HashMap::new(),
+        }),
+    }
 }
 
 // ── SteppableSolver ───────────────────────────────────────────────────────────
@@ -309,20 +357,15 @@ pub trait SteppableSolver: Solver {
             }
 
             if let Err(e) = check_finite(&u, t_next) {
-                self.on_divergence(&crate::solver::snapshot::SimulationSnapshot {
-                    time_config: config.time.clone(),
-                    integrator: config.integrator.clone(),
-                    state: u.clone(),
-                    t: t_next,
-                    n_steps: step + 1,
-                    error: Some(e.to_string()),
-                    partial: Some(SimulationResult {
-                        states: states.clone(),
-                        times: times.clone(),
-                        n_steps: step + 1,
-                        metadata: HashMap::new(),
-                    }),
-                });
+                self.on_divergence(&divergence_snapshot(
+                    config,
+                    &u,
+                    t_next,
+                    step + 1,
+                    e.to_string(),
+                    &states,
+                    &times,
+                ));
                 return Err(e);
             }
 
@@ -338,5 +381,161 @@ pub trait SteppableSolver: Solver {
             n_steps,
             metadata: HashMap::new(),
         })
+    }
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use nalgebra::{DMatrix, DVector};
+
+    use super::*;
+
+    fn diverges(state: ContextValue) -> bool {
+        matches!(
+            check_finite(&state, 1.5),
+            Err(OxiflowError::SolverDivergence { time, .. }) if time == 1.5
+        )
+    }
+
+    #[test]
+    fn check_finite_accepts_finite_states_of_every_variant() {
+        for state in [
+            ContextValue::Scalar(1.0),
+            ContextValue::Boolean(false),
+            ContextValue::Vector(DVector::from_element(3, 1.0)),
+            ContextValue::Matrix(DMatrix::from_element(2, 2, 1.0)),
+            ContextValue::ScalarField(DVector::from_element(3, 1.0)),
+            ContextValue::VectorField(DMatrix::from_element(3, 2, 1.0)),
+        ] {
+            assert!(check_finite(&state, 0.0).is_ok(), "{state:?}");
+        }
+    }
+
+    #[test]
+    fn check_finite_detects_nan_and_infinity_in_scalar_field() {
+        assert!(diverges(ContextValue::ScalarField(DVector::from_vec(
+            vec![0.0, f64::NAN]
+        ))));
+        assert!(diverges(ContextValue::ScalarField(DVector::from_vec(
+            vec![f64::NEG_INFINITY, 0.0]
+        ))));
+    }
+
+    #[test]
+    fn check_finite_detects_non_finite_value_in_any_vector_field_component() {
+        // Before #192, a VectorField state was never inspected.
+        for (row, col) in [(0, 0), (2, 1)] {
+            let mut m = DMatrix::from_element(3, 2, 1.0);
+            m[(row, col)] = f64::INFINITY;
+            assert!(diverges(ContextValue::VectorField(m)), "({row}, {col})");
+        }
+    }
+
+    #[test]
+    fn check_finite_detects_non_finite_scalar_vector_and_matrix() {
+        assert!(diverges(ContextValue::Scalar(f64::NAN)));
+        assert!(diverges(ContextValue::Vector(DVector::from_vec(vec![
+            f64::INFINITY
+        ]))));
+        assert!(diverges(ContextValue::Matrix(DMatrix::from_element(
+            1,
+            1,
+            f64::NAN
+        ))));
+    }
+
+    #[test]
+    fn divergence_snapshot_carries_state_error_and_partial_result() {
+        use crate::solver::config::{IntegratorKind, StepControl, TimeConfiguration};
+
+        let config = SolverConfiguration::new(
+            TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }),
+            IntegratorKind::Euler,
+        );
+        let state = ContextValue::VectorField(DMatrix::from_element(2, 2, f64::NAN));
+        let saved = vec![ContextValue::VectorField(DMatrix::from_element(2, 2, 1.0))];
+        let snapshot =
+            divergence_snapshot(&config, &state, 0.3, 3, "diverged".into(), &saved, &[0.0]);
+
+        assert_eq!(snapshot.t, 0.3);
+        assert_eq!(snapshot.n_steps, 3);
+        assert_eq!(snapshot.error.as_deref(), Some("diverged"));
+        assert_eq!(snapshot.integrator, IntegratorKind::Euler);
+        assert_eq!(snapshot.time_config.t_end, 1.0);
+        assert!(snapshot.state.as_vector_field().unwrap()[(0, 0)].is_nan());
+        let partial = snapshot.partial.unwrap();
+        assert_eq!(partial.states, saved);
+        assert_eq!(partial.times, vec![0.0]);
+        assert_eq!(partial.n_steps, 3);
+    }
+
+    // ── evaluate_derivative ───────────────────────────────────────────────────
+
+    #[test]
+    fn evaluate_derivative_hands_a_kept_value_to_the_model_without_copy() {
+        use std::sync::{Arc, Mutex};
+
+        use crate::context::calculator::CachedValueCalculator;
+        use crate::context::compute::ComputeContext;
+        use crate::context::variable::ContextVariable;
+        use crate::mesh::{Mesh, UniformGrid1D};
+        use crate::model::{PhysicalModel, RequiresContext};
+
+        /// Records the address of the coefficient it reads at each evaluation.
+        struct AddressRecorder {
+            var: ContextVariable,
+            seen: Arc<Mutex<Vec<usize>>>,
+        }
+
+        impl RequiresContext for AddressRecorder {
+            fn required_variables(&self) -> Vec<ContextVariable> {
+                vec![self.var.clone()]
+            }
+        }
+        impl PhysicalModel for AddressRecorder {
+            fn compute_physics(
+                &self,
+                state: &ContextValue,
+                ctx: &ComputeContext,
+            ) -> Result<ContextValue, OxiflowError> {
+                let coefficient = ctx.external(self.var.clone())?;
+                self.seen
+                    .lock()
+                    .unwrap()
+                    .push(coefficient as *const ContextValue as usize);
+                Ok(state.clone())
+            }
+            fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+                ContextValue::ScalarField(DVector::zeros(mesh.n_dof()))
+            }
+            fn name(&self) -> &str {
+                "address recorder"
+            }
+        }
+
+        let var = ContextVariable::External { name: "c".into() };
+        let calc = CachedValueCalculator {
+            var: var.clone(),
+            value: Arc::new(ContextValue::ScalarField(DVector::from_element(5, 0.5))),
+        };
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let domain = Domain::new(
+            "d",
+            Box::new(AddressRecorder {
+                var,
+                seen: Arc::clone(&seen),
+            }),
+            Box::new(UniformGrid1D::new(5, 0.0, 1.0).unwrap()),
+        );
+        let chain: [&dyn ContextCalculator; 1] = [&calc];
+        let mut state = ContextValue::ScalarField(DVector::zeros(5));
+
+        evaluate_derivative(&domain, &chain, &mut state, 0.0, 0.1).unwrap();
+        evaluate_derivative(&domain, &chain, &mut state, 0.1, 0.1).unwrap();
+
+        let kept = Arc::as_ptr(&calc.value) as usize;
+        assert_eq!(*seen.lock().unwrap(), vec![kept, kept]);
     }
 }

@@ -44,13 +44,20 @@
 //! and `FDLaplacianCalculator`'s `parallel_threshold` field), mirroring how
 //! `SparseLinearSolver`'s threshold (DD-043, #103) lives on the caller rather
 //! than the callee. [`DiscreteOperator::apply`] has no such caller to draw a
-//! value from, so it uses [`default_parallel_threshold`], calibrated
-//! empirically at 49_999: sequential cost of a single stencil evaluation
+//! value from, so it uses `default_parallel_threshold`, an indicative
+//! value of 49_999: sequential cost of a single stencil evaluation
 //! here (2-3 flops) is ~1 ns/node, the same order of magnitude as typical
 //! Rayon dispatch overhead well below that count. This does not transfer
 //! from `chrom-rs`'s threshold of 999, which was calibrated for a much
 //! heavier per-node cost (e.g. an isotherm evaluation) — only the
 //! operation-volume semantics carries over, not the number itself.
+//!
+//! There is no single right threshold. The crossover depends on the model
+//! and its per-node cost, the problem size, how models and calculators are
+//! chained within a time step, and the machine (core count, memory
+//! bandwidth, thermal state) -- see DA-048 and #140. The default is a
+//! starting point; the benchmarks under `benches/` are there to build the
+//! charts that replace it for a given use.
 
 use nalgebra::DVector;
 #[cfg(feature = "parallel")]
@@ -63,8 +70,8 @@ use crate::mesh::Mesh;
 use crate::operators::DiscreteOperator;
 
 /// Default Rayon dispatch threshold for the `compute_from_dx` functions in
-/// this module (DD-014, #51) — see the module documentation for the
-/// empirical justification. Used by [`DiscreteOperator::apply`], which has
+/// this module (DD-014, #51) — an indicative value, see the module
+/// documentation for its reasoning and limits. Used by [`DiscreteOperator::apply`], which has
 /// no per-calculator config to draw a threshold from; calculators
 /// (`FDGradientCalculator`/`FDLaplacianCalculator`) use this as their own
 /// field default but may override it via `with_parallel_threshold`. Gated

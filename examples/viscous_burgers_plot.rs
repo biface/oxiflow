@@ -4,27 +4,18 @@
 //! with the analytical Cole-Hopf traveling-shock solution -- same
 //! convention as `diffusion_1d_plot.rs`.
 //!
-//! Model code duplicated from `examples/viscous_burgers.rs` (same
-//! convention already established for `tests/`/`benches/` -- see that
-//! file's own module doc for the physics and the exact-solution
-//! derivation).
+//! The model comes from `rsc/models/viscous_burgers.rs`, shared with
+//! `examples/viscous_burgers.rs` (see that file's module doc for the
+//! physics and the exact-solution derivation).
 //!
 //! Run with: `cargo run --example viscous_burgers_plot` -- writes
 //! `viscous_burgers.svg` to the working directory.
 
 use std::sync::Arc;
 
-use nalgebra::DVector;
 use oxiflow::{
-    context::{
-        calculators::{FDGradientCalculator, FDLaplacianCalculator, FDScheme},
-        compute::ComputeContext,
-        error::OxiflowError,
-        value::ContextValue,
-        variable::ContextVariable,
-    },
+    context::calculators::{FDGradientCalculator, FDLaplacianCalculator, FDScheme},
     mesh::{Mesh, UniformGrid1D},
-    model::traits::{PhysicalModel, RequiresContext},
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::ForwardEulerSolver,
@@ -34,68 +25,10 @@ use oxiflow::{
 };
 use plotters::prelude::*;
 
-fn laplacian_variable() -> ContextVariable {
-    ContextVariable::External {
-        name: "laplacian".into(),
-    }
-}
+#[path = "../rsc/models/viscous_burgers.rs"]
+mod viscous_burgers_model;
 
-struct ViscousBurgers {
-    nu: f64,
-    u_l: f64,
-    u_r: f64,
-    x0: f64,
-}
-
-impl ViscousBurgers {
-    fn exact(&self, x: f64, t: f64) -> f64 {
-        let speed = (self.u_l + self.u_r) / 2.0;
-        let half_jump = (self.u_l - self.u_r) / 2.0;
-        let arg = (self.u_l - self.u_r) / (4.0 * self.nu) * (x - self.x0 - speed * t);
-        speed - half_jump * arg.tanh()
-    }
-}
-
-impl RequiresContext for ViscousBurgers {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![
-            ContextVariable::SpatialGradient {
-                dimension: 0,
-                component: None,
-            },
-            laplacian_variable(),
-        ]
-    }
-}
-
-impl PhysicalModel for ViscousBurgers {
-    fn compute_physics(
-        &self,
-        state: &ContextValue,
-        ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        let u = state.as_scalar_field()?;
-        let du_dx = ctx.gradient(0)?;
-        let lap = ctx.external(laplacian_variable())?.as_scalar_field()?;
-        let du_dt = -u.component_mul(du_dx) + lap.map(|v| self.nu * v);
-        Ok(ContextValue::ScalarField(du_dt))
-    }
-
-    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        let u0 = DVector::from_iterator(
-            mesh.n_dof(),
-            (0..mesh.n_dof()).map(|i| {
-                let x = mesh.coordinates(i)[0];
-                self.exact(x, 0.0)
-            }),
-        );
-        ContextValue::ScalarField(u0)
-    }
-
-    fn name(&self) -> &str {
-        "viscous_burgers"
-    }
-}
+use viscous_burgers_model::{laplacian_variable, ViscousBurgers};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     const N_NODES: usize = 401;

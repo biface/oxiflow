@@ -32,6 +32,9 @@
 
 use nalgebra::DVector;
 
+use crate::context::error::OxiflowError;
+use crate::context::value::ContextValue;
+
 /// Adaptive step-size controller — error-source-agnostic (see [module
 /// docs](self)).
 #[derive(Debug, Clone)]
@@ -79,6 +82,60 @@ impl StepSizeController {
     /// passing matching vectors — this is an internal helper, not a
     /// public-API boundary that needs to defend against misuse).
     pub fn error_norm(&self, error: &DVector<f64>, reference: &DVector<f64>) -> f64 {
+        self.rms_norm(error.as_slice(), reference.as_slice())
+    }
+
+    /// [`Self::error_norm`] for an error and a reference given as states:
+    /// `ScalarField` or `VectorField`, every value of the state weighing
+    /// the same in the RMS (#192). Reads the values in place, without
+    /// copying them.
+    ///
+    /// # Errors
+    ///
+    /// - `OxiflowError::TypeMismatch` if `error` and `reference` are not
+    ///   the same variant, or neither is `ScalarField`/`VectorField`.
+    /// - `OxiflowError::InvalidDomain` if their shapes differ.
+    pub(crate) fn state_error_norm(
+        &self,
+        error: &ContextValue,
+        reference: &ContextValue,
+    ) -> Result<f64, OxiflowError> {
+        let (e, u) = match (error, reference) {
+            (ContextValue::ScalarField(e), ContextValue::ScalarField(u)) if e.len() == u.len() => {
+                (e.as_slice(), u.as_slice())
+            }
+            (ContextValue::VectorField(e), ContextValue::VectorField(u))
+                if e.shape() == u.shape() =>
+            {
+                (e.as_slice(), u.as_slice())
+            }
+            (ContextValue::ScalarField(e), ContextValue::ScalarField(u)) => {
+                return Err(OxiflowError::InvalidDomain(format!(
+                    "error length {} != reference length {}",
+                    e.len(),
+                    u.len()
+                )))
+            }
+            (ContextValue::VectorField(e), ContextValue::VectorField(u)) => {
+                return Err(OxiflowError::InvalidDomain(format!(
+                    "error shape {:?} != reference shape {:?}",
+                    e.shape(),
+                    u.shape()
+                )))
+            }
+            (e, u) => {
+                return Err(OxiflowError::TypeMismatch {
+                    expected: e.variant_name(),
+                    actual: u.variant_name(),
+                })
+            }
+        };
+        Ok(self.rms_norm(e, u))
+    }
+
+    /// Weighted RMS of `error` against `reference` — see [module
+    /// docs](self).
+    fn rms_norm(&self, error: &[f64], reference: &[f64]) -> f64 {
         let n = error.len().max(1);
         let sum_sq: f64 = error
             .iter()
@@ -250,5 +307,51 @@ mod tests {
 
         assert_eq!(restored.dt_min(), controller.dt_min());
         assert_eq!(restored.prev_error_norm, controller.prev_error_norm);
+    }
+
+    #[test]
+    fn state_error_norm_matches_error_norm_on_scalar_fields() {
+        let c = StepSizeController::new(1e-3, 1e-6, 1e-8, 1.0, 4.0);
+        let e = DVector::from_vec(vec![1e-4, -3e-5, 2e-6]);
+        let u = DVector::from_vec(vec![1.0, 0.5, -2.0]);
+        let from_states = c
+            .state_error_norm(
+                &ContextValue::ScalarField(e.clone()),
+                &ContextValue::ScalarField(u.clone()),
+            )
+            .unwrap();
+        assert_eq!(from_states, c.error_norm(&e, &u));
+    }
+
+    #[test]
+    fn state_error_norm_weighs_every_vector_field_value() {
+        // Same values laid out as 3 nodes × 2 components or flat: same RMS.
+        let c = StepSizeController::new(1e-3, 1e-6, 1e-8, 1.0, 4.0);
+        let e = nalgebra::DMatrix::from_row_slice(3, 2, &[1e-4, 2e-4, -3e-5, 4e-5, 2e-6, -1e-6]);
+        let u = nalgebra::DMatrix::from_row_slice(3, 2, &[1.0, 2.0, 0.5, 0.25, -2.0, 4.0]);
+        let flat = |m: &nalgebra::DMatrix<f64>| DVector::from_column_slice(m.as_slice());
+        let from_states = c
+            .state_error_norm(
+                &ContextValue::VectorField(e.clone()),
+                &ContextValue::VectorField(u.clone()),
+            )
+            .unwrap();
+        assert_eq!(from_states, c.error_norm(&flat(&e), &flat(&u)));
+    }
+
+    #[test]
+    fn state_error_norm_rejects_mismatched_states() {
+        let c = StepSizeController::new(1e-3, 1e-6, 1e-8, 1.0, 4.0);
+        let short = ContextValue::ScalarField(DVector::from_element(2, 0.0));
+        let long = ContextValue::ScalarField(DVector::from_element(3, 0.0));
+        let field = ContextValue::VectorField(nalgebra::DMatrix::zeros(3, 1));
+        assert!(matches!(
+            c.state_error_norm(&short, &long),
+            Err(OxiflowError::InvalidDomain(_))
+        ));
+        assert!(matches!(
+            c.state_error_norm(&long, &field),
+            Err(OxiflowError::TypeMismatch { .. })
+        ));
     }
 }

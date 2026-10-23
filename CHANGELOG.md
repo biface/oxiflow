@@ -7,6 +7,131 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- `SimulationResult::write_vtk` exports a `VectorField` final state (n nodes
+  × d components) as well as a `ScalarField`: one scalar `Float64` point-data
+  array per component, named `field_0` … `field_{d-1}`, the first one being
+  the active scalars. Each component gets its own colour map in ParaView,
+  values stay bit-for-bit (NaN and infinities included), and the mesh is
+  still 1D. `ScalarField` output is byte-for-byte unchanged (#193).
+- With the `parallel` feature, `BackwardEulerSolver`, `CrankNicolsonSolver`
+  and `BDF2Solver` assemble their finite-difference Jacobians through Rayon:
+  one task per column on the dense path, one per colour on the banded path.
+  Each solver has its own dispatch threshold, in unknowns (nodes ×
+  components), configured with `with_parallel_threshold` or
+  `set_parallel_threshold` and read with `parallel_threshold`. The default,
+  256, is indicative: measure the crossover on your workload. Sequential and
+  parallel assembly give bit-for-bit identical Jacobians, and results are
+  unchanged (#199).
+- `benches/oxiflow_parallel`: an `implicit_jacobian_dispatch` diagnostic for
+  `diffusion_1d` (`ScalarField`) and `langmuir_multi` (`VectorField`). It
+  times one Backward Euler step with the Jacobian assembly forced sequential
+  or parallel, on the dense path and, with the `sparse` feature, on the
+  banded path, so that the solvers' dispatch threshold can be measured
+  locally (#199).
+- `ContextCalculator::compute_shared`, a provided method returning
+  `Arc<ContextValue>`. The solver now calls it at every derivative
+  evaluation. By default it wraps `compute` in an `Arc`, so existing
+  calculators are unaffected. A calculator that keeps its value between
+  evaluations overrides it to return a clone of the `Arc` it keeps, and every
+  evaluation then gets the same allocation instead of a copy. An override
+  must return the same value as `compute` (#196).
+
+### Changed
+
+- `ComputeContext` stores its values behind `Arc`. `insert` and the typed
+  accessors keep their signatures and still return references, so models
+  read the context as before (#196).
+- The finite-difference Jacobians of the implicit methods (dense and
+  banded) allocate one work state per Jacobian and perturb it in place,
+  instead of a new copy per column or colour plus, for a `VectorField`
+  state, two transposing copies (one to build the perturbed state, one to
+  read the derivative). The Jacobians are bit-for-bit unchanged (#197).
+- The banded finite-difference Jacobian (`sparse` feature) is assembled
+  directly in compressed-column form: the band structure is built from the
+  system size and the bandwidth, and each column is written once in its
+  final place. The θ-method folds `I − θΔt·J` into it in place. The
+  intermediate list of entries, its conversion to faer triplets and the
+  sort done by `SparseColMat::try_new_from_triplets` are gone. Matrices and
+  steps are bit-for-bit unchanged (#199).
+- `Cargo.toml` sets `autobenches = false`: `oxiflow_parallel` is the only
+  bench target, as intended. Cargo no longer also builds each module of
+  `benches/` as an empty standalone target (#199).
+- **Breaking:** `UniformGrid1D::new` returns `Result<Self, OxiflowError>`
+  (`OxiflowError::PreconditionFailed`, context `"UniformGrid1D"`) instead of
+  `Result<Self, String>`. `?` now works directly in functions returning
+  `OxiflowError`; the `.map_err(OxiflowError::InvalidDomain)` workaround is
+  gone from `examples/lahar_multifield.rs` and its test.
+- Each reference model of the examples, tests and benchmarks (diffusion,
+  viscous Burgers, multi-compound Langmuir, multi-field lahar, lahar–lake)
+  is defined once under `rsc/models/` and included by every target that
+  uses it, instead of up to four copies. Example outputs and test
+  tolerances are unchanged. The `langmuir_multi_plot` example gets back the
+  parallel branch its copy had lost. The dispatch diagnostics of the
+  Langmuir and lahar benchmarks now time the models' own `compute_physics`
+  and `apply` with the threshold forced, instead of partial copies of their
+  loops; their default thresholds stay as measured at v0.9.0. The crate
+  itself and its public API are unchanged (#194).
+- Documentation: `ContextValue::VectorField` holds `d` values per node,
+  either vector components or `d` unknowns unrelated to the mesh dimension;
+  the default dispatch threshold of the finite-difference operators
+  (49 999) is documented as indicative (#140, #194).
+
+### Fixed
+
+- `UniformGrid1D::new` rejects non-finite bounds: a NaN bound used to pass
+  the `x_end > x_start` check and yield a grid of NaN nodes.
+- `FDGradientCalculator` and `FDLaplacianCalculator` return
+  `OxiflowError::PreconditionFailed` from `compute()` on a mesh their
+  stencils cannot handle, instead of a silently wrong field: a mesh that is
+  not 1D, a 1D mesh whose node spacing is not uniform or differs from
+  `characteristic_length()` (relative tolerance `1e-6`), and, for the
+  gradient, a `dimension` beyond the mesh dimension. The check runs once, at
+  construction; `new()` keeps its signature and results on `UniformGrid1D`
+  are unchanged (#186).
+- `DanckwertsInlet::apply` and `DanckwertsOutlet::apply` return
+  `OxiflowError::PreconditionFailed` on a mesh that is not 1D: both locate
+  the boundary by node index (`0` and `n − 1`), which only an ordered 1D grid
+  makes meaningful (#187).
+- Divergence detection covers every numeric state variant. A NaN or an
+  infinity in a `VectorField` state used to go unnoticed: the run ended with
+  `Ok` and non-finite states, and `Solver::on_divergence` was never called.
+  It now raises `OxiflowError::SolverDivergence` with a snapshot, as for a
+  `ScalarField` (#192).
+- `OperatorSplittingSolver::solve` hands a `SimulationSnapshot` to
+  `Solver::on_divergence` before returning `SolverDivergence`, like every
+  other solver. The snapshot is built by one shared helper in all solver
+  loops (#134).
+- Time integrators advance `VectorField` states (n nodes × d components)
+  as they do `ScalarField` states, instead of failing with `TypeMismatch`:
+  `RK4Solver`, `DoPri45Solver` (error norm over every component),
+  `BackwardEulerSolver` and `CrankNicolsonSolver`, dense and banded paths,
+  `BDF2Solver`, and `OperatorSplittingSolver` through its sub-solvers.
+  The implicit solvers order the unknowns of a `VectorField` by node, so
+  `with_jacobian_bandwidth` takes `d·(s + 1) − 1` for `d` components and a
+  stencil of half-width `s`, and `with_sparse_threshold` counts unknowns
+  (nodes × components). `ScalarField` results are bit-identical. Boundary
+  conditions applied through `BoundaryCondition::apply` still take a single
+  field: a `VectorField` state with conditions attached is refused with
+  `TypeMismatch`, as documented; its boundaries go through `ghost_value()`
+  (#192).
+
+### Security
+
+- The `vtk` feature no longer depends on `vtkio`. `SimulationResult::write_vtk`
+  now writes the `.vtu` file itself, with an unchanged signature and the same
+  inline `binary` (base64) data arrays as before, so NaN and infinities in a
+  diverged state are still exported bit for bit. This removes
+  RUSTSEC-2026-0041 (`lz4_flex 0.7.5`), RUSTSEC-2026-0194 and
+  RUSTSEC-2026-0195 (`quick-xml 0.22.0`) from the dependency tree, along with
+  the future-incompatibility warning `nom 3.2.1` raised on builds with `vtk`
+  (#191).
+
+---
+
 ## [0.9.0] - 2026-09-16
 
 ### Added

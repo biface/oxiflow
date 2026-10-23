@@ -8,6 +8,8 @@
 //! avoids a `Cargo.toml` edit each time a new model joins the suite.
 
 mod diffusion_1d;
+#[cfg(feature = "parallel")]
+mod implicit_dispatch;
 mod lahar_multifield;
 mod langmuir_multi;
 mod viscous_burgers;
@@ -20,10 +22,12 @@ criterion_group!(
     diffusion_1d::full_run,
     diffusion_1d::laplacian_dispatch,
     diffusion_1d::raw_rayon_dispatch_diagnostic,
+    diffusion_1d::implicit_jacobian_dispatch,
     viscous_burgers::full_run,
     viscous_burgers::combined_dispatch_diagnostic,
     langmuir_multi::full_run,
     langmuir_multi::row_dispatch_diagnostic,
+    langmuir_multi::implicit_jacobian_dispatch,
     lahar_multifield::full_run,
     lahar_multifield::source_dispatch_diagnostic,
     lahar_multifield::flux_dispatch_diagnostic

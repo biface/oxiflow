@@ -118,9 +118,42 @@ impl Domain {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
+    /// ```rust
+    /// use oxiflow::boundary::{DanckwertsInlet, DanckwertsOutlet};
+    /// use oxiflow::mesh::UniformGrid1D;
+    /// use oxiflow::solver::Domain;
+    /// # use nalgebra::DVector;
+    /// # use oxiflow::context::{ComputeContext, ContextValue, ContextVariable, OxiflowError};
+    /// # use oxiflow::mesh::Mesh;
+    /// # use oxiflow::model::{PhysicalModel, RequiresContext};
+    /// # struct Decay;
+    /// # impl RequiresContext for Decay {
+    /// #     fn required_variables(&self) -> Vec<ContextVariable> { vec![] }
+    /// # }
+    /// # impl PhysicalModel for Decay {
+    /// #     fn compute_physics(
+    /// #         &self,
+    /// #         state: &ContextValue,
+    /// #         _ctx: &ComputeContext,
+    /// #     ) -> Result<ContextValue, OxiflowError> {
+    /// #         Ok(ContextValue::ScalarField(-state.as_scalar_field()?.clone()))
+    /// #     }
+    /// #     fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+    /// #         ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+    /// #     }
+    /// #     fn name(&self) -> &str { "decay" }
+    /// # }
+    /// # let model = Box::new(Decay);
+    /// let mesh = Box::new(UniformGrid1D::new(50, 0.0, 1.0)?);
+    /// let inlet_bc = DanckwertsInlet::new(
+    ///     1e-3, // dispersion
+    ///     0.1,  // velocity
+    ///     ContextVariable::External { name: "feed".into() },
+    /// );
+    /// let outlet_bc = DanckwertsOutlet::new();
     /// let domain = Domain::new("column", model, mesh)
     ///     .with_boundary_conditions(vec![Box::new(inlet_bc), Box::new(outlet_bc)]);
+    /// # Ok::<(), OxiflowError>(())
     /// ```
     pub fn with_boundary_conditions(mut self, bcs: Vec<Box<dyn BoundaryCondition>>) -> Self {
         self.boundary_conditions = bcs;
@@ -243,9 +276,57 @@ impl Scenario {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
+    /// ```rust
+    /// # use oxiflow::context::MultiDomainState;
+    /// # use oxiflow::coupling::{CouplingOperator, Interface};
+    /// use oxiflow::mesh::UniformGrid1D;
+    /// use oxiflow::solver::{Domain, DomainId, Scenario};
+    /// # use nalgebra::DVector;
+    /// # use oxiflow::context::{ComputeContext, ContextValue, ContextVariable, OxiflowError};
+    /// # use oxiflow::mesh::Mesh;
+    /// # use oxiflow::model::{PhysicalModel, RequiresContext};
+    /// # struct Decay;
+    /// # impl RequiresContext for Decay {
+    /// #     fn required_variables(&self) -> Vec<ContextVariable> { vec![] }
+    /// # }
+    /// # impl PhysicalModel for Decay {
+    /// #     fn compute_physics(
+    /// #         &self,
+    /// #         state: &ContextValue,
+    /// #         _ctx: &ComputeContext,
+    /// #     ) -> Result<ContextValue, OxiflowError> {
+    /// #         Ok(ContextValue::ScalarField(-state.as_scalar_field()?.clone()))
+    /// #     }
+    /// #     fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+    /// #         ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+    /// #     }
+    /// #     fn name(&self) -> &str { "decay" }
+    /// # }
+    /// # struct Transfer { interface: Interface }
+    /// # impl RequiresContext for Transfer {
+    /// #     fn required_variables(&self) -> Vec<ContextVariable> { vec![] }
+    /// # }
+    /// # impl CouplingOperator for Transfer {
+    /// #     fn apply(
+    /// #         &self,
+    /// #         states: &MultiDomainState,
+    /// #         _ctx: &ComputeContext,
+    /// #         _interface: &Interface,
+    /// #     ) -> Result<MultiDomainState, OxiflowError> {
+    /// #         Ok(states.clone())
+    /// #     }
+    /// #     fn interface(&self) -> &Interface { &self.interface }
+    /// # }
+    /// let domains = vec![
+    ///     Domain::new("lahar", Box::new(Decay), Box::new(UniformGrid1D::new(20, 0.0, 1.0)?)),
+    ///     Domain::new("lake", Box::new(Decay), Box::new(UniformGrid1D::new(10, 0.0, 1.0)?)),
+    /// ];
+    /// # let my_coupling_op = Transfer {
+    /// #     interface: Interface::new(DomainId::new("lahar"), DomainId::new("lake")),
+    /// # };
     /// let scenario = Scenario::multi(domains)?
     ///     .with_coupling(Box::new(my_coupling_op));
+    /// # Ok::<(), OxiflowError>(())
     /// ```
     pub fn with_coupling(mut self, coupling: Box<dyn CouplingOperator>) -> Self {
         self.interfaces.push(coupling.interface().clone());

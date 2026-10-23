@@ -24,7 +24,35 @@
 //! [`crate::model::CompositeModel`] (DD-037) — already delivered, already
 //! tested, no new trait:
 //!
-//! ```rust,ignore
+//! ```rust
+//! # use std::sync::Arc;
+//! # use oxiflow::mesh::UniformGrid1D;
+//! # use oxiflow::model::{CompositeModel, DiscretizedModel};
+//! # use oxiflow::operators::{fv::FVUpwindFlux, FluxBoundary};
+//! # use nalgebra::DVector;
+//! # use oxiflow::context::{ComputeContext, ContextValue, ContextVariable, OxiflowError};
+//! # use oxiflow::mesh::Mesh;
+//! # use oxiflow::model::{PhysicalModel, RequiresContext};
+//! # struct Decay;
+//! # impl RequiresContext for Decay {
+//! #     fn required_variables(&self) -> Vec<ContextVariable> { vec![] }
+//! # }
+//! # impl PhysicalModel for Decay {
+//! #     fn compute_physics(
+//! #         &self,
+//! #         state: &ContextValue,
+//! #         _ctx: &ComputeContext,
+//! #     ) -> Result<ContextValue, OxiflowError> {
+//! #         Ok(ContextValue::ScalarField(-state.as_scalar_field()?.clone()))
+//! #     }
+//! #     fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+//! #         ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+//! #     }
+//! #     fn name(&self) -> &str { "decay" }
+//! # }
+//! # let scheme = Arc::new(FVUpwindFlux::new(1.0, 0.0, FluxBoundary::Periodic));
+//! # let mesh = Arc::new(UniformGrid1D::new(50, 0.0, 1.0)?);
+//! # let my_source_model = Decay;
 //! let full_model = CompositeModel::new(
 //!     vec![
 //!         Box::new(DiscretizedModel::new(scheme, mesh, "advection")),
@@ -32,6 +60,7 @@
 //!     ],
 //!     "advection_reaction",
 //! )?;
+//! # Ok::<(), OxiflowError>(())
 //! ```
 //!
 //! `Op` is bound to [`FluxDivergenceOperator`] (DD-039), not
