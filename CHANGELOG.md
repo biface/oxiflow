@@ -17,9 +17,19 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the active scalars. Each component gets its own colour map in ParaView,
   values stay bit-for-bit (NaN and infinities included), and the mesh is
   still 1D. `ScalarField` output is byte-for-byte unchanged (#193).
+- `ContextCalculator::compute_shared`, a provided method returning
+  `Arc<ContextValue>`. The solver now calls it at every derivative
+  evaluation. By default it wraps `compute` in an `Arc`, so existing
+  calculators are unaffected. A calculator that keeps its value between
+  evaluations overrides it to return a clone of the `Arc` it keeps, and every
+  evaluation then gets the same allocation instead of a copy. An override
+  must return the same value as `compute` (#196).
 
 ### Changed
 
+- `ComputeContext` stores its values behind `Arc`. `insert` and the typed
+  accessors keep their signatures and still return references, so models
+  read the context as before (#196).
 - **Breaking:** `UniformGrid1D::new` returns `Result<Self, OxiflowError>`
   (`OxiflowError::PreconditionFailed`, context `"UniformGrid1D"`) instead of
   `Result<Self, String>`. `?` now works directly in functions returning

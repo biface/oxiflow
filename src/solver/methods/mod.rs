@@ -129,6 +129,11 @@ pub(crate) fn apply_boundary_conditions(
 /// order: build `ComputeContext`, run the calculator chain, apply boundary
 /// conditions, then call `compute_physics`.
 ///
+/// Each calculator runs through
+/// [`ContextCalculator::compute_shared`]: a calculator that keeps its value
+/// hands over the same allocation at every evaluation, without a copy
+/// (DT-068, #195).
+///
 /// `state` is mutated in-place by boundary condition application — this is
 /// intentional (see [`apply_boundary_conditions`]) and mirrors the contract
 /// documented on [`crate::boundary::BoundaryCondition::apply`]. Callers pass
@@ -145,13 +150,13 @@ pub(crate) fn evaluate_derivative(
     let mut ctx = ComputeContext::new(t, dt);
 
     for calc in chain {
-        let value = calc
-            .compute(state, &ctx)
-            .map_err(|e| OxiflowError::ComputationFailed {
-                variable: calc.provides(),
-                source: Box::new(e),
-            })?;
-        ctx.insert(calc.provides(), value);
+        let value =
+            calc.compute_shared(state, &ctx)
+                .map_err(|e| OxiflowError::ComputationFailed {
+                    variable: calc.provides(),
+                    source: Box::new(e),
+                })?;
+        ctx.insert_shared(calc.provides(), value);
     }
 
     apply_boundary_conditions(domain, state, &ctx)?;
@@ -464,5 +469,73 @@ mod tests {
         assert_eq!(partial.states, saved);
         assert_eq!(partial.times, vec![0.0]);
         assert_eq!(partial.n_steps, 3);
+    }
+
+    // ── evaluate_derivative ───────────────────────────────────────────────────
+
+    #[test]
+    fn evaluate_derivative_hands_a_kept_value_to_the_model_without_copy() {
+        use std::sync::{Arc, Mutex};
+
+        use crate::context::calculator::CachedValueCalculator;
+        use crate::context::compute::ComputeContext;
+        use crate::context::variable::ContextVariable;
+        use crate::mesh::{Mesh, UniformGrid1D};
+        use crate::model::{PhysicalModel, RequiresContext};
+
+        /// Records the address of the coefficient it reads at each evaluation.
+        struct AddressRecorder {
+            var: ContextVariable,
+            seen: Arc<Mutex<Vec<usize>>>,
+        }
+
+        impl RequiresContext for AddressRecorder {
+            fn required_variables(&self) -> Vec<ContextVariable> {
+                vec![self.var.clone()]
+            }
+        }
+        impl PhysicalModel for AddressRecorder {
+            fn compute_physics(
+                &self,
+                state: &ContextValue,
+                ctx: &ComputeContext,
+            ) -> Result<ContextValue, OxiflowError> {
+                let coefficient = ctx.external(self.var.clone())?;
+                self.seen
+                    .lock()
+                    .unwrap()
+                    .push(coefficient as *const ContextValue as usize);
+                Ok(state.clone())
+            }
+            fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+                ContextValue::ScalarField(DVector::zeros(mesh.n_dof()))
+            }
+            fn name(&self) -> &str {
+                "address recorder"
+            }
+        }
+
+        let var = ContextVariable::External { name: "c".into() };
+        let calc = CachedValueCalculator {
+            var: var.clone(),
+            value: Arc::new(ContextValue::ScalarField(DVector::from_element(5, 0.5))),
+        };
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let domain = Domain::new(
+            "d",
+            Box::new(AddressRecorder {
+                var,
+                seen: Arc::clone(&seen),
+            }),
+            Box::new(UniformGrid1D::new(5, 0.0, 1.0).unwrap()),
+        );
+        let chain: [&dyn ContextCalculator; 1] = [&calc];
+        let mut state = ContextValue::ScalarField(DVector::zeros(5));
+
+        evaluate_derivative(&domain, &chain, &mut state, 0.0, 0.1).unwrap();
+        evaluate_derivative(&domain, &chain, &mut state, 0.1, 0.1).unwrap();
+
+        let kept = Arc::as_ptr(&calc.value) as usize;
+        assert_eq!(*seen.lock().unwrap(), vec![kept, kept]);
     }
 }

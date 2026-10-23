@@ -15,8 +15,16 @@
 //!   with `ContextValue::ScalarField`. The model indexes the node it needs.
 //! - `external(var)` takes a typed `ContextVariable` — no `&str` shortcut that
 //!   would bypass the type system.
+//!
+//! ## Shared values (DT-068, #195)
+//!
+//! Values are stored behind `Arc`. A calculator that keeps a value between
+//! evaluations hands it over through
+//! [`ContextCalculator::compute_shared`](crate::context::calculator::ContextCalculator::compute_shared)
+//! without copying it; the accessors still return plain references.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use nalgebra::{DMatrix, DVector};
 
@@ -51,7 +59,8 @@ pub struct ComputeContext {
     /// Current time step `dt`.
     time_step: f64,
     /// Resolved context variables, keyed by typed `ContextVariable`.
-    variables: HashMap<ContextVariable, ContextValue>,
+    /// Shared so that a calculator can hand over a value it keeps (DT-068).
+    variables: HashMap<ContextVariable, Arc<ContextValue>>,
 }
 
 impl ComputeContext {
@@ -71,6 +80,15 @@ impl ComputeContext {
     /// Called by the solver after each calculator runs. Overwrites any previous
     /// value for the same key.
     pub fn insert(&mut self, var: ContextVariable, value: ContextValue) {
+        self.insert_shared(var, Arc::new(value));
+    }
+
+    /// Inserts a shared value without copying it.
+    ///
+    /// Used by the solver with the result of
+    /// [`ContextCalculator::compute_shared`](crate::context::calculator::ContextCalculator::compute_shared).
+    /// Overwrites any previous value for the same key.
+    pub(crate) fn insert_shared(&mut self, var: ContextVariable, value: Arc<ContextValue>) {
         self.variables.insert(var, value);
     }
 
@@ -153,7 +171,7 @@ impl ComputeContext {
     ///
     /// Non-failing alternative to the typed accessors — use for optional variables.
     pub fn try_get(&self, var: ContextVariable) -> Option<&ContextValue> {
-        self.variables.get(&var)
+        self.variables.get(&var).map(Arc::as_ref)
     }
 
     // ── Internal helper ───────────────────────────────────────────────────────
@@ -161,6 +179,7 @@ impl ComputeContext {
     fn get_value(&self, var: &ContextVariable) -> Result<&ContextValue, OxiflowError> {
         self.variables
             .get(var)
+            .map(Arc::as_ref)
             .ok_or_else(|| OxiflowError::MissingCalculator(var.clone()))
     }
 }
@@ -437,5 +456,33 @@ mod tests {
         ctx.insert(var.clone(), ContextValue::Scalar(1.0));
         ctx.insert(var.clone(), ContextValue::Scalar(2.0));
         assert_eq!(ctx.scalar(var).unwrap(), 2.0);
+    }
+
+    // ── insert_shared ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn insert_shared_stores_the_given_allocation() {
+        let mut ctx = ComputeContext::new(0.0, 0.01);
+        let var = ContextVariable::External { name: "c".into() };
+        let value = Arc::new(ContextValue::ScalarField(DVector::from_element(4, 2.0)));
+        ctx.insert_shared(var.clone(), Arc::clone(&value));
+
+        let read = ctx.try_get(var.clone()).unwrap();
+        assert!(std::ptr::eq(read, Arc::as_ptr(&value)));
+        assert!(std::ptr::eq(
+            ctx.external(var).unwrap(),
+            Arc::as_ptr(&value)
+        ));
+        // The context and the caller each hold one reference.
+        assert_eq!(Arc::strong_count(&value), 2);
+    }
+
+    #[test]
+    fn insert_shared_overwrites_a_value_inserted_by_insert() {
+        let mut ctx = ComputeContext::new(0.0, 0.01);
+        let var = ContextVariable::External { name: "x".into() };
+        ctx.insert(var.clone(), ContextValue::Scalar(1.0));
+        ctx.insert_shared(var.clone(), Arc::new(ContextValue::Scalar(3.0)));
+        assert_eq!(ctx.scalar(var).unwrap(), 3.0);
     }
 }
