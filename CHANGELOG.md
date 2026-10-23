@@ -30,6 +30,11 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `ComputeContext` stores its values behind `Arc`. `insert` and the typed
   accessors keep their signatures and still return references, so models
   read the context as before (#196).
+- The finite-difference Jacobians of the implicit methods (dense and
+  banded) allocate one work state per Jacobian and perturb it in place,
+  instead of a new copy per column or colour plus, for a `VectorField`
+  state, two transposing copies (one to build the perturbed state, one to
+  read the derivative). The Jacobians are bit-for-bit unchanged (#197).
 - **Breaking:** `UniformGrid1D::new` returns `Result<Self, OxiflowError>`
   (`OxiflowError::PreconditionFailed`, context `"UniformGrid1D"`) instead of
   `Result<Self, String>`. `?` now works directly in functions returning

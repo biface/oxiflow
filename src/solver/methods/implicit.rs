@@ -111,6 +111,12 @@ const FD_EPSILON: f64 = 1e-7;
 /// Rows and columns follow the flat ordering of [`StateLayout`]: for a
 /// `VectorField` state, unknowns are interleaved by node (#192).
 ///
+/// One work state is allocated per Jacobian and refilled from `state`
+/// before each column, then perturbed in place (#197): the boundary
+/// conditions modify the evaluated state in place and do not report which
+/// nodes they changed, so a full refill per column is needed, but no
+/// allocation is.
+///
 /// See [boundary conditions × the perturbed Jacobian](self#boundary-conditions--the-perturbed-jacobian).
 pub(crate) fn finite_difference_jacobian(
     domain: &Domain,
@@ -120,25 +126,26 @@ pub(crate) fn finite_difference_jacobian(
     dt: f64,
 ) -> Result<DMatrix<f64>, OxiflowError> {
     let layout = StateLayout::of(state)?;
-    let base_field = layout.flatten(state)?.into_owned();
-    let n = base_field.len();
+    let base = layout.values(state)?;
+    let n = layout.len();
 
     let mut base_state = state.clone();
     let f0 = evaluate_derivative(domain, chain, &mut base_state, t, dt)?;
     let f0_field = layout.flatten(&f0)?.into_owned();
 
     let mut jacobian = DMatrix::<f64>::zeros(n, n);
+    let mut work = state.clone();
 
     for j in 0..n {
-        let mut perturbed_field = base_field.clone();
-        perturbed_field[j] += FD_EPSILON;
-        let mut perturbed_state = layout.rebuild(perturbed_field)?;
+        let values = layout.values_mut(&mut work)?;
+        values.copy_from_slice(base);
+        values[layout.storage_index(j)] += FD_EPSILON;
 
-        let f_j = evaluate_derivative(domain, chain, &mut perturbed_state, t, dt)?;
-        let f_j_field = layout.flatten(&f_j)?;
+        let f_j = evaluate_derivative(domain, chain, &mut work, t, dt)?;
+        let f_j_values = layout.values(&f_j)?;
 
         for i in 0..n {
-            jacobian[(i, j)] = (f_j_field[i] - f0_field[i]) / FD_EPSILON;
+            jacobian[(i, j)] = (f_j_values[layout.storage_index(i)] - f0_field[i]) / FD_EPSILON;
         }
     }
 
@@ -289,8 +296,7 @@ pub(crate) fn theta_method_step_newton(
 /// A single Jacobian entry: `(row, col, value)` — one nonzero of `∂f/∂u`
 /// within the band, as produced by [`banded_jacobian_entries`]. Not yet a
 /// `faer` triplet: callers convert only when they actually need the
-/// sparse matrix type (see [`banded_finite_difference_jacobian`] and
-/// [`theta_method_step_adaptive`]), rather than paying that conversion
+/// sparse matrix type (see [`theta_method_step_adaptive`]), rather than paying that conversion
 /// cost inside the assembly loop itself.
 #[cfg(feature = "sparse")]
 type SparseEntry = (usize, usize, f64);
@@ -318,6 +324,9 @@ type BandedJacobianResult = Result<(usize, Vec<SparseEntry>), OxiflowError>;
 /// (`I - theta*dt*J`, see [`theta_method_step_adaptive`]) can fold the
 /// identity in before building the sparse type once, rather than building
 /// the raw Jacobian in sparse form only to rebuild it again.
+///
+/// Like [`finite_difference_jacobian`], one work state is refilled and
+/// perturbed in place for each color (#197).
 #[cfg(feature = "sparse")]
 pub(crate) fn banded_jacobian_entries(
     domain: &Domain,
@@ -328,8 +337,8 @@ pub(crate) fn banded_jacobian_entries(
     bandwidth: usize,
 ) -> BandedJacobianResult {
     let layout = StateLayout::of(state)?;
-    let base_field = layout.flatten(state)?.into_owned();
-    let n = base_field.len();
+    let base = layout.values(state)?;
+    let n = layout.len();
 
     let mut base_state = state.clone();
     let f0 = evaluate_derivative(domain, chain, &mut base_state, t, dt)?;
@@ -337,31 +346,30 @@ pub(crate) fn banded_jacobian_entries(
 
     let n_colors = 2 * bandwidth + 1;
     let mut triplets = Vec::new();
+    let mut work = state.clone();
 
-    for color in 0..n_colors {
-        let columns: Vec<usize> = (color..n).step_by(n_colors).collect();
-        if columns.is_empty() {
-            continue;
+    // Colors from `n` on have no column.
+    for color in 0..n_colors.min(n) {
+        let columns = (color..n).step_by(n_colors);
+
+        let values = layout.values_mut(&mut work)?;
+        values.copy_from_slice(base);
+        for j in columns.clone() {
+            values[layout.storage_index(j)] += FD_EPSILON;
         }
 
-        let mut perturbed_field = base_field.clone();
-        for &j in &columns {
-            perturbed_field[j] += FD_EPSILON;
-        }
-        let mut perturbed_state = layout.rebuild(perturbed_field)?;
-
-        let f_c = evaluate_derivative(domain, chain, &mut perturbed_state, t, dt)?;
-        let f_c_field = layout.flatten(&f_c)?;
+        let f_c = evaluate_derivative(domain, chain, &mut work, t, dt)?;
+        let f_c_values = layout.values(&f_c)?;
 
         // Columns of the same color are spaced `n_colors > 2*bandwidth`
         // apart, so their bands ([j-bandwidth, j+bandwidth]) never
         // overlap — each perturbed row's response is attributable to
         // exactly one column, no disambiguation needed.
-        for &j in &columns {
+        for j in columns {
             let lo = j.saturating_sub(bandwidth);
             let hi = (j + bandwidth + 1).min(n);
             for i in lo..hi {
-                let deriv = (f_c_field[i] - f0_field[i]) / FD_EPSILON;
+                let deriv = (f_c_values[layout.storage_index(i)] - f0_field[i]) / FD_EPSILON;
                 triplets.push((i, j, deriv));
             }
         }
@@ -372,13 +380,11 @@ pub(crate) fn banded_jacobian_entries(
 
 /// [`banded_jacobian_entries`], assembled into a `faer` sparse matrix.
 ///
-/// Kept separate from [`banded_jacobian_entries`] for dense/sparse parity
-/// testing against [`finite_difference_jacobian`] — see the test module.
-// TODO(v0.6.0): wire in once BackwardEulerSolver/CrankNicolsonSolver
-// select the banded path in practice (DD-043) — currently only exercised
-// by the dense/sparse parity test.
-#[allow(dead_code)]
-#[cfg(feature = "sparse")]
+/// Its only caller for now is the dense/sparse parity test, which compares
+/// the matrix it returns with [`finite_difference_jacobian`]; hence the
+/// `test` gate. #199 makes it the single banded assembler, called by
+/// [`theta_method_step_adaptive`], and lifts that gate.
+#[cfg(all(test, feature = "sparse"))]
 pub(crate) fn banded_finite_difference_jacobian(
     domain: &Domain,
     chain: &[&dyn ContextCalculator],
@@ -521,6 +527,106 @@ mod tests {
 
     fn make_mesh(n: usize) -> Box<dyn Mesh> {
         Box::new(UniformGrid1D::new(n, 0.0, 1.0).unwrap())
+    }
+
+    /// Two-component `VectorField` model: a reaction matrix couples the
+    /// components of each node, and each component diffuses to its
+    /// neighbours (zero outside the domain). Affine in `u`. In the
+    /// node-interleaved order its Jacobian has half-bandwidth
+    /// `d·(s + 1) − 1 = 3` (d = 2, s = 1). Also used by `sparse_tests`.
+    #[derive(Debug)]
+    pub(super) struct CoupledReactionDiffusion {
+        pub(super) reaction: [[f64; 2]; 2],
+        pub(super) diffusion: f64,
+    }
+
+    impl CoupledReactionDiffusion {
+        pub(super) const COMPONENTS: usize = 2;
+
+        /// Exact Jacobian entry between unknown `(node, component)` pairs.
+        fn exact_entry(&self, (i, c): (usize, usize), (m, k): (usize, usize)) -> f64 {
+            let reaction = if m == i { self.reaction[c][k] } else { 0.0 };
+            let diffusion = match (k == c, i.abs_diff(m)) {
+                (true, 0) => -2.0 * self.diffusion,
+                (true, 1) => self.diffusion,
+                _ => 0.0,
+            };
+            reaction + diffusion
+        }
+    }
+
+    impl RequiresContext for CoupledReactionDiffusion {
+        fn required_variables(&self) -> Vec<ContextVariable> {
+            vec![]
+        }
+    }
+
+    impl PhysicalModel for CoupledReactionDiffusion {
+        fn compute_physics(
+            &self,
+            state: &ContextValue,
+            _ctx: &ComputeContext,
+        ) -> Result<ContextValue, OxiflowError> {
+            let u = state.as_vector_field()?;
+            let n = u.nrows();
+            let out = DMatrix::from_fn(n, Self::COMPONENTS, |i, c| {
+                let reaction = self.reaction[c][0] * u[(i, 0)] + self.reaction[c][1] * u[(i, 1)];
+                let left = if i > 0 { u[(i - 1, c)] } else { 0.0 };
+                let right = if i + 1 < n { u[(i + 1, c)] } else { 0.0 };
+                reaction + self.diffusion * (left - 2.0 * u[(i, c)] + right)
+            });
+            Ok(ContextValue::VectorField(out))
+        }
+
+        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+            ContextValue::VectorField(DMatrix::from_fn(mesh.n_dof(), Self::COMPONENTS, |i, c| {
+                1.0 + 0.1 * i as f64 - 0.3 * c as f64
+            }))
+        }
+
+        fn name(&self) -> &str {
+            "coupled_reaction_diffusion_test"
+        }
+    }
+
+    pub(super) fn coupled_reaction_diffusion() -> CoupledReactionDiffusion {
+        CoupledReactionDiffusion {
+            reaction: [[-1.5, 0.4], [0.7, -0.9]],
+            diffusion: 0.6,
+        }
+    }
+
+    #[test]
+    fn jacobian_of_a_vector_field_follows_the_node_interleaved_order() {
+        let nodes = 5;
+        let d = CoupledReactionDiffusion::COMPONENTS;
+        let model = coupled_reaction_diffusion();
+        let expected =
+            |row: usize, col: usize| model.exact_entry((row / d, row % d), (col / d, col % d));
+        let scenario = Scenario::single(Box::new(coupled_reaction_diffusion()), make_mesh(nodes));
+        let domain = scenario.single_domain().unwrap();
+        let chain = build_calculator_chain(&scenario.context_requirements(), &[]).unwrap();
+        let state = domain.model.initial_state(domain.mesh.as_ref());
+
+        let jac = finite_difference_jacobian(domain, &chain, &state, 0.0, 0.1).unwrap();
+
+        assert_eq!(jac.shape(), (nodes * d, nodes * d));
+        for row in 0..nodes * d {
+            for col in 0..nodes * d {
+                let exact = expected(row, col);
+                if exact == 0.0 {
+                    // The perturbed unknown does not enter this row: same
+                    // inputs, same operations, hence exactly zero.
+                    assert_eq!(jac[(row, col)], 0.0, "({row}, {col})");
+                } else {
+                    assert!(
+                        (jac[(row, col)] - exact).abs() < 1e-6,
+                        "({row}, {col}): {} vs {exact}",
+                        jac[(row, col)]
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -864,46 +970,71 @@ mod sparse_tests {
         Box::new(UniformGrid1D::new(n, 0.0, 1.0).unwrap())
     }
 
-    #[test]
-    fn banded_jacobian_entries_match_dense_jacobian() {
-        let n = 12;
-        let scenario = Scenario::single(
-            Box::new(TridiagonalDiffusion { diffusion: 0.7 }),
-            make_mesh(n),
-        );
+    /// Builds the dense Jacobian and the banded one of `scenario` at its
+    /// initial state, and checks that they are equal bit for bit.
+    ///
+    /// Inside the band, a row of a color evaluation reads exactly the
+    /// unknowns it reads in the dense evaluation of that column (the other
+    /// perturbed columns of the color are outside its stencil), so every
+    /// entry is computed from the same operands with the same operations.
+    /// Outside the band the dense entries are exactly zero for the same
+    /// reason, and the banded matrix stores nothing.
+    fn assert_banded_jacobian_equals_dense(scenario: &Scenario, bandwidth: usize) {
         let domain = scenario.single_domain().unwrap();
-        let requirements = scenario.context_requirements();
-        let chain = build_calculator_chain(&requirements, &[]).unwrap();
+        let chain = build_calculator_chain(&scenario.context_requirements(), &[]).unwrap();
         let state = domain.model.initial_state(domain.mesh.as_ref());
 
         let dense = finite_difference_jacobian(domain, &chain, &state, 0.0, 0.01).unwrap();
-        let (n_check, banded_triplets) =
-            banded_jacobian_entries(domain, &chain, &state, 0.0, 0.01, 1).unwrap();
-        assert_eq!(n_check, n);
+        let banded =
+            banded_finite_difference_jacobian(domain, &chain, &state, 0.0, 0.01, bandwidth)
+                .unwrap();
+        let n = dense.nrows();
+        assert_eq!((banded.nrows(), banded.ncols()), (n, n));
 
-        // Every banded entry must match the corresponding dense entry.
-        for (i, j, v) in &banded_triplets {
-            assert!(
-                (dense[(*i, *j)] - v).abs() < 1e-6,
-                "mismatch at ({i},{j}): dense={}, banded={v}",
-                dense[(*i, *j)]
+        let mut stored = 0;
+        for entry in banded.as_ref().triplet_iter() {
+            let (i, j) = (entry.row, entry.col);
+            assert!(i.abs_diff(j) <= bandwidth, "({i},{j}) outside the band");
+            assert_eq!(
+                entry.val.to_bits(),
+                dense[(i, j)].to_bits(),
+                "({i},{j}): banded {} vs dense {}",
+                entry.val,
+                dense[(i, j)]
             );
+            stored += 1;
         }
+        let band_size: usize = (0..n)
+            .map(|j| (j + bandwidth + 1).min(n) - j.saturating_sub(bandwidth))
+            .sum();
+        assert_eq!(stored, band_size);
 
-        // Every dense entry outside the band must be (near) zero — a
-        // genuinely tridiagonal problem has no coupling beyond bandwidth 1,
-        // so nothing should be missing from the banded set that matters.
         for i in 0..n {
             for j in 0..n {
-                if i.abs_diff(j) > 1 {
-                    assert!(
-                        dense[(i, j)].abs() < 1e-6,
-                        "unexpected nonzero outside the band at ({i},{j}): {}",
-                        dense[(i, j)]
-                    );
+                if i.abs_diff(j) > bandwidth {
+                    assert_eq!(dense[(i, j)], 0.0, "dense ({i},{j}) outside the band");
                 }
             }
         }
+    }
+
+    #[test]
+    fn banded_jacobian_equals_dense_jacobian_on_a_scalar_field() {
+        let scenario = Scenario::single(
+            Box::new(TridiagonalDiffusion { diffusion: 0.7 }),
+            make_mesh(12),
+        );
+        assert_banded_jacobian_equals_dense(&scenario, 1);
+    }
+
+    #[test]
+    fn banded_jacobian_equals_dense_jacobian_on_a_vector_field() {
+        let scenario = Scenario::single(
+            Box::new(super::tests::coupled_reaction_diffusion()),
+            make_mesh(6),
+        );
+        // d·(s + 1) − 1 with d = 2 components and a stencil of half-width 1.
+        assert_banded_jacobian_equals_dense(&scenario, 3);
     }
 
     #[test]
