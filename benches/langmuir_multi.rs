@@ -14,6 +14,10 @@
 //!   diffusion_1d/viscous_burgers, no single calculator call dominates
 //!   here, so calibrating a calculator's own dispatch (as those two did)
 //!   would not measure anything representative of this model.
+//! - [`implicit_jacobian_dispatch`] — dispatch of the implicit solvers'
+//!   finite-difference Jacobian assembly (#199) on a `VectorField` state,
+//!   sequential vs. parallel, through one Backward Euler step: dense path,
+//!   and banded path with the `sparse` feature.
 
 use std::hint::black_box;
 
@@ -138,4 +142,89 @@ pub fn row_dispatch_diagnostic(c: &mut Criterion) {
         });
     }
     group.finish();
+}
+
+/// Dispatch of the finite-difference Jacobian assembly of the implicit
+/// solvers (#199, DT-069) on a `VectorField` state, sequential vs.
+/// parallel, through the public `BackwardEulerSolver::with_parallel_threshold`.
+/// Same principle as `diffusion_1d::implicit_jacobian_dispatch`: one full
+/// Backward Euler step is timed, and the model's row loop and the gradient
+/// calculators are kept sequential in both, so that only the Jacobian
+/// dispatch differs. Sizes are node counts; the system has
+/// `n_species` times as many unknowns.
+///
+/// Banded path (`sparse` feature): half-bandwidth `d·(s + 1) − 1` for `d`
+/// species and the backward stencil (`s = 1`), so `2·(2d − 1) + 1` colours,
+/// that is as many tasks. Only exists when the crate is built with the
+/// `parallel` feature.
+#[cfg(feature = "parallel")]
+pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
+    use crate::implicit_dispatch::sequential_vs_parallel;
+    use oxiflow::solver::methods::backward_euler::BackwardEulerSolver;
+
+    let mut group = c.benchmark_group("langmuir_multi_implicit_jacobian_dispatch");
+    group.sample_size(20);
+
+    for &n_points in &[32usize, 64, 128, 256] {
+        let (scenario, config, _) = one_backward_euler_step(n_points);
+        sequential_vs_parallel(
+            &mut group,
+            "dense",
+            n_points,
+            &scenario,
+            &config,
+            |threshold| BackwardEulerSolver::new().with_parallel_threshold(threshold),
+        );
+    }
+
+    #[cfg(feature = "sparse")]
+    for &n_points in &[1_000usize, 10_000, 50_000] {
+        use oxiflow::solver::sparse::FaerSparseSolver;
+
+        let (scenario, config, bandwidth) = one_backward_euler_step(n_points);
+        sequential_vs_parallel(
+            &mut group,
+            "banded",
+            n_points,
+            &scenario,
+            &config,
+            |threshold| {
+                BackwardEulerSolver::new()
+                    .with_sparse_solver(Box::new(FaerSparseSolver))
+                    .with_jacobian_bandwidth(bandwidth)
+                    .with_sparse_threshold(0)
+                    .with_parallel_threshold(threshold)
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Scenario and configuration of a single Backward Euler step on
+/// `n_points` nodes, with the model's row loop and the gradient
+/// calculators kept sequential, and the Jacobian half-bandwidth.
+#[cfg(feature = "parallel")]
+fn one_backward_euler_step(n_points: usize) -> (Scenario, SolverConfiguration, usize) {
+    let dt = TOTAL_TIME / N_STEPS as f64;
+    let mut model = make_model(COLUMN_LENGTH / (n_points as f64 - 1.0));
+    model.parallel_threshold = usize::MAX;
+    let n_species = model.n_species();
+
+    let mut config = SolverConfiguration::new(
+        TimeConfiguration::new(dt, StepControl::Fixed { dt }),
+        IntegratorKind::BackwardEuler,
+    );
+    for i in 0..n_species {
+        let mesh_arc: Arc<dyn Mesh> =
+            Arc::new(UniformGrid1D::new(n_points, 0.0, COLUMN_LENGTH).unwrap());
+        config = config.with_calculator(Box::new(
+            FDGradientCalculator::new(mesh_arc, 0, Some(i), FDScheme::Backward)
+                .with_parallel_threshold(usize::MAX),
+        ));
+    }
+
+    let mesh = UniformGrid1D::new(n_points, 0.0, COLUMN_LENGTH).unwrap();
+    let scenario = Scenario::single(Box::new(model), Box::new(mesh));
+    (scenario, config, 2 * n_species - 1)
 }

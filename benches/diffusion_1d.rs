@@ -18,6 +18,10 @@
 //!   shipped defaults (statistical rigor: warm-up, repeated samples,
 //!   outlier detection -- a single `Instant::now()` pair does not have
 //!   that).
+//! - [`implicit_jacobian_dispatch`] — dispatch of the implicit solvers'
+//!   finite-difference Jacobian assembly (#199), sequential vs. parallel,
+//!   through one Backward Euler step: dense path, and banded path with the
+//!   `sparse` feature.
 
 use std::hint::black_box;
 use std::sync::Arc;
@@ -178,4 +182,76 @@ pub fn raw_rayon_dispatch_diagnostic(c: &mut Criterion) {
         });
     }
     group.finish();
+}
+
+/// Dispatch of the finite-difference Jacobian assembly of the implicit
+/// solvers (#199, DT-069), sequential vs. parallel, through the public
+/// `BackwardEulerSolver::with_parallel_threshold`. What is timed is one
+/// full Backward Euler step: the threshold changes only the Jacobian
+/// assembly, so the difference between the two timings is the assembly's,
+/// while the rest of the step (the linear solve above all, `O(n³)` on the
+/// dense path) is the same in both. The Laplacian calculator is kept
+/// sequential in both, so that only the Jacobian dispatch differs.
+///
+/// Dense path: one task per column. Banded path (`sparse` feature,
+/// bandwidth 1): one task per colour, so at most 3 tasks whatever the
+/// size — measures how much that limited parallelism still gains. Only
+/// exists when the crate is built with the `parallel` feature.
+#[cfg(feature = "parallel")]
+pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
+    use crate::implicit_dispatch::sequential_vs_parallel;
+    use oxiflow::solver::methods::backward_euler::BackwardEulerSolver;
+
+    let mut group = c.benchmark_group("diffusion_1d_implicit_jacobian_dispatch");
+    group.sample_size(20);
+
+    for &n in &[64usize, 128, 256, 512] {
+        let (scenario, config) = one_backward_euler_step(n);
+        sequential_vs_parallel(&mut group, "dense", n, &scenario, &config, |threshold| {
+            BackwardEulerSolver::new().with_parallel_threshold(threshold)
+        });
+    }
+
+    #[cfg(feature = "sparse")]
+    for &n in &[1_000usize, 10_000, 100_000] {
+        use oxiflow::solver::sparse::FaerSparseSolver;
+
+        let (scenario, config) = one_backward_euler_step(n);
+        sequential_vs_parallel(&mut group, "banded", n, &scenario, &config, |threshold| {
+            BackwardEulerSolver::new()
+                .with_sparse_solver(Box::new(FaerSparseSolver))
+                .with_jacobian_bandwidth(1)
+                .with_sparse_threshold(0)
+                .with_parallel_threshold(threshold)
+        });
+    }
+
+    group.finish();
+}
+
+/// Scenario and configuration of a single Backward Euler step on `n`
+/// nodes, with a sequential Laplacian calculator.
+#[cfg(feature = "parallel")]
+fn one_backward_euler_step(n: usize) -> (Scenario, SolverConfiguration) {
+    const DT: f64 = 1e-3;
+
+    let model = Diffusion1D {
+        alpha: 0.01,
+        amplitude: 1.0,
+        center: 0.0,
+        sigma0: 0.05,
+    };
+    let mesh = UniformGrid1D::new(n, -1.0, 1.0).unwrap();
+    let mesh_arc: Arc<dyn Mesh> = Arc::new(UniformGrid1D::new(n, -1.0, 1.0).unwrap());
+
+    let scenario = Scenario::single(Box::new(model), Box::new(mesh));
+    let config = SolverConfiguration::new(
+        TimeConfiguration::new(DT, StepControl::Fixed { dt: DT }),
+        IntegratorKind::BackwardEuler,
+    )
+    .with_calculator(Box::new(
+        FDLaplacianCalculator::new(mesh_arc, laplacian_variable())
+            .with_parallel_threshold(usize::MAX),
+    ));
+    (scenario, config)
 }

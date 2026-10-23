@@ -26,6 +26,12 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   256, is indicative: measure the crossover on your workload. Sequential and
   parallel assembly give bit-for-bit identical Jacobians, and results are
   unchanged (#199).
+- `benches/oxiflow_parallel`: an `implicit_jacobian_dispatch` diagnostic for
+  `diffusion_1d` (`ScalarField`) and `langmuir_multi` (`VectorField`). It
+  times one Backward Euler step with the Jacobian assembly forced sequential
+  or parallel, on the dense path and, with the `sparse` feature, on the
+  banded path, so that the solvers' dispatch threshold can be measured
+  locally (#199).
 - `ContextCalculator::compute_shared`, a provided method returning
   `Arc<ContextValue>`. The solver now calls it at every derivative
   evaluation. By default it wraps `compute` in an `Arc`, so existing
@@ -51,6 +57,9 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   intermediate list of entries, its conversion to faer triplets and the
   sort done by `SparseColMat::try_new_from_triplets` are gone. Matrices and
   steps are bit-for-bit unchanged (#199).
+- `Cargo.toml` sets `autobenches = false`: `oxiflow_parallel` is the only
+  bench target, as intended. Cargo no longer also builds each module of
+  `benches/` as an empty standalone target (#199).
 - **Breaking:** `UniformGrid1D::new` returns `Result<Self, OxiflowError>`
   (`OxiflowError::PreconditionFailed`, context `"UniformGrid1D"`) instead of
   `Result<Self, String>`. `?` now works directly in functions returning

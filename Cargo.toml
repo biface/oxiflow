@@ -8,6 +8,10 @@ rust-version = "1.84"
 # contrainte : une dépendance transitive peut encore exiger davantage, d'où les
 # épinglages du `Cargo.lock` versionné, contrôlés par le job MSRV (#168).
 resolver    = "3"
+# Une seule cible de benchmark, `oxiflow_parallel` (voir `[[bench]]`), qui
+# regroupe les modules de `benches/` par `mod`. Sans cette ligne, Cargo
+# compilerait aussi chaque module comme une cible autonome et vide (#199).
+autobenches = false
 
 description = "Generic PDE solving engine for transport, reaction and diffusion phenomena (∂u/∂t + ∇·F = S)"
 license     = "Apache-2.0"
