@@ -93,6 +93,8 @@ use crate::solver::linear::LinearSolver;
 use crate::solver::scenario::Domain;
 #[cfg(feature = "sparse")]
 use crate::solver::sparse::SparseLinearSolver;
+#[cfg(feature = "sparse")]
+use faer::sparse::{SparseColMat, SymbolicSparseColMat};
 
 /// Finite-difference step size for [`finite_difference_jacobian`].
 ///
@@ -293,49 +295,35 @@ pub(crate) fn theta_method_step_newton(
 // why `PhysicalModel::jacobian_bandwidth` was rejected: bandwidth is a
 // property of the numerical scheme (HOW), not of the physical model (WHAT).
 
-/// A single Jacobian entry: `(row, col, value)` — one nonzero of `∂f/∂u`
-/// within the band, as produced by [`banded_jacobian_entries`]. Not yet a
-/// `faer` triplet: callers convert only when they actually need the
-/// sparse matrix type (see [`theta_method_step_adaptive`]), rather than paying that conversion
-/// cost inside the assembly loop itself.
-#[cfg(feature = "sparse")]
-type SparseEntry = (usize, usize, f64);
-
-/// Return type of [`banded_jacobian_entries`]: the system size `n`, and
-/// the raw list of [`SparseEntry`] within the declared band. Each
-/// `(row, col)` pair appears at most once — every column belongs to
-/// exactly one CPR color, so no two colors can ever produce the same
-/// entry.
-#[cfg(feature = "sparse")]
-type BandedJacobianResult = Result<(usize, Vec<SparseEntry>), OxiflowError>;
-
-/// Assembles the nonzero entries of $\partial f/\partial u$ within a band of
-/// half-width `bandwidth` around the diagonal, via Curtis-Powell-Reid (CPR)
-/// graph coloring, in the flat ordering of [`StateLayout`] (#192): for a
-/// `VectorField` of d components and a stencil of half-width `s`, the band
-/// half-width is `d·(s + 1) − 1`. For a genuinely banded Jacobian, columns more than
-/// `2*bandwidth + 1` apart never share a nonzero row, so all columns of the
-/// same color can be perturbed **simultaneously** in a single
-/// [`evaluate_derivative`] call — `2*bandwidth + 1` evaluations total,
-/// instead of [`finite_difference_jacobian`]'s `n`.
+/// Assembles $\partial f/\partial u$ within a band of half-width
+/// `bandwidth` around the diagonal, directly in compressed-column form, in
+/// the flat ordering of [`StateLayout`] (#192): for a `VectorField` of d
+/// components and a stencil of half-width `s`, the band half-width is
+/// `d·(s + 1) − 1`.
 ///
-/// Returns `(n, triplets)` — raw `(row, col, value)` entries, not yet a
-/// `faer` sparse matrix, so callers computing the *system* matrix
-/// (`I - theta*dt*J`, see [`theta_method_step_adaptive`]) can fold the
-/// identity in before building the sparse type once, rather than building
-/// the raw Jacobian in sparse form only to rebuild it again.
+/// Columns are grouped by Curtis-Powell-Reid (CPR) coloring: for a
+/// genuinely banded Jacobian, columns `2*bandwidth + 1` or more apart never
+/// share a nonzero row, so all columns of the same color are perturbed
+/// **simultaneously** in a single [`evaluate_derivative`] call —
+/// `2*bandwidth + 1` evaluations, instead of [`finite_difference_jacobian`]'s
+/// `n`. As there, one work state is refilled and perturbed in place for
+/// each color (#197).
 ///
-/// Like [`finite_difference_jacobian`], one work state is refilled and
-/// perturbed in place for each color (#197).
+/// The structure is known in advance (DT-069, #198): column `j` holds rows
+/// `max(0, j − bandwidth)` to `min(n, j + bandwidth + 1)`, in increasing
+/// order, diagonal included. `col_ptr` and `row_idx` are built from `n` and
+/// `bandwidth`; each column of `values` is written once, in place, with the
+/// same arithmetic as [`finite_difference_jacobian`] — no triplets, no
+/// sort. Every entry of the band is stored, zeros included.
 #[cfg(feature = "sparse")]
-pub(crate) fn banded_jacobian_entries(
+pub(crate) fn banded_finite_difference_jacobian(
     domain: &Domain,
     chain: &[&dyn ContextCalculator],
     state: &ContextValue,
     t: f64,
     dt: f64,
     bandwidth: usize,
-) -> BandedJacobianResult {
+) -> Result<SparseColMat<usize, f64>, OxiflowError> {
     let layout = StateLayout::of(state)?;
     let base = layout.values(state)?;
     let n = layout.len();
@@ -344,74 +332,57 @@ pub(crate) fn banded_jacobian_entries(
     let f0 = evaluate_derivative(domain, chain, &mut base_state, t, dt)?;
     let f0_field = layout.flatten(&f0)?.into_owned();
 
+    let rows_of_column = |j: usize| j.saturating_sub(bandwidth)..(j + bandwidth + 1).min(n);
+    let mut col_ptr = Vec::with_capacity(n + 1);
+    let mut row_idx = Vec::new();
+    col_ptr.push(0);
+    for j in 0..n {
+        row_idx.extend(rows_of_column(j));
+        col_ptr.push(row_idx.len());
+    }
+    let mut values = vec![0.0; row_idx.len()];
+
+    // One group of (column, column storage) per color; column `j` has
+    // color `j % n_colors`, and colors from `n` on have no column.
     let n_colors = 2 * bandwidth + 1;
-    let mut triplets = Vec::new();
+    let mut colors: Vec<Vec<(usize, &mut [f64])>> =
+        (0..n_colors.min(n)).map(|_| Vec::new()).collect();
+    let mut rest = values.as_mut_slice();
+    for j in 0..n {
+        let (column, tail) = std::mem::take(&mut rest).split_at_mut(col_ptr[j + 1] - col_ptr[j]);
+        colors[j % n_colors].push((j, column));
+        rest = tail;
+    }
+
     let mut work = state.clone();
-
-    // Colors from `n` on have no column.
-    for color in 0..n_colors.min(n) {
-        let columns = (color..n).step_by(n_colors);
-
+    for color in colors {
         let values = layout.values_mut(&mut work)?;
         values.copy_from_slice(base);
-        for j in columns.clone() {
-            values[layout.storage_index(j)] += FD_EPSILON;
+        for (j, _) in &color {
+            values[layout.storage_index(*j)] += FD_EPSILON;
         }
 
         let f_c = evaluate_derivative(domain, chain, &mut work, t, dt)?;
         let f_c_values = layout.values(&f_c)?;
 
-        // Columns of the same color are spaced `n_colors > 2*bandwidth`
-        // apart, so their bands ([j-bandwidth, j+bandwidth]) never
-        // overlap — each perturbed row's response is attributable to
-        // exactly one column, no disambiguation needed.
-        for j in columns {
-            let lo = j.saturating_sub(bandwidth);
-            let hi = (j + bandwidth + 1).min(n);
-            for i in lo..hi {
-                let deriv = (f_c_values[layout.storage_index(i)] - f0_field[i]) / FD_EPSILON;
-                triplets.push((i, j, deriv));
+        // The bands of the columns of one color ([j-bandwidth,
+        // j+bandwidth]) never overlap: each row's response is attributable
+        // to exactly one column.
+        for (j, column) in color {
+            for (i, entry) in rows_of_column(j).zip(column.iter_mut()) {
+                *entry = (f_c_values[layout.storage_index(i)] - f0_field[i]) / FD_EPSILON;
             }
         }
     }
 
-    Ok((n, triplets))
-}
-
-/// [`banded_jacobian_entries`], assembled into a `faer` sparse matrix.
-///
-/// Its only caller for now is the dense/sparse parity test, which compares
-/// the matrix it returns with [`finite_difference_jacobian`]; hence the
-/// `test` gate. #199 makes it the single banded assembler, called by
-/// [`theta_method_step_adaptive`], and lifts that gate.
-#[cfg(all(test, feature = "sparse"))]
-pub(crate) fn banded_finite_difference_jacobian(
-    domain: &Domain,
-    chain: &[&dyn ContextCalculator],
-    state: &ContextValue,
-    t: f64,
-    dt: f64,
-    bandwidth: usize,
-) -> Result<faer::sparse::SparseColMat<usize, f64>, OxiflowError> {
-    let (n, triplets) = banded_jacobian_entries(domain, chain, state, t, dt, bandwidth)?;
-
-    let faer_triplets: Vec<faer::sparse::Triplet<usize, usize, f64>> = triplets
-        .into_iter()
-        .map(|(i, j, v)| faer::sparse::Triplet::new(i, j, v))
-        .collect();
-
-    faer::sparse::SparseColMat::try_new_from_triplets(n, n, &faer_triplets).map_err(|e| {
-        OxiflowError::PreconditionFailed {
-            context: "banded_finite_difference_jacobian",
-            message: format!("failed to build sparse matrix from triplets: {e:?}"),
-        }
-    })
+    let symbolic = SymbolicSparseColMat::new_checked(n, n, col_ptr, None, row_idx);
+    Ok(SparseColMat::new(symbolic, values))
 }
 
 /// Same contract as [`theta_method_step`], with an additional sparse path:
 /// when `jacobian_bandwidth` is `Some(k)` **and** `n > sparse_threshold`,
 /// assembles `I - theta*dt*J` directly in sparse (banded) form via
-/// [`banded_jacobian_entries`] and solves it with `sparse_solver`. Falls
+/// [`banded_finite_difference_jacobian`] and solves it with `sparse_solver`. Falls
 /// back to [`theta_method_step`] unchanged in every other case — `None`
 /// bandwidth, or a small enough system that the dense path is cheaper
 /// regardless of bandwidth.
@@ -444,33 +415,20 @@ pub(crate) fn theta_method_step_adaptive(
 
             // Jacobian frozen at the (now BC-corrected) u^n, evaluated at
             // t + dt — same convention as theta_method_step.
-            let (n_check, raw_triplets) =
-                banded_jacobian_entries(domain, chain, state, t + dt, dt, k)?;
-            debug_assert_eq!(n_check, n);
+            let mut system_matrix =
+                banded_finite_difference_jacobian(domain, chain, state, t + dt, dt, k)?;
 
-            // I - theta*dt*J, folded into the triplets directly rather than
-            // building J's sparse matrix first and combining afterward —
-            // banded_jacobian_entries always includes the diagonal (j is
-            // always within its own band), so every row gets its "+1.0".
+            // I - theta*dt*J, folded in place into the values of J. Column j
+            // starts at row max(0, j - k) and always holds its diagonal
+            // entry, at offset j - max(0, j - k).
             let coeff = -theta * dt;
-            let system_triplets: Vec<faer::sparse::Triplet<usize, usize, f64>> = raw_triplets
-                .into_iter()
-                .map(|(i, j, deriv)| {
-                    let mut value = coeff * deriv;
-                    if i == j {
-                        value += 1.0;
-                    }
-                    faer::sparse::Triplet::new(i, j, value)
-                })
-                .collect();
-
-            let system_matrix =
-                faer::sparse::SparseColMat::try_new_from_triplets(n, n, &system_triplets).map_err(
-                    |e| OxiflowError::PreconditionFailed {
-                        context: "theta_method_step_adaptive",
-                        message: format!("failed to build sparse system matrix: {e:?}"),
-                    },
-                )?;
+            for j in 0..n {
+                let column = system_matrix.val_of_col_mut(j);
+                for value in column.iter_mut() {
+                    *value *= coeff;
+                }
+                column[j - j.saturating_sub(k)] += 1.0;
+            }
 
             let rhs = f_n_field * dt;
             let delta_u = sparse_solver.solve(&system_matrix, &rhs)?;
@@ -1025,6 +983,17 @@ mod sparse_tests {
             make_mesh(12),
         );
         assert_banded_jacobian_equals_dense(&scenario, 1);
+    }
+
+    #[test]
+    fn banded_jacobian_wider_than_the_system_is_the_full_dense_jacobian() {
+        // Fewer columns than colors: every column gets its own color and
+        // every band covers the whole column.
+        let scenario = Scenario::single(
+            Box::new(TridiagonalDiffusion { diffusion: 0.7 }),
+            make_mesh(4),
+        );
+        assert_banded_jacobian_equals_dense(&scenario, 6);
     }
 
     #[test]

@@ -35,6 +35,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   instead of a new copy per column or colour plus, for a `VectorField`
   state, two transposing copies (one to build the perturbed state, one to
   read the derivative). The Jacobians are bit-for-bit unchanged (#197).
+- The banded finite-difference Jacobian (`sparse` feature) is assembled
+  directly in compressed-column form: the band structure is built from the
+  system size and the bandwidth, and each column is written once in its
+  final place. The θ-method folds `I − θΔt·J` into it in place. The
+  intermediate list of entries, its conversion to faer triplets and the
+  sort done by `SparseColMat::try_new_from_triplets` are gone. Matrices and
+  steps are bit-for-bit unchanged (#199).
 - **Breaking:** `UniformGrid1D::new` returns `Result<Self, OxiflowError>`
   (`OxiflowError::PreconditionFailed`, context `"UniformGrid1D"`) instead of
   `Result<Self, String>`. `?` now works directly in functions returning
