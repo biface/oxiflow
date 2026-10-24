@@ -71,6 +71,12 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   state and to the state at the end of each step, before checking and saving
   it: every saved state satisfies them, including a value that depends on
   time. `SteppableSolver::step` itself does not (DD-070, #201).
+- `DanckwertsInlet` sets the inlet node from its neighbour,
+  `u0 = (u_feed + κ u1) / (1 + κ)` with `κ = D / (v (x1 − x0))`, the
+  one-sided discretisation of the Robin condition solved for `u0`. It now
+  requires the feed variable only, no longer the spatial gradient, declares
+  node 0, and refuses a mesh with fewer than two nodes or whose node 1 is not
+  downstream of node 0. Its values change accordingly (DD-070, #201).
 - `ComputeContext` stores its values behind `Arc`. `insert` and the typed
   accessors keep their signatures and still return references, so models
   read the context as before (#196).
@@ -111,6 +117,11 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `DanckwertsInlet` diverged as soon as `κ = D / (v Δx) > 1`, i.e.
+  `(n − 1) / Pe > 1` on a uniform grid with `Pe = vL/D`: it set `u0` from
+  the gradient at node 0, computed from the previous `u0`, which iterated
+  `u0` with a factor `−κ` from one evaluation to the next. The inlet value
+  no longer depends on its previous value (#201).
 - `UniformGrid1D::new` rejects non-finite bounds: a NaN bound used to pass
   the `x_end > x_start` check and yield a grid of NaN nodes.
 - `FDGradientCalculator` and `FDLaplacianCalculator` return

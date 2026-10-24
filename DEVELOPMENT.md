@@ -176,8 +176,8 @@ Chromatography BC mappings:
 | Chromatography BC | Mathematical type | Context needed |
 |---|---|---|
 | Simplified BC | Dirichlet | injection concentration profile |
-| Danckwerts inlet | Robin | time + gradient |
-| Danckwerts outlet | Neumann | gradient only |
+| Danckwerts inlet | Robin | feed concentration (function of time) |
+| Danckwerts outlet | Neumann | none (neighbouring node) |
 
 ---
 

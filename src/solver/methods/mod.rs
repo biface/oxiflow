@@ -1129,6 +1129,58 @@ mod boundary_condition_tests {
         }
     }
 
+    /// Scalar calculator for `Scaled` without source: `factor`, constant.
+    fn constant(name: &'static str, value: f64) -> Box<dyn ContextCalculator> {
+        Box::new(Scaled {
+            name,
+            source: None,
+            factor: value,
+        })
+    }
+
+    #[test]
+    fn danckwerts_inlet_stays_stable_whatever_kappa() {
+        // The former inlet, u0 = u_feed + (D/v) (u1 - u0)/dx with u0 from the
+        // previous evaluation, diverged for kappa = D/(v dx) > 1 (#201).
+        use crate::boundary::{DanckwertsInlet, DanckwertsOutlet};
+        use crate::solver::methods::ForwardEulerSolver;
+        let n = 21;
+        let dx = 1.0 / (n - 1) as f64;
+        let feed = 2.0;
+        for kappa in [0.5, 2.0, 50.0] {
+            let (velocity, dispersion) = (1.0, kappa * dx);
+            let domain = Domain::new("column", Box::new(Heat { alpha: ALPHA }), Box::new(grid(n)))
+                .with_boundary_conditions(vec![
+                    Box::new(DanckwertsInlet::new(
+                        dispersion,
+                        velocity,
+                        ContextVariable::External {
+                            name: "feed".into(),
+                        },
+                    )),
+                    Box::new(DanckwertsOutlet::new()),
+                ]);
+            let scenario = Scenario::multi(vec![domain]).unwrap();
+            let config = config(
+                n,
+                IntegratorKind::Euler,
+                StepControl::Fixed { dt: explicit_dt(n) },
+                0.2,
+            )
+            .with_calculator(constant("feed", feed));
+            let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
+            for (state, &t) in result.states.iter().zip(&result.times) {
+                let u = field(state);
+                let residual = velocity * u[0] - dispersion * (u[1] - u[0]) / dx - velocity * feed;
+                assert!(
+                    residual.abs() < 1e-12,
+                    "kappa = {kappa}, t = {t}: residual {residual}"
+                );
+                assert_eq!(u[n - 1], u[n - 2], "kappa = {kappa}, t = {t}");
+            }
+        }
+    }
+
     #[test]
     fn calculators_required_by_a_condition_run_first_with_their_dependencies() {
         let n = 11;

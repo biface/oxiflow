@@ -27,7 +27,6 @@ use oxiflow::{
 const DISPERSION: f64 = 1e-3;
 const VELOCITY: f64 = 1e-2;
 const FEED: f64 = 2.0;
-const GRADIENT_AT_INLET: f64 = -0.5;
 
 fn feed_variable() -> ContextVariable {
     ContextVariable::External {
@@ -41,17 +40,8 @@ fn inlet() -> DanckwertsInlet {
 
 /// Context holding everything `DanckwertsInlet` reads, so that a refusal can
 /// only come from the mesh.
-fn full_context(n_dof: usize) -> ComputeContext {
+fn full_context() -> ComputeContext {
     let mut ctx = ComputeContext::new(0.0, 1e-3);
-    let mut gradient = DVector::zeros(n_dof);
-    gradient[0] = GRADIENT_AT_INLET;
-    ctx.insert(
-        ContextVariable::SpatialGradient {
-            dimension: 0,
-            component: None,
-        },
-        ContextValue::ScalarField(gradient),
-    );
     ctx.insert(feed_variable(), ContextValue::Scalar(FEED));
     ctx
 }
@@ -75,7 +65,7 @@ fn inlet_refuses_2d_mesh() {
     let mesh = ScatteredMesh2D::new(5);
     let mut state = ramp(&mesh);
     let before = state.clone();
-    let result = inlet().apply(&mut state, &full_context(mesh.n_dof()), &mesh);
+    let result = inlet().apply(&mut state, &full_context(), &mesh);
     assert_refused(result, "DanckwertsInlet on a 2D mesh");
     assert_eq!(
         state, before,
@@ -88,7 +78,7 @@ fn outlet_refuses_2d_mesh() {
     let mesh = ScatteredMesh2D::new(5);
     let mut state = ramp(&mesh);
     let before = state.clone();
-    let result = DanckwertsOutlet::new().apply(&mut state, &full_context(mesh.n_dof()), &mesh);
+    let result = DanckwertsOutlet::new().apply(&mut state, &full_context(), &mesh);
     assert_refused(result, "DanckwertsOutlet on a 2D mesh");
     assert_eq!(
         state, before,
@@ -100,11 +90,11 @@ fn outlet_refuses_2d_mesh() {
 
 #[test]
 fn both_conditions_apply_on_ordered_non_uniform_1d_mesh() {
-    // The conditions read no spacing: an ordered 1D mesh is enough, uniform
-    // or not.
+    // The inlet reads the first spacing, x1 - x0, and nothing else of the
+    // geometry: an ordered 1D mesh is enough, uniform or not.
     let mesh = StretchedGrid1D::new(9, 1.2);
     let n = mesh.n_dof();
-    let ctx = full_context(n);
+    let ctx = full_context();
     let mut state = ramp(&mesh);
 
     inlet().apply(&mut state, &ctx, &mesh).unwrap();
@@ -112,7 +102,8 @@ fn both_conditions_apply_on_ordered_non_uniform_1d_mesh() {
         .apply(&mut state, &ctx, &mesh)
         .unwrap();
 
-    let expected_inlet = FEED + DISPERSION / VELOCITY * GRADIENT_AT_INLET;
+    let kappa = DISPERSION / (VELOCITY * (mesh.coordinates(1)[0] - mesh.coordinates(0)[0]));
+    let expected_inlet = (FEED + kappa * 2.0) / (1.0 + kappa);
     assert!((state[0] - expected_inlet).abs() < 1e-12);
     assert_eq!(state[n - 1], state[n - 2]);
     assert!((1..n - 1).all(|i| state[i] == (i + 1) as f64));

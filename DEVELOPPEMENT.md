@@ -178,8 +178,8 @@ Correspondances BC chromatographiques :
 | BC chromatographique | Type mathématique | Contexte nécessaire |
 |---|---|---|
 | BC simplifiée | Dirichlet | profil de concentration d'injection |
-| BC de Danckwerts (entrée) | Robin | temps + gradient |
-| BC de Danckwerts (sortie) | Neumann | gradient uniquement |
+| BC de Danckwerts (entrée) | Robin | concentration d'alimentation (fonction du temps) |
+| BC de Danckwerts (sortie) | Neumann | aucun (nœud voisin) |
 
 ---
 

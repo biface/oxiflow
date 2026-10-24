@@ -16,10 +16,19 @@
 //! $$v \, u(0, t) - D \left.\frac{\partial u}{\partial x}\right|_{x=0}
 //!   = v \, u_{\text{feed}}(t)$$
 //!
-//! Rearranged into an explicit assignment for the inlet node:
+//! Discretised with the one-sided difference between the inlet node and its
+//! neighbour, $(u_1 - u_0)/\Delta x$ with $\Delta x = x_1 - x_0$, and solved
+//! for the inlet node (DD-070, #201):
 //!
-//! $$u(0, t) = u_{\text{feed}}(t) + \frac{D}{v}
-//!   \left.\frac{\partial u}{\partial x}\right|_{x=0}$$
+//! $$u_0 = \frac{u_{\text{feed}}(t) + \kappa \, u_1}{1 + \kappa},
+//!   \qquad \kappa = \frac{D}{v \, \Delta x}$$
+//!
+//! The inlet value follows from its neighbour alone, not from a gradient
+//! computed on the state before the condition was applied. The former form,
+//! $u_0 = u_{\text{feed}} + (D/v)\,\partial_x u|_0$ with the gradient read
+//! from the context, iterated $u_0$ with a factor $-\kappa$ from one
+//! evaluation to the next and diverged as soon as $\kappa > 1$, that is
+//! $(n - 1)/\text{Pe} > 1$ on a uniform grid with $\text{Pe} = vL/D$.
 //!
 //! The feed concentration $u_{\text{feed}}(t)$ is read from [`ComputeContext`] via
 //! a typed [`ContextVariable`] key — it can be constant, time-dependent, or
@@ -36,9 +45,9 @@
 //!
 //! ## Supported meshes
 //!
-//! Both conditions locate the boundary by DOF index: the inlet is node `0`,
-//! the outlet node `n − 1`, and the outlet copies node `n − 2`. That holds on
-//! an ordered 1D grid only — on an unstructured mesh (#151) node `0` is an
+//! Both conditions locate the boundary by DOF index: the inlet is node `0`
+//! and reads node `1`, the outlet node `n − 1` copies node `n − 2`. That
+//! holds on an ordered 1D grid only — on an unstructured mesh (#151) node `0` is an
 //! arbitrary node. Both `apply()` methods therefore return
 //! `PreconditionFailed` when `mesh.spatial_dimension() != 1` (#187), as
 //! `TrapezoidalIntegral` does. On a 1D mesh, nodes are assumed ordered from
@@ -88,10 +97,16 @@ fn require_1d(mesh: &dyn Mesh, context: &'static str) -> Result<(), OxiflowError
 
 /// Danckwerts inlet condition — Robin BC at $x = 0$.
 ///
-/// Enforces mass-flux continuity at the column inlet:
+/// Enforces mass-flux continuity at the column inlet,
+/// $v\,u(0, t) - D\,\partial_x u|_{x=0} = v\,u_{\text{feed}}(t)$, through its
+/// one-sided discretisation solved for node 0 (see the module
+/// documentation):
 ///
-/// $$u(0, t) = u_{\text{feed}}(t) + \frac{D}{v}
-///   \left.\frac{\partial u}{\partial x}\right|_{x=0}$$
+/// $$u_0 = \frac{u_{\text{feed}}(t) + \kappa \, u_1}{1 + \kappa},
+///   \qquad \kappa = \frac{D}{v \, (x_1 - x_0)}$$
+///
+/// Node 0 is declared as a constrained node (DD-070): the solver keeps its
+/// derivative at zero and the condition alone sets it.
 ///
 /// # Parameters
 ///
@@ -104,19 +119,17 @@ fn require_1d(mesh: &dyn Mesh, context: &'static str) -> Result<(), OxiflowError
 ///
 /// # Requirements
 ///
-/// Declares two required context variables:
-///
-/// - `ContextVariable::SpatialGradient { dimension: 0, component: None }` —
-///   the nodal gradient field $\partial u / \partial x$ computed by a gradient
-///   calculator registered in `SolverConfiguration`.
-/// - `feed_variable` — the feed concentration $u_{\text{feed}}(t)$.
-///
-/// The solver validates that both are covered before the first time step.
+/// Declares one required context variable, `feed_variable` — the feed
+/// concentration $u_{\text{feed}}(t)$, which does not depend on the state.
+/// The solver validates that it is covered before the first time step. No
+/// gradient calculator is needed.
 ///
 /// # Supported meshes
 ///
-/// 1D meshes whose nodes are ordered from inlet (node `0`) to outlet; see the
-/// module documentation. `apply()` refuses any other spatial dimension.
+/// 1D meshes with at least two nodes, ordered from inlet (node `0`) to
+/// outlet; see the module documentation. `apply()` refuses any other spatial
+/// dimension, a single node, and a node `1` that is not downstream of node
+/// `0`.
 ///
 /// # Serialisation
 ///
@@ -166,13 +179,7 @@ impl DanckwertsInlet {
 
 impl RequiresContext for DanckwertsInlet {
     fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![
-            ContextVariable::SpatialGradient {
-                dimension: 0,
-                component: None,
-            },
-            self.feed_variable.clone(),
-        ]
+        vec![self.feed_variable.clone()]
     }
 
     fn priority(&self) -> u32 {
@@ -191,16 +198,17 @@ impl BoundaryCondition for DanckwertsInlet {
 
     /// Applies the Danckwerts inlet condition to `state[0]`.
     ///
-    /// Reads `∂u/∂x|_{x=0}` from the gradient field at node 0 and
+    /// Reads $u_1$ from `state`, $x_0$ and $x_1$ from `mesh`, and
     /// $u_{\text{feed}}$ from the context variable declared at construction.
     ///
     /// # Errors
     ///
-    /// - [`OxiflowError::MissingCalculator`] if the gradient field or the feed
-    ///   variable is absent from the context.
+    /// - [`OxiflowError::MissingCalculator`] if the feed variable is absent
+    ///   from the context.
     /// - [`OxiflowError::TypeMismatch`] if the feed variable is not a `Scalar`.
-    /// - [`OxiflowError::PreconditionFailed`] if the mesh is not 1D, has no
-    ///   nodes, or if `velocity` is zero (division by zero in $D/v$).
+    /// - [`OxiflowError::PreconditionFailed`] if the mesh is not 1D, has fewer
+    ///   than two nodes, if node `1` is not downstream of node `0`, if
+    ///   `velocity` is zero, or if $1 + \kappa = 0$.
     fn apply(
         &self,
         state: &mut DVector<f64>,
@@ -208,25 +216,45 @@ impl BoundaryCondition for DanckwertsInlet {
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError> {
         require_1d(mesh, "DanckwertsInlet")?;
-        if mesh.n_dof() == 0 {
-            return Err(OxiflowError::PreconditionFailed {
-                context: "DanckwertsInlet",
-                message: "mesh has no degrees of freedom".into(),
-            });
+        let refuse = |message: String| OxiflowError::PreconditionFailed {
+            context: "DanckwertsInlet",
+            message,
+        };
+        if mesh.n_dof() < 2 {
+            return Err(refuse(format!(
+                "mesh must have at least 2 nodes, got {}",
+                mesh.n_dof()
+            )));
         }
         if self.velocity == 0.0 {
-            return Err(OxiflowError::PreconditionFailed {
-                context: "DanckwertsInlet",
-                message: "velocity must be non-zero".into(),
-            });
+            return Err(refuse("velocity must be non-zero".into()));
+        }
+        let dx = mesh.coordinates(1)[0] - mesh.coordinates(0)[0];
+        if dx.is_nan() || dx <= 0.0 {
+            return Err(refuse(format!(
+                "node 1 must be downstream of node 0, got x1 - x0 = {dx}"
+            )));
+        }
+        let kappa = self.dispersion / (self.velocity * dx);
+        if 1.0 + kappa == 0.0 {
+            return Err(refuse(format!(
+                "1 + D / (v dx) is zero (D = {}, v = {}, dx = {dx})",
+                self.dispersion, self.velocity
+            )));
         }
 
-        let gradient = ctx.gradient(0)?;
-        let du_dx_0 = gradient[0];
         let u_feed = ctx.external(self.feed_variable.clone())?.as_scalar()?;
-
-        state[0] = u_feed + (self.dispersion / self.velocity) * du_dx_0;
+        state[0] = (u_feed + kappa * state[1]) / (1.0 + kappa);
         Ok(())
+    }
+
+    /// Node 0, set by [`apply`](Self::apply) (DD-070).
+    fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {
+        if mesh.n_dof() == 0 {
+            Vec::new()
+        } else {
+            vec![0]
+        }
     }
 }
 
@@ -360,18 +388,8 @@ mod tests {
         UniformGrid1D::new(n, 0.0, 1.0).unwrap()
     }
 
-    fn make_ctx_with_gradient_and_feed(gradient_at_0: f64, u_feed: f64) -> ComputeContext {
+    fn make_ctx_with_feed(u_feed: f64) -> ComputeContext {
         let mut ctx = ComputeContext::new(0.0, 0.01);
-        let n = 5;
-        let mut grad = DVector::zeros(n);
-        grad[0] = gradient_at_0;
-        ctx.insert(
-            ContextVariable::SpatialGradient {
-                dimension: 0,
-                component: None,
-            },
-            ContextValue::ScalarField(grad),
-        );
         ctx.insert(feed_var(), ContextValue::Scalar(u_feed));
         ctx
     }
@@ -413,15 +431,21 @@ mod tests {
     // ── RequiresContext — DanckwertsInlet ─────────────────────────────────────
 
     #[test]
-    fn inlet_required_variables_contains_gradient_and_feed() {
+    fn inlet_requires_the_feed_only() {
+        // DD-070: no state-dependent variable, so no gradient.
+        assert_eq!(
+            make_inlet(1e-7, 1e-3).required_variables(),
+            vec![feed_var()]
+        );
+    }
+
+    #[test]
+    fn inlet_declares_node_zero() {
         let inlet = make_inlet(1e-7, 1e-3);
-        let reqs = inlet.required_variables();
-        assert!(reqs.contains(&ContextVariable::SpatialGradient {
-            dimension: 0,
-            component: None,
-        }));
-        assert!(reqs.contains(&feed_var()));
-        assert_eq!(reqs.len(), 2);
+        assert_eq!(inlet.constrained_nodes(&make_mesh(5)), vec![0]);
+        assert!(inlet
+            .constrained_nodes(&NodeCloud::new::<1>(&[], 0.0))
+            .is_empty());
     }
 
     #[test]
@@ -453,80 +477,96 @@ mod tests {
 
     // ── apply — DanckwertsInlet ───────────────────────────────────────────────
 
-    #[test]
-    fn inlet_apply_zero_gradient_equals_u_feed() {
-        // When ∂u/∂x|₀ = 0, state[0] = u_feed exactly.
-        let inlet = make_inlet(1e-7, 1e-3);
-        let mesh = make_mesh(5);
-        let ctx = make_ctx_with_gradient_and_feed(0.0, 1.0);
-        let mut state = DVector::zeros(5);
-        inlet.apply(&mut state, &ctx, &mesh).unwrap();
-        assert!((state[0] - 1.0).abs() < 1e-12);
+    /// `v u0 - D (u1 - u0) / dx - v u_feed`: zero when the discrete Robin
+    /// condition holds.
+    fn robin_residual(inlet: &DanckwertsInlet, state: &DVector<f64>, dx: f64, u_feed: f64) -> f64 {
+        inlet.velocity * state[0]
+            - inlet.dispersion * (state[1] - state[0]) / dx
+            - inlet.velocity * u_feed
     }
 
     #[test]
-    fn inlet_apply_formula_is_correct() {
-        // u(0) = u_feed + (D/v) * du_dx_0
-        // With D=1e-4, v=1e-2, du_dx_0=0.5, u_feed=0.8:
-        // u(0) = 0.8 + (1e-4/1e-2)*0.5 = 0.8 + 0.005 = 0.805
+    fn inlet_apply_equals_u_feed_on_a_flat_profile() {
+        // u1 = u_feed gives u0 = u_feed, whatever kappa.
         let inlet = make_inlet(1e-4, 1e-2);
-        let mesh = make_mesh(5);
-        let ctx = make_ctx_with_gradient_and_feed(0.5, 0.8);
-        let mut state = DVector::zeros(5);
-        inlet.apply(&mut state, &ctx, &mesh).unwrap();
-        let expected = 0.8 + (1e-4 / 1e-2) * 0.5;
-        assert!((state[0] - expected).abs() < 1e-12);
+        let mut state = DVector::from_element(5, 0.8);
+        state[0] = 0.0;
+        inlet
+            .apply(&mut state, &make_ctx_with_feed(0.8), &make_mesh(5))
+            .unwrap();
+        assert!((state[0] - 0.8).abs() < 1e-15);
+    }
+
+    #[test]
+    fn inlet_apply_solves_the_discrete_robin_relation() {
+        // D = 1e-3, v = 1e-2, dx = 0.25: kappa = 0.4.
+        // u0 = (0.8 + 0.4 * 2.0) / 1.4.
+        let inlet = make_inlet(1e-3, 1e-2);
+        let mut state = DVector::from_element(5, 2.0);
+        inlet
+            .apply(&mut state, &make_ctx_with_feed(0.8), &make_mesh(5))
+            .unwrap();
+        assert!((state[0] - (0.8 + 0.4 * 2.0) / 1.4).abs() < 1e-15);
+        assert!(robin_residual(&inlet, &state, 0.25, 0.8).abs() < 1e-15);
+    }
+
+    #[test]
+    fn inlet_apply_does_not_depend_on_the_previous_inlet_value() {
+        // The former form iterated u0 with a factor -kappa; this one does
+        // not read u0 at all.
+        let inlet = make_inlet(1.0, 1e-2); // kappa = 400 on dx = 0.25
+        let mut a = DVector::from_element(5, 2.0);
+        let mut b = a.clone();
+        b[0] = 1e6;
+        let ctx = make_ctx_with_feed(0.8);
+        inlet.apply(&mut a, &ctx, &make_mesh(5)).unwrap();
+        inlet.apply(&mut b, &ctx, &make_mesh(5)).unwrap();
+        assert_eq!(a[0].to_bits(), b[0].to_bits());
+        assert!(robin_residual(&inlet, &a, 0.25, 0.8).abs() < 1e-12);
     }
 
     #[test]
     fn inlet_apply_does_not_modify_other_nodes() {
         let inlet = make_inlet(1e-7, 1e-3);
-        let mesh = make_mesh(5);
-        let ctx = make_ctx_with_gradient_and_feed(0.0, 1.0);
+        let ctx = make_ctx_with_feed(1.0);
         let mut state = DVector::from_element(5, 2.0);
-        inlet.apply(&mut state, &ctx, &mesh).unwrap();
-        // Only node 0 is changed.
+        inlet.apply(&mut state, &ctx, &make_mesh(5)).unwrap();
         for i in 1..5 {
             assert!((state[i] - 2.0).abs() < 1e-12, "node {i} was modified");
         }
     }
 
     #[test]
-    fn inlet_apply_missing_gradient_returns_error() {
+    fn inlet_apply_missing_feed_returns_error() {
         let inlet = make_inlet(1e-7, 1e-3);
-        let mesh = make_mesh(5);
-        let mut ctx = ComputeContext::new(0.0, 0.01);
-        ctx.insert(feed_var(), ContextValue::Scalar(1.0));
-        // Gradient not inserted.
+        let ctx = ComputeContext::new(0.0, 0.01);
         let mut state = DVector::zeros(5);
-        let err = inlet.apply(&mut state, &ctx, &mesh).unwrap_err();
+        let err = inlet.apply(&mut state, &ctx, &make_mesh(5)).unwrap_err();
         assert!(matches!(err, OxiflowError::MissingCalculator(_)));
     }
 
     #[test]
-    fn inlet_apply_missing_feed_returns_error() {
+    fn inlet_apply_refuses_a_single_node_or_a_reversed_mesh() {
         let inlet = make_inlet(1e-7, 1e-3);
-        let mesh = make_mesh(5);
-        let mut ctx = ComputeContext::new(0.0, 0.01);
-        let grad = ContextValue::ScalarField(DVector::zeros(5));
-        ctx.insert(
-            ContextVariable::SpatialGradient {
-                dimension: 0,
-                component: None,
-            },
-            grad,
-        );
-        // Feed not inserted.
-        let mut state = DVector::zeros(5);
-        let err = inlet.apply(&mut state, &ctx, &mesh).unwrap_err();
-        assert!(matches!(err, OxiflowError::MissingCalculator(_)));
+        let ctx = make_ctx_with_feed(1.0);
+        let single = NodeCloud::new(&[[0.0]], 0.0);
+        let reversed = NodeCloud::new(&[[1.0], [0.5], [0.0]], 0.5);
+        for (mesh, n) in [(&single, 1), (&reversed, 3)] {
+            let mut state = DVector::from_element(n, 2.0);
+            let err = inlet.apply(&mut state, &ctx, mesh).unwrap_err();
+            assert!(
+                matches!(err, OxiflowError::PreconditionFailed { .. }),
+                "{err:?}"
+            );
+            assert_eq!(state, DVector::from_element(n, 2.0));
+        }
     }
 
     #[test]
     fn inlet_apply_zero_velocity_returns_error() {
         let inlet = make_inlet(1e-7, 0.0);
         let mesh = make_mesh(5);
-        let ctx = make_ctx_with_gradient_and_feed(0.0, 1.0);
+        let ctx = make_ctx_with_feed(1.0);
         let mut state = DVector::zeros(5);
         let err = inlet.apply(&mut state, &ctx, &mesh).unwrap_err();
         assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
@@ -537,7 +577,7 @@ mod tests {
         let inlet = make_inlet(1e-7, 1e-3);
         // UniformGrid1D requires n >= 2: a node cloud without nodes covers this edge case.
         let mesh = NodeCloud::new::<1>(&[], 0.0);
-        let ctx = make_ctx_with_gradient_and_feed(0.0, 1.0);
+        let ctx = make_ctx_with_feed(1.0);
         let mut state = DVector::zeros(0);
         let err = inlet.apply(&mut state, &ctx, &mesh).unwrap_err();
         assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
