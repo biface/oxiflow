@@ -66,11 +66,24 @@ pub enum ContextVariable {
         component: Option<usize>,
     },
 
-    /// External scalar provided by the user (e.g. ambient temperature, feed concentration).
+    /// External value provided by the user or by a built-in calculator: a
+    /// scalar (e.g. ambient temperature, feed concentration, a spatial
+    /// integral) or a field (e.g. the FD Laplacian of the primary field).
     ///
     /// The `name` is a static string and participates in `Hash + Eq`.
     External {
         /// Unique name of the external variable.
+        name: Cow<'static, str>,
+    },
+
+    /// Coefficient field c(x) or c(x, t) evaluated on the mesh nodes
+    /// (DD-066): a `ScalarField` with one value per node, provided by
+    /// [`CoefficientField`](crate::context::calculators::CoefficientField).
+    ///
+    /// Distinct from `External` with the same name. The `name` participates
+    /// in `Hash + Eq`.
+    Coefficient {
+        /// Unique name of the coefficient.
         name: Cow<'static, str>,
     },
 }
@@ -93,6 +106,7 @@ impl std::fmt::Display for ContextVariable {
                 write!(f, "SpatialGradient(dim={},comp={})", dimension, c)
             }
             Self::External { name } => write!(f, "External({})", name),
+            Self::Coefficient { name } => write!(f, "Coefficient({})", name),
             // J3+ variants handled when added
             #[allow(unreachable_patterns)]
             _ => write!(f, "Unknown"),
@@ -165,6 +179,18 @@ mod tests {
             name: "pressure".into(),
         };
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn coefficient_differs_from_external_of_the_same_name() {
+        let coefficient = ContextVariable::Coefficient {
+            name: "porosity".into(),
+        };
+        let external = ContextVariable::External {
+            name: "porosity".into(),
+        };
+        assert_ne!(coefficient, external);
+        assert_eq!(coefficient.to_string(), "Coefficient(porosity)");
     }
 
     // ── Clone ─────────────────────────────────────────────────────────────────

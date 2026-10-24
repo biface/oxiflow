@@ -336,6 +336,7 @@ mod tests {
     use super::*;
     use crate::context::value::ContextValue;
     use crate::mesh::structured::UniformGrid1D;
+    use crate::mesh::NodeCloud;
     use nalgebra::DVector;
 
     // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -529,28 +530,8 @@ mod tests {
     #[test]
     fn inlet_apply_empty_mesh_returns_error() {
         let inlet = make_inlet(1e-7, 1e-3);
-        // UniformGrid1D requires n >= 2, so we use a DummyMesh for this edge case.
-        struct EmptyMesh;
-        impl Mesh for EmptyMesh {
-            fn n_dof(&self) -> usize {
-                0
-            }
-            fn coordinates(&self, _: usize) -> &[f64] {
-                &[]
-            }
-            fn spatial_dimension(&self) -> usize {
-                1
-            }
-            fn characteristic_length(&self) -> f64 {
-                0.0
-            }
-        }
-        impl std::fmt::Debug for EmptyMesh {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "EmptyMesh")
-            }
-        }
-        let mesh = EmptyMesh;
+        // UniformGrid1D requires n >= 2: a node cloud without nodes covers this edge case.
+        let mesh = NodeCloud::new::<1>(&[], 0.0);
         let ctx = make_ctx_with_gradient_and_feed(0.0, 1.0);
         let mut state = DVector::zeros(0);
         let err = inlet.apply(&mut state, &ctx, &mesh).unwrap_err();
@@ -601,27 +582,7 @@ mod tests {
 
     #[test]
     fn outlet_apply_single_node_returns_error() {
-        struct SingleMesh;
-        impl Mesh for SingleMesh {
-            fn n_dof(&self) -> usize {
-                1
-            }
-            fn coordinates(&self, _: usize) -> &[f64] {
-                &[0.0]
-            }
-            fn spatial_dimension(&self) -> usize {
-                1
-            }
-            fn characteristic_length(&self) -> f64 {
-                0.0
-            }
-        }
-        impl std::fmt::Debug for SingleMesh {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "SingleMesh")
-            }
-        }
-        let mesh = SingleMesh;
+        let mesh = NodeCloud::new(&[[0.0]], 0.0);
         let ctx = ComputeContext::new(0.0, 0.01);
         let mut state = DVector::from_element(1, 1.0);
         let err = DanckwertsOutlet::new()

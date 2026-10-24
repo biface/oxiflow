@@ -39,6 +39,19 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   evaluations overrides it to return a clone of the `Arc` it keeps, and every
   evaluation then gets the same allocation instead of a copy. An override
   must return the same value as `compute` (#196).
+- `CoefficientField` (`context::calculators`), a coefficient c(x) or c(x, t)
+  evaluated on every mesh node from `Mesh::coordinates()`, in any dimension,
+  and published as a `ScalarField` under the new variant
+  `ContextVariable::Coefficient { name }` (DD-066). `CoefficientField::of_x`
+  evaluates c(x) once at construction; `CoefficientField::of_x_t` evaluates
+  c(x, t) at the context's time and reuses the field for further evaluations
+  at the same time. Both hand the solver the field they keep, through
+  `compute_shared`, instead of a copy. A non-finite value is reported as
+  `ExternalData`, naming the first node, its coordinates and the time. With
+  the `parallel` feature, nodes are evaluated through Rayon above a
+  threshold set with `with_parallel_threshold` or `set_parallel_threshold`;
+  the default, 10 000 nodes, is indicative. The function must be pure
+  (#182).
 
 ### Changed
 

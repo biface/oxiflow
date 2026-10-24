@@ -147,59 +147,52 @@ pub(crate) fn uniform_spacing(mesh: &dyn Mesh) -> Option<f64> {
     uniform.then_some(step)
 }
 
+// ── Test mesh ─────────────────────────────────────────────────────────────────
+
+/// Mesh built from explicit node coordinates, for unit tests in any
+/// dimension `D`; `characteristic_length()` returns the declared `length`.
+#[cfg(test)]
+pub(crate) struct NodeCloud {
+    dimension: usize,
+    n_nodes: usize,
+    coordinates: Vec<f64>,
+    length: f64,
+}
+
+#[cfg(test)]
+impl NodeCloud {
+    /// One node per entry of `nodes`, in index order.
+    pub(crate) fn new<const D: usize>(nodes: &[[f64; D]], length: f64) -> Self {
+        Self {
+            dimension: D,
+            n_nodes: nodes.len(),
+            coordinates: nodes.concat(),
+            length,
+        }
+    }
+}
+
+#[cfg(test)]
+impl Mesh for NodeCloud {
+    fn n_dof(&self) -> usize {
+        self.n_nodes
+    }
+    fn coordinates(&self, i: usize) -> &[f64] {
+        &self.coordinates[i * self.dimension..(i + 1) * self.dimension]
+    }
+    fn spatial_dimension(&self) -> usize {
+        self.dimension
+    }
+    fn characteristic_length(&self) -> f64 {
+        self.length
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// 1D mesh built from an explicit node list and a declared length.
-    struct NodeList {
-        nodes: Vec<[f64; 1]>,
-        length: f64,
-    }
-
-    impl NodeList {
-        fn new(xs: &[f64], length: f64) -> Self {
-            Self {
-                nodes: xs.iter().map(|&x| [x]).collect(),
-                length,
-            }
-        }
-    }
-
-    impl Mesh for NodeList {
-        fn n_dof(&self) -> usize {
-            self.nodes.len()
-        }
-        fn coordinates(&self, i: usize) -> &[f64] {
-            &self.nodes[i]
-        }
-        fn spatial_dimension(&self) -> usize {
-            1
-        }
-        fn characteristic_length(&self) -> f64 {
-            self.length
-        }
-    }
-
-    /// Two nodes in 2D, uniform in x if projected.
-    struct TwoNodes2D([[f64; 2]; 2]);
-
-    impl Mesh for TwoNodes2D {
-        fn n_dof(&self) -> usize {
-            2
-        }
-        fn coordinates(&self, i: usize) -> &[f64] {
-            &self.0[i]
-        }
-        fn spatial_dimension(&self) -> usize {
-            2
-        }
-        fn characteristic_length(&self) -> f64 {
-            1.0
-        }
-    }
 
     #[test]
     fn uniform_grid_returns_its_step() {
@@ -216,39 +209,39 @@ mod tests {
 
     #[test]
     fn non_uniform_nodes_are_rejected() {
-        let mesh = NodeList::new(&[0.0, 0.25, 0.5, 1.0], 0.25);
+        let mesh = NodeCloud::new(&[[0.0], [0.25], [0.5], [1.0]], 0.25);
         assert_eq!(uniform_spacing(&mesh), None);
     }
 
     #[test]
     fn length_inconsistent_with_nodes_is_rejected() {
-        let mesh = NodeList::new(&[0.0, 0.25, 0.5, 0.75], 0.5);
+        let mesh = NodeCloud::new(&[[0.0], [0.25], [0.5], [0.75]], 0.5);
         assert_eq!(uniform_spacing(&mesh), None);
     }
 
     #[test]
     fn decreasing_nodes_are_rejected() {
-        let mesh = NodeList::new(&[0.75, 0.5, 0.25, 0.0], 0.25);
+        let mesh = NodeCloud::new(&[[0.75], [0.5], [0.25], [0.0]], 0.25);
         assert_eq!(uniform_spacing(&mesh), None);
     }
 
     #[test]
     fn degenerate_length_is_rejected() {
         for length in [0.0, -0.25, f64::NAN, f64::INFINITY] {
-            let mesh = NodeList::new(&[0.0, 0.25], length);
+            let mesh = NodeCloud::new(&[[0.0], [0.25]], length);
             assert_eq!(uniform_spacing(&mesh), None, "length = {length}");
         }
     }
 
     #[test]
     fn single_node_is_rejected() {
-        let mesh = NodeList::new(&[0.0], 1.0);
+        let mesh = NodeCloud::new(&[[0.0]], 1.0);
         assert_eq!(uniform_spacing(&mesh), None);
     }
 
     #[test]
     fn non_1d_mesh_is_rejected() {
-        let mesh = TwoNodes2D([[0.0, 0.0], [1.0, 0.0]]);
+        let mesh = NodeCloud::new(&[[0.0, 0.0], [1.0, 0.0]], 1.0);
         assert_eq!(uniform_spacing(&mesh), None);
     }
 }
