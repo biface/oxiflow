@@ -57,6 +57,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zero at these nodes, so the integrators and the Newton iterations leave
   them to the condition; their rows of the implicit system become identity
   rows. `DanckwertsOutlet` declares its last node (DD-070, #201).
+- Boundary regions in `mesh` (DA-071, #204): `BoundaryRegion` (one variant
+  today, `Face { axis, side }`), `FaceSide` and `BoundaryNode`, with two
+  provided methods on `Mesh`. `boundary_nodes` lists the nodes of a region;
+  `boundary_neighbours` pairs each with its first neighbour along the inward
+  normal and their distance. Their default covers the two faces of a 1D mesh
+  whose nodes are ordered along the axis; any other region is refused with
+  `PreconditionFailed`.
 
 ### Changed
 
