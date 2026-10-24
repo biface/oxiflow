@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="6. Test" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+  <configuration default="false" name="6. Test" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Controls">
     <option name="buildProfileId" value="test" />
     <option name="command" value="test --all-features" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />

@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="5. Clippy" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+  <configuration default="false" name="1. Clean" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Controls">
     <option name="buildProfileId" value="dev" />
-    <option name="command" value="clippy --all-targets --all-features -- -D warnings" />
+    <option name="command" value="clean" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="true" />
@@ -13,8 +13,6 @@
     <option name="backtrace" value="SHORT" />
     <option name="isRedirectInput" value="false" />
     <option name="redirectInputPath" value="" />
-    <method v="2">
-      <option name="RunConfigurationTask" enabled="true" run_configuration_name="4. Format" run_configuration_type="CargoCommandRunConfiguration" />
-    </method>
+    <method v="2" />
   </configuration>
 </component>
