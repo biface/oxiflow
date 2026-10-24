@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="7. Bench" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Benchmarks">
     <option name="buildProfileId" value="release" />
-    <option name="command" value="bench --features parallel" />
+    <option name="command" value="bench --features parallel --profile release" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="true" />
