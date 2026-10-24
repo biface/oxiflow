@@ -87,8 +87,8 @@
 //! With the `parallel` feature, both finite-difference Jacobians dispatch
 //! their independent evaluations through Rayon — one per column for the
 //! dense one, one per color for the banded one — once the system has at
-//! least as many unknowns as the solver's dispatch threshold. Each worker
-//! perturbs its own work state and writes its columns in place, in the
+//! least as many unknowns as the solver's dispatch threshold. Each Rayon
+//! job perturbs its own work state and writes its columns in place, in the
 //! final matrix. Every column is computed from the same operands with the
 //! same operations in both modes, so the sequential and parallel Jacobians
 //! are bit-for-bit identical. The threshold belongs to each implicit
@@ -184,7 +184,9 @@ impl JacobianDispatch {
 /// Runs `fill` on every item, each call with a work state cloned from
 /// `state` that `fill` refills and perturbs itself.
 ///
-/// Through Rayon when `parallel`, with one work state per worker;
+/// Through Rayon when `parallel`, with one work state per Rayon job
+/// (`try_for_each_init` initialises once per job, not once per thread):
+/// of the order of the number of threads, not of items;
 /// otherwise in order, with one work state for all items. Items must be
 /// independent of one another: each writes only its own columns, from
 /// its own work state, so the result does not depend on the dispatch.

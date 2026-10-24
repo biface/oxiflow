@@ -36,7 +36,7 @@
 //!    [`crate::solver`]). Split into two passes internally (DD-048
 //!    consequence): a Jacobi-parallel compute pass (each domain reads
 //!    only the pre-step state, independent by construction, optionally
-//!    dispatched through Rayon above [`MultiDomainOrchestrator::parallel_threshold`])
+//!    dispatched through Rayon above `MultiDomainOrchestrator::parallel_threshold`)
 //!    followed by a sequential apply pass that writes the results back
 //!    into [`MultiDomainState`]/history. See
 //!    `MultiDomainOrchestrator::compute_domain_steps` for why the split
@@ -452,7 +452,7 @@ impl MultiDomainOrchestrator {
     /// a `Vec`, one domain-local slot each, for [`run`](Self::run)'s
     /// Phase 1b to apply sequentially. Dispatched through Rayon once the
     /// aggregate mesh volume (`Σ domain.mesh.n_dof()`) reaches
-    /// [`parallel_threshold`](Self::parallel_threshold); a plain
+    /// `parallel_threshold` (`parallel` feature); a plain
     /// sequential loop otherwise, and always without the `parallel`
     /// feature.
     ///

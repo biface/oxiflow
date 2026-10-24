@@ -128,7 +128,7 @@ pub enum OxiflowError {
 
     /// No compatible GPU adapter was found (DD-045, `gpu` feature).
     ///
-    /// Returned by [`crate::solver::gpu::GpuContext::new`] — never a silent
+    /// Returned by `solver::gpu::GpuContext::new` — never a silent
     /// CPU fallback (DD-045's explicit-error policy). The caller decides
     /// which CPU solver to fall back to. Present unconditionally (not
     /// `#[cfg(feature = "gpu")]`), consistent with `Persistence` above,

@@ -415,7 +415,7 @@ pub trait Solver: Send + Sync {
     /// always describes a non-finite value.
     ///
     /// Default implementation is a no-op — override to persist (e.g. via
-    /// [`snapshot::write_snapshot`]) or log. There is no `checkpoint()`
+    /// `snapshot::write_snapshot`, `serde` feature) or log. There is no `checkpoint()`
     /// counterpart on this trait; see the [`snapshot`] module docs for why
     /// explicit checkpoints are constructed directly by caller code instead.
     fn on_divergence(&self, snapshot: &snapshot::SimulationSnapshot) {

@@ -47,7 +47,7 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 pub struct CrankNicolsonSolver {
     linear_solver: Box<dyn LinearSolver>,
     /// Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — default
-    /// [`stiff_jacobian_convergence`](super::implicit::stiff_jacobian_convergence)
+    /// [`stiff_jacobian_convergence`]
     /// (deliberately looser than
     /// [`NewtonConvergence::default`] — see
     /// [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)'s

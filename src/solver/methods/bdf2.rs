@@ -82,12 +82,12 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 pub struct BDF2Solver {
     linear_solver: Box<dyn LinearSolver>,
     /// Newton convergence criterion (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — default
-    /// [`stiff_jacobian_convergence`](super::implicit::stiff_jacobian_convergence)
+    /// [`stiff_jacobian_convergence`]
     /// (deliberately looser than [`NewtonConvergence::default`] — see
     /// that function's docs for why zero-config construction needs it).
     /// Only affects the real BDF2 update ([`bdf2_step_newton`]) — the
     /// startup/bootstrap step always uses
-    /// [`theta_method_step`](super::implicit::theta_method_step)
+    /// [`theta_method_step`]
     /// unconditionally, per [module docs](self).
     newton_convergence: NewtonConvergence,
     /// Jacobian refresh strategy (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — default
@@ -254,13 +254,13 @@ impl SteppableSolver for BDF2Solver {
 /// passing its own configured fields. Passing `stiff_jacobian_convergence()`,
 /// [`JacobianStrategy::default`], and `max_iterations = 1` reproduces the
 /// pre-DD-044 behaviour exactly, matching
-/// [`theta_method_step`](super::implicit::theta_method_step)'s own
+/// [`theta_method_step`]'s own
 /// delegate pattern for BE/CN — kept as a plain function call here rather
 /// than a separate wrapper, since (unlike `theta_method_step`) nothing in
 /// production calls the unconfigured form; only this module's own tests
 /// do.
 ///
-/// Follows [`newton`](super::newton)'s residual convention with $\alpha =
+/// Follows [`newton`]'s residual convention with $\alpha =
 /// 3/2$, $c = \Delta t$, $u^{*} = \frac{4u^n - u^{n-1}}{3}$ — derived from
 /// $g(u) = \frac{3}{2}u - 2u^n + \frac{1}{2}u^{n-1} - \Delta t f(u) =
 /// \frac{3}{2}(u - u^{*}) - \Delta t f(u)$ (see [module docs](self)).

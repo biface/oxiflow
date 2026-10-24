@@ -171,12 +171,12 @@ impl FDGradientCalculator {
     /// `compute()` (see the type-level *Supported meshes* section).
     ///
     /// `parallel_threshold` has no override by default —
-    /// [`Self::parallel_threshold`] reports
+    /// `parallel_threshold` reports
     /// `operators::fd::default_parallel_threshold`
     /// (DD-014, #51) until one is set, at construction with
-    /// [`Self::with_parallel_threshold`] or at runtime with
-    /// [`Self::set_parallel_threshold`]; both available only when the crate
-    /// is built with the `parallel` feature.
+    /// `with_parallel_threshold` or at runtime with
+    /// `set_parallel_threshold`; all three exist only when the crate is
+    /// built with the `parallel` feature.
     pub fn new(
         mesh: Arc<dyn Mesh>,
         dimension: usize,
@@ -423,12 +423,12 @@ impl FDLaplacianCalculator {
     /// type-level *Supported meshes* section).
     ///
     /// `parallel_threshold` has no override by default —
-    /// [`Self::parallel_threshold`] reports
+    /// `parallel_threshold` reports
     /// `operators::fd::default_parallel_threshold`
     /// (DD-014, #51) until one is set, at construction with
-    /// [`Self::with_parallel_threshold`] or at runtime with
-    /// [`Self::set_parallel_threshold`]; both available only when the crate
-    /// is built with the `parallel` feature.
+    /// `with_parallel_threshold` or at runtime with
+    /// `set_parallel_threshold`; all three exist only when the crate is
+    /// built with the `parallel` feature.
     pub fn new(mesh: Arc<dyn Mesh>, variable: ContextVariable) -> Self {
         let step = grid_step(&*mesh);
         Self {
