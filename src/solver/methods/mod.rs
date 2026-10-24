@@ -1129,6 +1129,57 @@ mod boundary_condition_tests {
         }
     }
 
+    #[test]
+    fn danckwerts_conditions_on_opposite_faces_mirror_the_column() {
+        // DA-071: inlet on the upper face and outlet on the lower one give
+        // the mirror image of the usual column, on a symmetric initial state.
+        use crate::boundary::{DanckwertsInlet, DanckwertsOutlet};
+        use crate::mesh::{BoundaryRegion, FaceSide};
+        use crate::solver::methods::ForwardEulerSolver;
+        let n = 21;
+        let dx = 1.0 / (n - 1) as f64;
+        let face = |side| BoundaryRegion::Face { axis: 0, side };
+        let run = |inlet_side, outlet_side| {
+            let domain = Domain::new("column", Box::new(Heat { alpha: ALPHA }), Box::new(grid(n)))
+                .with_boundary_conditions(vec![
+                    Box::new(
+                        DanckwertsInlet::new(
+                            2.0 * dx,
+                            1.0,
+                            ContextVariable::External {
+                                name: "feed".into(),
+                            },
+                        )
+                        .on(face(inlet_side)),
+                    ),
+                    Box::new(DanckwertsOutlet::new().on(face(outlet_side))),
+                ]);
+            let scenario = Scenario::multi(vec![domain]).unwrap();
+            let config = config(
+                n,
+                IntegratorKind::Euler,
+                StepControl::Fixed { dt: explicit_dt(n) },
+                0.2,
+            )
+            .with_calculator(constant("feed", 2.0));
+            ForwardEulerSolver.solve(&scenario, &config).unwrap()
+        };
+        let usual = run(FaceSide::Lower, FaceSide::Upper);
+        let mirrored = run(FaceSide::Upper, FaceSide::Lower);
+        for (a, b) in usual.states.iter().zip(&mirrored.states) {
+            let (a, b) = (field(a), field(b));
+            for i in 0..n {
+                assert!(
+                    (a[i] - b[n - 1 - i]).abs() < 1e-12,
+                    "node {i}: {} vs {}",
+                    a[i],
+                    b[n - 1 - i]
+                );
+            }
+        }
+        assert!(field(usual.states.last().unwrap())[0] > 1.5);
+    }
+
     /// Scalar calculator for `Scaled` without source: `factor`, constant.
     fn constant(name: &'static str, value: f64) -> Box<dyn ContextCalculator> {
         Box::new(Scaled {

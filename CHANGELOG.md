@@ -84,6 +84,16 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   requires the feed variable only, no longer the spatial gradient, declares
   node 0, and refuses a mesh with fewer than two nodes or whose node 1 is not
   downstream of node 0. Its values change accordingly (DD-070, #201).
+- `DanckwertsInlet` and `DanckwertsOutlet` act on a boundary region of the
+  mesh, resolved through `Mesh::boundary_neighbours`, instead of node indices:
+  every node of the region is set from its interior neighbour. `new` keeps its
+  signature and its region (the lower face of axis 0 for the inlet, the upper
+  one for the outlet), so results on 1D meshes are unchanged bit for bit; the
+  new `on` method chooses another face, e.g. for a flow towards decreasing
+  `x`. Both conditions gain a public `region` field. The 1D-only check moves
+  to the mesh, which now also refuses a boundary pair not ordered along the
+  axis. The outlet, formerly a unit value, serialises as a map holding its
+  region (DA-071, #204).
 - `ComputeContext` stores its values behind `Arc`. `insert` and the typed
   accessors keep their signatures and still return references, so models
   read the context as before (#196).

@@ -45,13 +45,16 @@
 //!
 //! ## Supported meshes
 //!
-//! Both conditions locate the boundary by DOF index: the inlet is node `0`
-//! and reads node `1`, the outlet node `n − 1` copies node `n − 2`. That
-//! holds on an ordered 1D grid only — on an unstructured mesh (#151) node `0` is an
-//! arbitrary node. Both `apply()` methods therefore return
-//! `PreconditionFailed` when `mesh.spatial_dimension() != 1` (#187), as
-//! `TrapezoidalIntegral` does. On a 1D mesh, nodes are assumed ordered from
-//! inlet to outlet.
+//! Each condition acts on a boundary region of the mesh (DA-071, #204): by
+//! default the lower face of axis 0 for the inlet, the upper face for the
+//! outlet — the two ends of a 1D column, flow towards increasing `x`.
+//! [`DanckwertsInlet::on`] and [`DanckwertsOutlet::on`] choose another face,
+//! for a flow towards decreasing `x` for instance. The mesh resolves the
+//! region with [`Mesh::boundary_neighbours`]: every node of the face is set
+//! from its first interior neighbour along the normal. A mesh that does not
+//! define the region refuses it with `PreconditionFailed`; with the default
+//! implementation of `Mesh`, that is any mesh that is not 1D (#187), and a
+//! 1D mesh whose boundary nodes are not ordered along the axis.
 //!
 //! ## Souplesse
 //!
@@ -64,8 +67,11 @@
 //! ## Serialisation
 //!
 //! Both types implement `serde::Serialize` / `serde::Deserialize` under the `serde`
-//! feature flag. All fields are either `f64` or [`ContextVariable`] — both
-//! already serialisable.
+//! feature flag. All fields are `f64`, [`ContextVariable`] or
+//! [`BoundaryRegion`] — all serialisable. An inlet serialised before DA-071,
+//! without a region, reads back on the lower face of axis 0. The outlet,
+//! formerly a unit value, now serialises as a map holding its region; an
+//! empty map reads back on the upper face.
 //!
 //! [`ComputeContext`]: crate::context::compute::ComputeContext
 //! [`ContextCalculator`]: crate::context::calculator::ContextCalculator
@@ -75,21 +81,23 @@ use crate::boundary::BoundaryCondition;
 use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
 use crate::context::variable::ContextVariable;
-use crate::mesh::Mesh;
+use crate::mesh::{BoundaryRegion, FaceSide, Mesh};
 use crate::model::traits::RequiresContext;
 use nalgebra::DVector;
 
-/// Refuses a mesh that is not 1D: both conditions locate the boundary by
-/// DOF index, which only an ordered 1D grid makes meaningful.
-fn require_1d(mesh: &dyn Mesh, context: &'static str) -> Result<(), OxiflowError> {
-    let dimension = mesh.spatial_dimension();
-    if dimension == 1 {
-        Ok(())
-    } else {
-        Err(OxiflowError::PreconditionFailed {
-            context,
-            message: format!("only 1D meshes are supported, got spatial_dimension = {dimension}"),
-        })
+/// Default region of the inlet: the lower face of axis 0.
+fn lower_face() -> BoundaryRegion {
+    BoundaryRegion::Face {
+        axis: 0,
+        side: FaceSide::Lower,
+    }
+}
+
+/// Default region of the outlet: the upper face of axis 0.
+fn upper_face() -> BoundaryRegion {
+    BoundaryRegion::Face {
+        axis: 0,
+        side: FaceSide::Upper,
     }
 }
 
@@ -105,8 +113,11 @@ fn require_1d(mesh: &dyn Mesh, context: &'static str) -> Result<(), OxiflowError
 /// $$u_0 = \frac{u_{\text{feed}}(t) + \kappa \, u_1}{1 + \kappa},
 ///   \qquad \kappa = \frac{D}{v \, (x_1 - x_0)}$$
 ///
-/// Node 0 is declared as a constrained node (DD-070): the solver keeps its
-/// derivative at zero and the condition alone sets it.
+/// Written for node 0 and its neighbour 1 of a 1D column, the default
+/// region; on any region, each boundary node and its interior neighbour
+/// play these roles. The nodes of the region are declared as constrained
+/// nodes (DD-070): the solver keeps their derivative at zero and the
+/// condition alone sets them.
 ///
 /// # Parameters
 ///
@@ -126,10 +137,10 @@ fn require_1d(mesh: &dyn Mesh, context: &'static str) -> Result<(), OxiflowError
 ///
 /// # Supported meshes
 ///
-/// 1D meshes with at least two nodes, ordered from inlet (node `0`) to
-/// outlet; see the module documentation. `apply()` refuses any other spatial
-/// dimension, a single node, and a node `1` that is not downstream of node
-/// `0`.
+/// Any mesh defining the region through [`Mesh::boundary_neighbours`]; see
+/// the module documentation. With the default implementation of `Mesh`: 1D
+/// meshes with at least two nodes, whose inlet pair is ordered along the
+/// axis.
 ///
 /// # Serialisation
 ///
@@ -158,6 +169,10 @@ pub struct DanckwertsInlet {
     pub velocity: f64,
     /// Context key used to read the feed concentration $u_{\text{feed}}(t)$.
     pub feed_variable: ContextVariable,
+    /// Boundary region the condition acts on (DA-071) — the lower face of
+    /// axis 0 unless set with [`Self::on`].
+    #[cfg_attr(feature = "serde", serde(default = "lower_face"))]
+    pub region: BoundaryRegion,
 }
 
 impl DanckwertsInlet {
@@ -168,12 +183,23 @@ impl DanckwertsInlet {
     /// - `dispersion` — axial dispersion coefficient $D$.
     /// - `velocity`   — interstitial velocity $v$ (must be non-zero at apply time).
     /// - `feed_variable` — context key for $u_{\text{feed}}(t)$.
+    ///
+    /// The condition acts on the lower face of axis 0 — node `0` of a 1D
+    /// column; [`Self::on`] chooses another face.
     pub fn new(dispersion: f64, velocity: f64, feed_variable: ContextVariable) -> Self {
         Self {
             dispersion,
             velocity,
             feed_variable,
+            region: lower_face(),
         }
+    }
+
+    /// Sets the boundary region the condition acts on (DA-071) — the upper
+    /// face of axis 0 for a flow towards decreasing `x`, for instance.
+    pub fn on(mut self, region: BoundaryRegion) -> Self {
+        self.region = region;
+        self
     }
 }
 
@@ -196,9 +222,10 @@ impl BoundaryCondition for DanckwertsInlet {
         Some(crate::boundary::BoundaryLocation::Inlet)
     }
 
-    /// Applies the Danckwerts inlet condition to `state[0]`.
+    /// Applies the Danckwerts inlet condition to every node of its region.
     ///
-    /// Reads $u_1$ from `state`, $x_0$ and $x_1$ from `mesh`, and
+    /// For each boundary node, reads its interior neighbour from `state` and
+    /// their distance from [`Mesh::boundary_neighbours`], and
     /// $u_{\text{feed}}$ from the context variable declared at construction.
     ///
     /// # Errors
@@ -206,55 +233,51 @@ impl BoundaryCondition for DanckwertsInlet {
     /// - [`OxiflowError::MissingCalculator`] if the feed variable is absent
     ///   from the context.
     /// - [`OxiflowError::TypeMismatch`] if the feed variable is not a `Scalar`.
-    /// - [`OxiflowError::PreconditionFailed`] if the mesh is not 1D, has fewer
-    ///   than two nodes, if node `1` is not downstream of node `0`, if
-    ///   `velocity` is zero, or if $1 + \kappa = 0$.
+    /// - [`OxiflowError::PreconditionFailed`] if the mesh does not define the
+    ///   region (with the default implementation of `Mesh`: a mesh that is
+    ///   not 1D, has fewer than two nodes, or whose boundary pair is not
+    ///   ordered along the axis), if `velocity` is zero, or if
+    ///   $1 + \kappa = 0$.
     fn apply(
         &self,
         state: &mut DVector<f64>,
         ctx: &ComputeContext,
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError> {
-        require_1d(mesh, "DanckwertsInlet")?;
         let refuse = |message: String| OxiflowError::PreconditionFailed {
             context: "DanckwertsInlet",
             message,
         };
-        if mesh.n_dof() < 2 {
-            return Err(refuse(format!(
-                "mesh must have at least 2 nodes, got {}",
-                mesh.n_dof()
-            )));
-        }
+        let boundary = mesh.boundary_neighbours(&self.region)?;
         if self.velocity == 0.0 {
             return Err(refuse("velocity must be non-zero".into()));
         }
-        let dx = mesh.coordinates(1)[0] - mesh.coordinates(0)[0];
-        if dx.is_nan() || dx <= 0.0 {
-            return Err(refuse(format!(
-                "node 1 must be downstream of node 0, got x1 - x0 = {dx}"
-            )));
-        }
-        let kappa = self.dispersion / (self.velocity * dx);
-        if 1.0 + kappa == 0.0 {
-            return Err(refuse(format!(
-                "1 + D / (v dx) is zero (D = {}, v = {}, dx = {dx})",
-                self.dispersion, self.velocity
-            )));
-        }
-
         let u_feed = ctx.external(self.feed_variable.clone())?.as_scalar()?;
-        state[0] = (u_feed + kappa * state[1]) / (1.0 + kappa);
+
+        // Every kappa is checked before any node is set: a refused condition
+        // leaves the state as is.
+        let mut kappas = Vec::with_capacity(boundary.len());
+        for b in &boundary {
+            let kappa = self.dispersion / (self.velocity * b.distance);
+            if 1.0 + kappa == 0.0 {
+                return Err(refuse(format!(
+                    "1 + D / (v dx) is zero at node {} (D = {}, v = {}, dx = {})",
+                    b.node, self.dispersion, self.velocity, b.distance
+                )));
+            }
+            kappas.push(kappa);
+        }
+        for (b, kappa) in boundary.iter().zip(kappas) {
+            state[b.node] = (u_feed + kappa * state[b.inner]) / (1.0 + kappa);
+        }
         Ok(())
     }
 
-    /// Node 0, set by [`apply`](Self::apply) (DD-070).
+    /// The nodes of its region, set by [`apply`](Self::apply) (DD-070). A
+    /// region the mesh does not define gives no node here; `apply` reports
+    /// the error.
     fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {
-        if mesh.n_dof() == 0 {
-            Vec::new()
-        } else {
-            vec![0]
-        }
+        mesh.boundary_nodes(&self.region).unwrap_or_default()
     }
 }
 
@@ -270,14 +293,19 @@ impl BoundaryCondition for DanckwertsInlet {
 ///
 /// $$u_{n-1} = u_{n-2}$$
 ///
+/// written for the last node of a 1D column, the default region; on any
+/// region, each boundary node takes the value of its interior neighbour.
+/// The nodes of the region are declared as constrained nodes (DD-070).
+///
 /// No context variables are required — the condition depends only on the
 /// current field state and the mesh geometry.
 ///
 /// # Supported meshes
 ///
-/// 1D meshes whose last node (`n − 1`) is the outlet and whose node `n − 2`
-/// is its neighbour; see the module documentation. `apply()` refuses any
-/// other spatial dimension.
+/// Any mesh defining the region through [`Mesh::boundary_neighbours`]; see
+/// the module documentation. With the default implementation of `Mesh`: 1D
+/// meshes with at least two nodes, whose outlet pair is ordered along the
+/// axis.
 ///
 /// # Serialisation
 ///
@@ -295,12 +323,27 @@ impl BoundaryCondition for DanckwertsInlet {
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct DanckwertsOutlet;
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct DanckwertsOutlet {
+    /// Boundary region the condition acts on (DA-071) — the upper face of
+    /// axis 0 unless set with [`Self::on`].
+    pub region: BoundaryRegion,
+}
 
 impl DanckwertsOutlet {
-    /// Creates a new `DanckwertsOutlet`.
+    /// Creates a new `DanckwertsOutlet`, acting on the upper face of axis 0
+    /// — node `n − 1` of a 1D column; [`Self::on`] chooses another face.
     pub fn new() -> Self {
-        Self
+        Self {
+            region: upper_face(),
+        }
+    }
+
+    /// Sets the boundary region the condition acts on (DA-071) — the lower
+    /// face of axis 0 for a flow towards decreasing `x`, for instance.
+    pub fn on(mut self, region: BoundaryRegion) -> Self {
+        self.region = region;
+        self
     }
 }
 
@@ -329,36 +372,35 @@ impl BoundaryCondition for DanckwertsOutlet {
         Some(crate::boundary::BoundaryLocation::Outlet)
     }
 
-    /// Applies the Danckwerts outlet condition.
+    /// Applies the Danckwerts outlet condition to every node of its region.
     ///
-    /// Sets `state[n-1] = state[n-2]` — first-order approximation of zero
-    /// gradient at the outlet. Requires at least two nodes.
+    /// Sets each boundary node to the value of its first interior neighbour
+    /// ([`Mesh::boundary_neighbours`]) — first-order approximation of a zero
+    /// gradient across the outlet; on a 1D column, `state[n-1] = state[n-2]`.
     ///
     /// # Errors
     ///
-    /// - [`OxiflowError::PreconditionFailed`] if the mesh is not 1D or has
-    ///   fewer than two nodes.
+    /// - [`OxiflowError::PreconditionFailed`] if the mesh does not define the
+    ///   region (with the default implementation of `Mesh`: a mesh that is
+    ///   not 1D, has fewer than two nodes, or whose boundary pair is not
+    ///   ordered along the axis).
     fn apply(
         &self,
         state: &mut DVector<f64>,
         _ctx: &ComputeContext,
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError> {
-        require_1d(mesh, "DanckwertsOutlet")?;
-        let n = mesh.n_dof();
-        if n < 2 {
-            return Err(OxiflowError::PreconditionFailed {
-                context: "DanckwertsOutlet",
-                message: "mesh must have at least 2 nodes".into(),
-            });
+        for b in mesh.boundary_neighbours(&self.region)? {
+            state[b.node] = state[b.inner];
         }
-        state[n - 1] = state[n - 2];
         Ok(())
     }
 
-    /// The last node, set by [`apply`](Self::apply) (DD-070).
+    /// The nodes of its region, set by [`apply`](Self::apply) (DD-070). A
+    /// region the mesh does not define gives no node here; `apply` reports
+    /// the error.
     fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {
-        mesh.n_dof().checked_sub(1).into_iter().collect()
+        mesh.boundary_nodes(&self.region).unwrap_or_default()
     }
 }
 
@@ -633,6 +675,61 @@ mod tests {
         assert!(outlet
             .constrained_nodes(&NodeCloud::new::<1>(&[], 0.0))
             .is_empty());
+    }
+
+    // ── Boundary regions (DA-071) ────────────────────────────────────────────
+
+    #[test]
+    fn conditions_on_the_opposite_faces_for_a_flow_towards_decreasing_x() {
+        use crate::mesh::{BoundaryRegion, FaceSide};
+        let face = |side| BoundaryRegion::Face { axis: 0, side };
+        let mesh = make_mesh(5); // dx = 0.25
+        let inlet = make_inlet(1e-3, 1e-2).on(face(FaceSide::Upper)); // kappa = 0.4
+        let outlet = DanckwertsOutlet::new().on(face(FaceSide::Lower));
+        assert_eq!(inlet.constrained_nodes(&mesh), vec![4]);
+        assert_eq!(outlet.constrained_nodes(&mesh), vec![0]);
+
+        let mut state = DVector::from_vec(vec![9.0, 1.0, 2.0, 3.0, 9.0]);
+        inlet
+            .apply(&mut state, &make_ctx_with_feed(0.8), &mesh)
+            .unwrap();
+        outlet
+            .apply(&mut state, &make_ctx_with_feed(0.8), &mesh)
+            .unwrap();
+        assert!((state[4] - (0.8 + 0.4 * 3.0) / 1.4).abs() < 1e-15);
+        assert_eq!(state[0], 1.0);
+        assert_eq!(state.rows(1, 3).as_slice(), &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn new_conditions_act_on_the_two_ends_of_axis_0() {
+        use crate::mesh::{BoundaryRegion, FaceSide};
+        assert_eq!(
+            make_inlet(1e-7, 1e-3).region,
+            BoundaryRegion::Face {
+                axis: 0,
+                side: FaceSide::Lower
+            }
+        );
+        assert_eq!(
+            DanckwertsOutlet::new().region,
+            BoundaryRegion::Face {
+                axis: 0,
+                side: FaceSide::Upper
+            }
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serialised_conditions_without_a_region_read_back_on_their_default_face() {
+        let mut inlet = serde_json::to_value(make_inlet(1e-7, 1e-3)).unwrap();
+        inlet.as_object_mut().unwrap().remove("region").unwrap();
+        let inlet: DanckwertsInlet = serde_json::from_value(inlet).unwrap();
+        assert_eq!(inlet.region, make_inlet(1e-7, 1e-3).region);
+
+        let outlet: DanckwertsOutlet = serde_json::from_str("{}").unwrap();
+        assert_eq!(outlet.region, DanckwertsOutlet::new().region);
     }
 
     #[test]

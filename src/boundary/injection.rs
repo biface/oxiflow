@@ -226,7 +226,11 @@ impl BoundaryCondition for InjectionInlet {
 /// The signature is kept as is for 0.10.0: a form taking a mesh would also
 /// need an explicit location and a mass-to-nodal-value conversion once
 /// unstructured meshes exist, so it is left to that cycle (#151) rather than
-/// broken twice (#187).
+/// broken twice (#187). The location now has its mechanism: a
+/// [`BoundaryRegion`](crate::mesh::BoundaryRegion) resolved by
+/// [`Mesh::boundary_nodes`] (DA-071), as
+/// the Danckwerts conditions do. Only the mass conversion, which needs the
+/// control volume of a node, still holds the signature back until #151.
 pub fn dirac_initial_state(n_dof: usize, amount: f64) -> DVector<f64> {
     let mut v = DVector::zeros(n_dof);
     if n_dof > 0 {

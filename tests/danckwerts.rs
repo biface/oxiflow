@@ -1,10 +1,11 @@
 //! # Integration test: meshes supported by the Danckwerts conditions (#187)
 //!
-//! `DanckwertsInlet` and `DanckwertsOutlet` locate the boundary by DOF index
-//! (node `0`, node `n − 1`), which an ordered 1D grid alone makes meaningful.
-//! These tests check, from outside the crate, that both conditions refuse a
-//! 2D mesh with `PreconditionFailed` and still apply on a 1D mesh whose nodes
-//! are ordered but not equally spaced.
+//! `DanckwertsInlet` and `DanckwertsOutlet` act on a boundary region the mesh
+//! resolves (DA-071): with the default implementation of `Mesh`, the two
+//! ends of a 1D mesh whose nodes are ordered along the axis. These tests
+//! check, from outside the crate, that both conditions refuse a 2D mesh that
+//! defines no boundary region with `PreconditionFailed`, and still apply on a
+//! 1D mesh whose nodes are ordered but not equally spaced.
 
 mod common;
 
