@@ -46,7 +46,9 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
-use crate::solver::methods::{check_finite, divergence_snapshot, SteppableSolver};
+use crate::solver::methods::{
+    check_finite, divergence_snapshot, enforce_boundary_conditions, SteppableSolver,
+};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -293,6 +295,7 @@ impl Solver for OperatorSplittingSolver {
         let chain = build_calculator_chain(&requirements, &config.calculators)?;
 
         let mut u = domain.model.initial_state(domain.mesh.as_ref());
+        enforce_boundary_conditions(domain, &chain, &mut u, t_start, dt)?;
 
         let n_steps = ((t_end - t_start) / dt).round() as usize;
         let save_every = config.time.save_every.unwrap_or(1);
@@ -308,6 +311,9 @@ impl Solver for OperatorSplittingSolver {
             let t_next = t_start + ((step + 1) as f64) * dt;
 
             u = self.apply_step(&chain, &mut u, t, dt)?;
+            // Saved states satisfy the outer domain's boundary conditions
+            // (DD-070); the sub-steps only re-apply them per evaluation.
+            enforce_boundary_conditions(domain, &chain, &mut u, t_next, dt)?;
 
             if let Err(e) = check_finite(&u, t_next) {
                 self.on_divergence(&divergence_snapshot(

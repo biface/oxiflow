@@ -454,55 +454,16 @@ mod tests {
 
     #[test]
     fn boundary_condition_is_applied_at_every_stage() {
-        use crate::boundary::{BoundaryCondition, BoundaryType};
-        use crate::mesh::Mesh as MeshTrait;
+        use crate::boundary::PinnedNodes;
         use crate::solver::scenario::Domain;
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        use std::sync::Arc;
+        use std::sync::atomic::Ordering;
 
-        /// Pins node 0 and counts how many times it was applied — used to
-        /// confirm RK4 applies BCs once per stage (4 per step), not once
-        /// per outer step.
-        ///
-        /// `Arc<AtomicUsize>`, not `Rc<Cell<usize>>` — `BoundaryCondition`
-        /// requires `Send + Sync` since DD-037 (#45): a `Domain` can now be
-        /// *owned* by `OperatorSplittingSolver`'s `SplitOperator`, which
-        /// must itself be `Send + Sync` (`Solver: Send + Sync`).
-        #[derive(Debug)]
-        struct PinFirstNode {
-            value: f64,
-            calls: Arc<AtomicUsize>,
-        }
-
-        impl RequiresContext for PinFirstNode {
-            fn required_variables(&self) -> Vec<ContextVariable> {
-                vec![]
-            }
-        }
-
-        impl BoundaryCondition for PinFirstNode {
-            fn boundary_type(&self) -> BoundaryType {
-                BoundaryType::Dirichlet
-            }
-
-            fn apply(
-                &self,
-                state: &mut DVector<f64>,
-                _ctx: &ComputeContext,
-                _mesh: &dyn MeshTrait,
-            ) -> Result<(), OxiflowError> {
-                state[0] = self.value;
-                self.calls.fetch_add(1, Ordering::SeqCst);
-                Ok(())
-            }
-        }
-
-        let calls = Arc::new(AtomicUsize::new(0));
+        // Counts the applications, to confirm RK4 applies the conditions
+        // once per stage (4 per step), not once per outer step.
+        let pin = PinnedNodes::new(&[0], |_| -7.0);
+        let calls = pin.calls();
         let domain = Domain::new("pinned", Box::new(ZeroDerivative), make_mesh(3))
-            .with_boundary_conditions(vec![Box::new(PinFirstNode {
-                value: -7.0,
-                calls: calls.clone(),
-            })]);
+            .with_boundary_conditions(vec![Box::new(pin)]);
         let scenario = Scenario::multi(vec![domain]).unwrap();
         let config = make_config(0.2, 0.1); // 2 steps
 
@@ -512,8 +473,9 @@ mod tests {
         assert!((final_state[0] - (-7.0)).abs() < 1e-12);
         assert!((final_state[1] - 2.5).abs() < 1e-12);
 
-        // 2 steps * 4 stages = 8 applications.
-        assert_eq!(calls.load(Ordering::SeqCst), 8);
+        // 2 steps * (4 stages + 1 at the end of the step, DD-070), plus 1
+        // on the initial state = 11 applications.
+        assert_eq!(calls.load(Ordering::SeqCst), 11);
     }
 
     // ── Validation errors ─────────────────────────────────────────────────────

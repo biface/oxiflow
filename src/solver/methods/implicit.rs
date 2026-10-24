@@ -1079,7 +1079,7 @@ mod tests {
 
     // ── Dirichlet BC × perturbed Jacobian (#113) ───────────────────────────────
 
-    use crate::boundary::{BoundaryCondition, BoundaryType};
+    use crate::boundary::PinnedNodes;
 
     /// Discrete tridiagonal diffusion with a spike initial condition —
     /// genuine spatial coupling to neighbours, needed to distinguish
@@ -1129,41 +1129,11 @@ mod tests {
         }
     }
 
-    /// Fixes a single node to a constant value — a minimal Dirichlet BC.
-    /// No built-in `BoundaryCondition` implementation in `crate::boundary`
-    /// enforces a plain Dirichlet constraint today (only `DanckwertsInlet`/
-    /// `DanckwertsOutlet`, Robin/Neumann), so this test defines its own.
-    #[derive(Debug)]
-    struct FixedDirichlet {
-        node_index: usize,
-        value: f64,
-    }
-
-    impl RequiresContext for FixedDirichlet {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl BoundaryCondition for FixedDirichlet {
-        fn boundary_type(&self) -> BoundaryType {
-            BoundaryType::Dirichlet
-        }
-
-        fn apply(
-            &self,
-            state: &mut DVector<f64>,
-            _ctx: &ComputeContext,
-            _mesh: &dyn Mesh,
-        ) -> Result<(), OxiflowError> {
-            state[self.node_index] = self.value;
-            Ok(())
-        }
-    }
-
     #[test]
     fn dirichlet_constrained_column_is_exactly_zero_row_keeps_real_coupling() {
-        // DD-033's known limitation, closed by #113: `finite_difference_jacobian`
+        // Undeclared constrained node (no `constrained_nodes`, behaviour
+        // before DD-070), kept as such. DD-033's known limitation, closed by
+        // #113: `finite_difference_jacobian`
         // perturbs each state component and re-evaluates `evaluate_derivative`,
         // which re-applies boundary conditions on every call. A
         // Dirichlet-constrained node's perturbation is therefore overwritten
@@ -1179,10 +1149,7 @@ mod tests {
             Box::new(TridiagonalDiffusion { diffusion }),
             make_mesh(n),
         )
-        .with_boundary_conditions(vec![Box::new(FixedDirichlet {
-            node_index: constrained,
-            value: 0.0,
-        })]);
+        .with_boundary_conditions(vec![Box::new(PinnedNodes::new(&[constrained], |_| 0.0))]);
         let scenario = Scenario::multi(vec![domain]).unwrap();
         let domain = scenario.single_domain().unwrap();
         let requirements = scenario.context_requirements();
@@ -1230,6 +1197,51 @@ mod tests {
             "expected right-neighbour coupling ~{diffusion}, got {}",
             jac[(constrained, right)]
         );
+    }
+
+    #[test]
+    fn declared_constrained_node_has_a_zero_row_and_column() {
+        // DD-070 (#200): a declared node gets a zero derivative at every
+        // evaluation, so its row of the Jacobian is zero as well as its
+        // column -- an identity row in `I - theta*dt*J`. The other entries
+        // are those of the undeclared case, bit for bit.
+        let n = 5;
+        let constrained = n / 2;
+        let jacobian = |pin: PinnedNodes| {
+            let domain = Domain::new(
+                "dirichlet_test",
+                Box::new(TridiagonalDiffusion { diffusion: 0.7 }),
+                make_mesh(n),
+            )
+            .with_boundary_conditions(vec![Box::new(pin)]);
+            let state = domain.model.initial_state(domain.mesh.as_ref());
+            let chain = build_calculator_chain(&domain.model.required_variables(), &[]).unwrap();
+            finite_difference_jacobian(
+                &domain,
+                &chain,
+                &state,
+                0.0,
+                0.01,
+                &JacobianDispatch::default(),
+            )
+            .unwrap()
+        };
+        let undeclared = jacobian(PinnedNodes::new(&[constrained], |_| 0.0));
+        let declared = jacobian(PinnedNodes::new(&[constrained], |_| 0.0).declared());
+
+        for k in 0..n {
+            assert_eq!(declared[(constrained, k)], 0.0, "row entry {k}");
+            assert_eq!(declared[(k, constrained)], 0.0, "column entry {k}");
+        }
+        for i in (0..n).filter(|&i| i != constrained) {
+            for j in 0..n {
+                assert_eq!(
+                    declared[(i, j)].to_bits(),
+                    undeclared[(i, j)].to_bits(),
+                    "({i}, {j})"
+                );
+            }
+        }
     }
 }
 

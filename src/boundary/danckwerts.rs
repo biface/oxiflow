@@ -327,6 +327,11 @@ impl BoundaryCondition for DanckwertsOutlet {
         state[n - 1] = state[n - 2];
         Ok(())
     }
+
+    /// The last node, set by [`apply`](Self::apply) (DD-070).
+    fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {
+        mesh.n_dof().checked_sub(1).into_iter().collect()
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -578,6 +583,16 @@ mod tests {
             .apply(&mut state, &ctx, &mesh)
             .unwrap();
         assert!((state[1] - 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn outlet_declares_its_last_node() {
+        // DD-070: the node `apply` sets is declared to the solver.
+        let outlet = DanckwertsOutlet::new();
+        assert_eq!(outlet.constrained_nodes(&make_mesh(5)), vec![4]);
+        assert!(outlet
+            .constrained_nodes(&NodeCloud::new::<1>(&[], 0.0))
+            .is_empty());
     }
 
     #[test]

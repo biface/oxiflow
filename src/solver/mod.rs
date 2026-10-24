@@ -12,12 +12,21 @@
 //!
 //! ## Contractual execution order
 //!
-//! `Solver::solve()` implementations must follow this order at each time step:
+//! `Solver::solve()` implementations must follow this order at each derivative
+//! evaluation (DD-070, #200):
 //!
-//! 1. **Calculators** — populate `ComputeContext` in topological order
+//! 1. **Calculators required by the boundary conditions** — populate
+//!    `ComputeContext` with the variables the conditions require (with their
+//!    dependencies), in chain order
 //! 2. **Boundary conditions** — apply to state using `ctx` (J2)
-//! 3. **`compute_physics`** — compute `du/dt` from state + context
-//! 4. **Integrate** — advance state by `dt`
+//! 3. **Other calculators** — complete `ComputeContext` from the constrained
+//!    state, in chain order
+//! 4. **`compute_physics`** — compute `du/dt` from state + context, then set
+//!    it to zero at the nodes the conditions declare
+//! 5. **Integrate** — advance state by `dt`
+//!
+//! The boundary conditions are also applied to the initial state and to the
+//! state at the end of each step, before it is checked and saved.
 //!
 //! This order is a contract, not a convention. Deviating from it produces
 //! silently incorrect results.

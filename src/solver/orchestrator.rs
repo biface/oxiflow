@@ -56,7 +56,7 @@ use crate::context::state::MultiDomainState;
 use crate::context::{ContextCalculator, ContextValue};
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::{StepControl, TimeConfiguration};
-use crate::solver::methods::{check_finite, SteppableSolver};
+use crate::solver::methods::{check_finite, enforce_boundary_conditions, SteppableSolver};
 #[cfg(feature = "parallel")]
 use crate::solver::parallel::ParallelThreshold;
 use crate::solver::scenario::{Domain, DomainId, Scenario};
@@ -349,7 +349,8 @@ impl MultiDomainOrchestrator {
         let mut multi_state = MultiDomainState::new();
         for domain in scenario.domains() {
             let quantity = self.quantity_for(&domain.id)?;
-            let initial = domain.model.initial_state(domain.mesh.as_ref());
+            let mut initial = domain.model.initial_state(domain.mesh.as_ref());
+            enforce_boundary_conditions(domain, &chain, &mut initial, t_start, dt)?;
             multi_state.set(domain.id.clone(), quantity, initial);
         }
 
@@ -393,8 +394,15 @@ impl MultiDomainOrchestrator {
             // `parallel_threshold()`. Phase 1b applies the collected
             // results to `multi_state`/`histories` sequentially -- cheap,
             // O(domain count), not the numerical work itself.
-            let results: Vec<DomainStepResult> =
-                self.compute_domain_steps(scenario, &multi_state, &histories, &chain, t, dt)?;
+            let results: Vec<DomainStepResult> = self.compute_domain_steps(
+                scenario,
+                &multi_state,
+                &histories,
+                &chain,
+                t,
+                dt,
+                t_next,
+            )?;
 
             for result in results {
                 if result.history_depth > 0 {
@@ -445,7 +453,8 @@ impl MultiDomainOrchestrator {
         })
     }
 
-    /// Phase 1a: computes every domain's next state, independently.
+    /// Phase 1a: computes every domain's next state, independently, and
+    /// applies its boundary conditions at `t_next` (DD-070, #200).
     ///
     /// Reads only the pre-step `multi_state`/`histories` (both taken by
     /// shared reference) and writes nothing -- results are collected into
@@ -462,6 +471,11 @@ impl MultiDomainOrchestrator {
     /// iteration order) -- domains are independent within a step, so
     /// which one's error is reported first does not change whether the
     /// step as a whole fails.
+    ///
+    /// `dt` and `t_next` are both passed, rather than `t_next` recomputed as
+    /// `t + dt`: the step uses `dt` as before, and the boundary conditions
+    /// are applied at the very time the state is saved with.
+    #[allow(clippy::too_many_arguments)]
     fn compute_domain_steps(
         &self,
         scenario: &Scenario,
@@ -470,6 +484,7 @@ impl MultiDomainOrchestrator {
         chain: &[&dyn ContextCalculator],
         t: f64,
         dt: f64,
+        t_next: f64,
     ) -> Result<Vec<DomainStepResult>, OxiflowError> {
         let compute_one = |domain: &Domain| -> Result<DomainStepResult, OxiflowError> {
             let quantity = self.quantity_for(&domain.id)?;
@@ -485,10 +500,13 @@ impl MultiDomainOrchestrator {
                 })?
                 .clone();
 
-            let next_state = {
+            let mut next_state = {
                 let history = &histories[&domain.id];
                 solver.step(domain, chain, &mut state, history, t, dt)?
             };
+            // Each domain's state satisfies its boundary conditions before
+            // the coupling exchange (DD-070, #200).
+            enforce_boundary_conditions(domain, chain, &mut next_state, t_next, dt)?;
 
             // `state` was mutated in-place by BC application inside
             // `step()` above -- carry *that* corrected u^n forward for

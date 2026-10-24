@@ -109,8 +109,9 @@ impl SteppableSolver for ForwardEulerSolver {
     ) -> Result<ContextValue, OxiflowError> {
         // history_depth() defaults to 0 -- Euler is a one-step method,
         // `_history` is always empty here and intentionally unused.
-        // Contractual order (calculators -> BCs -> compute_physics) is
-        // enforced once, here, for both Euler and RK4 — see
+        // Contractual order (boundary calculators -> BCs -> other
+        // calculators -> compute_physics -> held nodes, DD-070) is enforced
+        // once, for every integrator — see
         // `solver::methods::evaluate_derivative`. `state` is corrected
         // in-place by boundary conditions before the derivative is taken.
         let du_dt = evaluate_derivative(domain, chain, state, t, dt)?;
@@ -436,45 +437,14 @@ mod tests {
 
     #[test]
     fn boundary_condition_is_applied_each_step() {
-        use crate::boundary::{BoundaryCondition, BoundaryType};
-        use crate::context::compute::ComputeContext;
-        use crate::mesh::Mesh as MeshTrait;
+        use crate::boundary::PinnedNodes;
         use crate::solver::scenario::Domain;
-
-        /// Pins node 0 to a fixed value on every application — a minimal
-        /// Dirichlet-style fixture, not a physically meaningful BC.
-        #[derive(Debug)]
-        struct PinFirstNode {
-            value: f64,
-        }
-
-        impl RequiresContext for PinFirstNode {
-            fn required_variables(&self) -> Vec<ContextVariable> {
-                vec![]
-            }
-        }
-
-        impl BoundaryCondition for PinFirstNode {
-            fn boundary_type(&self) -> BoundaryType {
-                BoundaryType::Dirichlet
-            }
-
-            fn apply(
-                &self,
-                state: &mut DVector<f64>,
-                _ctx: &ComputeContext,
-                _mesh: &dyn MeshTrait,
-            ) -> Result<(), OxiflowError> {
-                state[0] = self.value;
-                Ok(())
-            }
-        }
 
         // ZeroDerivative leaves the field unchanged everywhere — any
         // deviation from its initial value of 2.5 at node 0 can only come
         // from the boundary condition.
         let domain = Domain::new("pinned", Box::new(ZeroDerivative), make_mesh(3))
-            .with_boundary_conditions(vec![Box::new(PinFirstNode { value: -7.0 })]);
+            .with_boundary_conditions(vec![Box::new(PinnedNodes::new(&[0], |_| -7.0))]);
         let scenario = Scenario::multi(vec![domain]).unwrap();
         let config = make_config(0.3, 0.1);
         let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();

@@ -52,9 +52,25 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   threshold set with `with_parallel_threshold` or `set_parallel_threshold`;
   the default, 10 000 nodes, is indicative. The function must be pure
   (#182).
+- `BoundaryCondition::constrained_nodes`, a provided method returning the
+  nodes `apply` sets (empty by default). The solver sets the derivative to
+  zero at these nodes, so the integrators and the Newton iterations leave
+  them to the condition; their rows of the implicit system become identity
+  rows. `DanckwertsOutlet` declares its last node (DD-070, #201).
 
 ### Changed
 
+- Boundary conditions are applied before the calculators that read the
+  state: at each derivative evaluation, the calculators providing the
+  variables the conditions require run first, then the conditions, then the
+  other calculators and `compute_physics`. A gradient or Laplacian no longer
+  sees a boundary value that drifted since the last evaluation; with
+  boundary conditions, results change accordingly (DD-070, #201).
+- The solver drivers (fixed-step loop, DoPri45, operator splitting,
+  `MultiDomainOrchestrator`) apply the boundary conditions to the initial
+  state and to the state at the end of each step, before checking and saving
+  it: every saved state satisfies them, including a value that depends on
+  time. `SteppableSolver::step` itself does not (DD-070, #201).
 - `ComputeContext` stores its values behind `Arc`. `insert` and the typed
   accessors keep their signatures and still return references, so models
   read the context as before (#196).

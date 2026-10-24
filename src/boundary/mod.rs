@@ -26,9 +26,21 @@
 //! ## Role
 //!
 //! A boundary condition constrains the primary field $u$ at the boundary of a
-//! spatial domain. It is applied **after** the context calculators have run and
-//! **before** `PhysicalModel::compute_physics` is called, so the full
-//! [`ComputeContext`] is available when `apply` executes.
+//! spatial domain. At every derivative evaluation (DD-070, #200), the solver
+//! runs the calculators providing the variables the conditions require, then
+//! applies the conditions, then runs the remaining calculators and calls
+//! `PhysicalModel::compute_physics`: the calculators that read the state (a
+//! gradient, a Laplacian) see the constrained state.
+//!
+//! ## Constrained nodes (DD-070)
+//!
+//! A condition that sets node values declares them through
+//! [`BoundaryCondition::constrained_nodes`]. These nodes are algebraic, not
+//! differential: the solver sets the derivative to zero there, so neither an
+//! integrator nor a Newton iteration moves them, and the solver drivers
+//! re-apply every condition to the state at the end of each step and to the
+//! initial state. Every saved state therefore satisfies the conditions,
+//! including a value that depends on time or on neighbouring nodes.
 //!
 //! ## RequiresContext integration
 //!
@@ -187,11 +199,19 @@ pub enum BoundaryLocation {
 ///
 /// # Contract
 ///
-/// - `apply` is called once per time step, after context calculators and before
-///   `PhysicalModel::compute_physics`.
+/// - `apply` is called at every derivative evaluation, after the calculators
+///   providing the variables declared in `required_variables()` and before
+///   the other calculators and `PhysicalModel::compute_physics` (DD-070). The
+///   solver drivers also call it on the initial state and at the end of each
+///   step.
 /// - `apply` must not modify `ctx` or `mesh` — only `state`.
 /// - Variables declared in `required_variables()` are guaranteed to be present
-///   in `ctx` when `apply` is called.
+///   in `ctx` when `apply` is called. They are computed on the state *before*
+///   the conditions are applied, so a condition should only require variables
+///   that do not depend on the state (time, a feed concentration): a gradient
+///   read there would come from the unconstrained state.
+/// - `apply` only modifies the nodes returned by
+///   [`constrained_nodes`](Self::constrained_nodes), if it declares any.
 ///
 /// # State variants
 ///
@@ -284,13 +304,15 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
 
     /// Applies the boundary condition to `state`.
     ///
-    /// Called once per time step, after all context calculators have run.
-    /// Modifies `state` in-place to enforce the constraint.
+    /// Called at every derivative evaluation and by the solver drivers (see
+    /// the *Contract* section). Modifies `state` in-place to enforce the
+    /// constraint.
     ///
     /// # Parameters
     ///
     /// - `state` — current field $u$ as a DOF vector; modified in-place.
-    /// - `ctx`   — fully populated context (time, step, spatial quantities).
+    /// - `ctx`   — context holding the time, the time step and the variables
+    ///   declared in `required_variables()`.
     /// - `mesh`  — spatial discretisation of the domain.
     ///
     /// # Errors
@@ -302,6 +324,33 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
         ctx: &ComputeContext,
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError>;
+
+    /// Indices of the nodes [`apply`](Self::apply) sets, for `mesh` (DD-070,
+    /// #200).
+    ///
+    /// The solver treats these nodes as algebraic: it sets the derivative to
+    /// zero there at every evaluation, so that the integrators and the Newton
+    /// iterations of the implicit methods leave them alone (their rows of the
+    /// implicit system become identity rows), and the condition alone fixes
+    /// their value, within a step as well as at its end.
+    ///
+    /// Defaults to an empty list: a condition that declares nothing keeps the
+    /// derivative the model gives its nodes. The solver drivers still restore
+    /// it at the end of each step, but its nodes move within the step: a
+    /// direct call to `SteppableSolver::step` returns them moved, and the
+    /// error estimate of an adaptive method or the residual of a Newton
+    /// iteration includes that movement. Return only nodes `apply` actually
+    /// sets — a declared node that `apply` leaves alone would keep its
+    /// initial value.
+    ///
+    /// # Errors reported by the solver
+    ///
+    /// An index outside the state is reported as
+    /// `OxiflowError::PreconditionFailed` at the first derivative evaluation.
+    fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {
+        let _ = mesh;
+        Vec::new()
+    }
 
     /// Ghost-cell value for this boundary condition, at reflection depth
     /// `depth` (DD-042, amendment 1).
@@ -357,6 +406,93 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
     ) -> Option<f64> {
         let _ = (depth, interior_at_depth, dx, ctx);
         None
+    }
+}
+
+// ── Test condition ────────────────────────────────────────────────────────────
+
+/// Test condition setting some nodes to a value that may depend on time,
+/// declared as constrained nodes (DD-070) or not, and counting its
+/// applications. Shared by the solver tests.
+#[cfg(test)]
+pub(crate) struct PinnedNodes {
+    nodes: Vec<usize>,
+    value: Box<dyn Fn(f64) -> f64 + Send + Sync>,
+    declared: Vec<usize>,
+    calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[cfg(test)]
+impl PinnedNodes {
+    /// Sets `nodes` to `value(t)` without declaring them, as a condition
+    /// written before DD-070.
+    pub(crate) fn new(nodes: &[usize], value: impl Fn(f64) -> f64 + Send + Sync + 'static) -> Self {
+        Self {
+            nodes: nodes.to_vec(),
+            value: Box::new(value),
+            declared: Vec::new(),
+            calls: Default::default(),
+        }
+    }
+
+    /// Declares the pinned nodes through `constrained_nodes`.
+    pub(crate) fn declared(self) -> Self {
+        let nodes = self.nodes.clone();
+        self.declaring(&nodes)
+    }
+
+    /// Declares `nodes` through `constrained_nodes`, whatever `apply` sets —
+    /// for the tests of an inconsistent declaration.
+    pub(crate) fn declaring(mut self, nodes: &[usize]) -> Self {
+        self.declared = nodes.to_vec();
+        self
+    }
+
+    /// Counter of the calls to `apply`.
+    pub(crate) fn calls(&self) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+        std::sync::Arc::clone(&self.calls)
+    }
+}
+
+#[cfg(test)]
+impl std::fmt::Debug for PinnedNodes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PinnedNodes")
+            .field("nodes", &self.nodes)
+            .field("declared", &self.declared)
+            .finish()
+    }
+}
+
+#[cfg(test)]
+impl RequiresContext for PinnedNodes {
+    fn required_variables(&self) -> Vec<crate::context::variable::ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl BoundaryCondition for PinnedNodes {
+    fn boundary_type(&self) -> BoundaryType {
+        BoundaryType::Dirichlet
+    }
+
+    fn apply(
+        &self,
+        state: &mut DVector<f64>,
+        ctx: &ComputeContext,
+        _mesh: &dyn Mesh,
+    ) -> Result<(), OxiflowError> {
+        let value = (self.value)(ctx.time());
+        for &i in &self.nodes {
+            state[i] = value;
+        }
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn constrained_nodes(&self, _mesh: &dyn Mesh) -> Vec<usize> {
+        self.declared.clone()
     }
 }
 

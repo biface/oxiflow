@@ -71,7 +71,9 @@ use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
 use crate::solver::methods::step_control::StepSizeController;
-use crate::solver::methods::{check_finite, divergence_snapshot, evaluate_derivative};
+use crate::solver::methods::{
+    check_finite, divergence_snapshot, enforce_boundary_conditions, evaluate_derivative,
+};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -181,6 +183,7 @@ impl Solver for DoPri45Solver {
         let chain = build_calculator_chain(&requirements, &config.calculators)?;
 
         let mut u = domain.model.initial_state(domain.mesh.as_ref());
+        enforce_boundary_conditions(domain, &chain, &mut u, t_start, dt_init)?;
         let mut t = t_start;
         let mut dt = dt_init;
 
@@ -216,6 +219,8 @@ impl Solver for DoPri45Solver {
                 if controller.accept(error_norm) {
                     u = y5;
                     t += local_dt;
+                    // Saved states satisfy the boundary conditions (DD-070).
+                    enforce_boundary_conditions(domain, &chain, &mut u, t, local_dt)?;
                     accepted_steps += 1;
                     accepted_since_save += 1;
 
