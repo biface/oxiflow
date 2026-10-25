@@ -87,6 +87,12 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Backward Euler against the exact steady profile. It exits with an error
   beyond its tolerances and runs in CI as the first reference example
   (#175).
+- `benches/oxiflow_parallel`: a `coefficient_dispatch` diagnostic for
+  `CoefficientField`, with the `parallel` feature. It times the evaluation
+  of a c(x, t) field forced sequential or parallel, at a new time on every
+  call, for the graded conductivity of the heat-transfer example and for a
+  costlier two-layer profile, so that the field's dispatch threshold can be
+  measured locally (#175).
 
 ### Changed
 

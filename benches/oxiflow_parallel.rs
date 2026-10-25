@@ -9,6 +9,8 @@
 
 mod diffusion_1d;
 #[cfg(feature = "parallel")]
+mod heat_transfer_1d;
+#[cfg(feature = "parallel")]
 mod implicit_dispatch;
 mod lahar_multifield;
 mod langmuir_multi;
@@ -24,6 +26,7 @@ criterion_group!(
     diffusion_1d::raw_rayon_dispatch_diagnostic,
     diffusion_1d::implicit_jacobian_dispatch,
     diffusion_1d::boundary_condition_overhead,
+    heat_transfer_1d::coefficient_dispatch,
     viscous_burgers::full_run,
     viscous_burgers::combined_dispatch_diagnostic,
     langmuir_multi::full_run,
