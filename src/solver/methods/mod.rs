@@ -685,11 +685,11 @@ mod boundary_condition_tests {
     use nalgebra::DVector;
 
     use super::*;
-    use crate::boundary::{BoundaryCondition, BoundaryType, PinnedNodes};
+    use crate::boundary::{BoundaryCondition, BoundaryType, Dirichlet, PinnedNodes};
     use crate::context::calculators::FDLaplacianCalculator;
     use crate::context::quantity::PhysicalQuantity;
     use crate::context::variable::ContextVariable;
-    use crate::mesh::{Mesh, UniformGrid1D};
+    use crate::mesh::{BoundaryRegion, FaceSide, Mesh, UniformGrid1D};
     use crate::model::{PhysicalModel, RequiresContext};
     use crate::solver::config::{IntegratorKind, TimeConfiguration};
     use crate::solver::orchestrator::{MultiDomainOrchestrator, OrchestratorConfig};
@@ -744,9 +744,63 @@ mod boundary_condition_tests {
         UniformGrid1D::new(n, 0.0, 1.0).unwrap()
     }
 
-    fn heat_domain(n: usize, alpha: f64, bc: PinnedNodes) -> Domain {
+    /// Boundary conditions of a test domain.
+    type Conditions = Vec<Box<dyn BoundaryCondition>>;
+
+    const LOWER: BoundaryRegion = BoundaryRegion::Face {
+        axis: 0,
+        side: FaceSide::Lower,
+    };
+    const UPPER: BoundaryRegion = BoundaryRegion::Face {
+        axis: 0,
+        side: FaceSide::Upper,
+    };
+
+    /// A single test condition.
+    fn pinned(bc: PinnedNodes) -> Conditions {
+        vec![Box::new(bc)]
+    }
+
+    /// The two ways of holding both ends checked here (#202).
+    #[derive(Debug, Clone, Copy)]
+    enum HeldEnds {
+        /// One test condition declaring both nodes.
+        PinnedNodes,
+        /// Two `Dirichlet` conditions, one per face.
+        Dirichlet,
+    }
+
+    impl HeldEnds {
+        const ALL: [Self; 2] = [Self::PinnedNodes, Self::Dirichlet];
+
+        /// Both ends of an `n`-node bar held at `value`.
+        fn at(self, n: usize, value: f64) -> Conditions {
+            match self {
+                Self::PinnedNodes => {
+                    pinned(PinnedNodes::new(&[0, n - 1], move |_| value).declared())
+                }
+                Self::Dirichlet => vec![
+                    Box::new(Dirichlet::constant(LOWER, value)),
+                    Box::new(Dirichlet::constant(UPPER, value)),
+                ],
+            }
+        }
+
+        /// Both ends of an `n`-node bar held at `g(t)`.
+        fn by(self, n: usize, g: fn(f64) -> f64) -> Conditions {
+            match self {
+                Self::PinnedNodes => pinned(PinnedNodes::new(&[0, n - 1], g).declared()),
+                Self::Dirichlet => vec![
+                    Box::new(Dirichlet::of_t(LOWER, g)),
+                    Box::new(Dirichlet::of_t(UPPER, g)),
+                ],
+            }
+        }
+    }
+
+    fn heat_domain(n: usize, alpha: f64, bcs: Conditions) -> Domain {
         Domain::new("bar", Box::new(Heat { alpha }), Box::new(grid(n)))
-            .with_boundary_conditions(vec![Box::new(bc)])
+            .with_boundary_conditions(bcs)
     }
 
     fn laplacian_calculator(n: usize) -> Box<dyn ContextCalculator> {
@@ -769,10 +823,11 @@ mod boundary_condition_tests {
         0.2 * dx * dx / ALPHA
     }
 
-    /// The seven solvers, with a step suited to each.
+    /// The seven solvers, with a step suited to each; `bcs` builds the
+    /// conditions of each domain.
     fn solvers(
         n: usize,
-        bc: &dyn Fn() -> PinnedNodes,
+        bcs: &dyn Fn() -> Conditions,
     ) -> Vec<(&'static str, Box<dyn Solver>, SolverConfiguration)> {
         use crate::solver::methods::{
             BDF2Solver, BackwardEulerSolver, CrankNicolsonSolver, DoPri45Solver,
@@ -782,9 +837,9 @@ mod boundary_condition_tests {
         let fixed = |dt| StepControl::Fixed { dt };
         let explicit = explicit_dt(n);
         let splitting = OperatorSplittingSolver::strang(
-            heat_domain(n, ALPHA / 2.0, bc()),
+            heat_domain(n, ALPHA / 2.0, bcs()),
             Box::new(ForwardEulerSolver),
-            heat_domain(n, ALPHA / 2.0, bc()),
+            heat_domain(n, ALPHA / 2.0, bcs()),
             Box::new(ForwardEulerSolver),
         )
         .unwrap();
@@ -847,14 +902,20 @@ mod boundary_condition_tests {
     #[test]
     fn every_saved_state_holds_a_declared_constant_value() {
         let n = 21;
-        let bc = || PinnedNodes::new(&[0, 20], |_| 1.25).declared();
-        for (name, solver, config) in solvers(n, &bc) {
-            let scenario = Scenario::multi(vec![heat_domain(n, ALPHA, bc())]).unwrap();
-            let result = solver.solve(&scenario, &config).unwrap();
-            assert!(result.states.len() > 2, "{name}");
-            for (k, state) in result.states.iter().enumerate() {
-                let u = field(state);
-                assert_eq!((u[0], u[n - 1]), (1.25, 1.25), "{name}, saved state {k}");
+        for how in HeldEnds::ALL {
+            for (name, solver, config) in solvers(n, &|| how.at(n, 1.25)) {
+                let scenario =
+                    Scenario::multi(vec![heat_domain(n, ALPHA, how.at(n, 1.25))]).unwrap();
+                let result = solver.solve(&scenario, &config).unwrap();
+                assert!(result.states.len() > 2, "{how:?}, {name}");
+                for (k, state) in result.states.iter().enumerate() {
+                    let u = field(state);
+                    assert_eq!(
+                        (u[0], u[n - 1]),
+                        (1.25, 1.25),
+                        "{how:?}, {name}, saved state {k}"
+                    );
+                }
             }
         }
     }
@@ -864,15 +925,22 @@ mod boundary_condition_tests {
         let n = 21;
         // Differs from the initial value 1 at the ends: the initial state
         // must be corrected too.
-        let g = |t: f64| 1.5 + 0.5 * t;
-        let bc = move || PinnedNodes::new(&[0, 20], g).declared();
-        for (name, solver, config) in solvers(n, &bc) {
-            let scenario = Scenario::multi(vec![heat_domain(n, ALPHA, bc())]).unwrap();
-            let result = solver.solve(&scenario, &config).unwrap();
-            for (state, &t) in result.states.iter().zip(&result.times) {
-                let u = field(state);
-                assert_eq!(u[0].to_bits(), g(t).to_bits(), "{name}, t = {t}");
-                assert_eq!(u[n - 1].to_bits(), g(t).to_bits(), "{name}, t = {t}");
+        fn g(t: f64) -> f64 {
+            1.5 + 0.5 * t
+        }
+        for how in HeldEnds::ALL {
+            for (name, solver, config) in solvers(n, &|| how.by(n, g)) {
+                let scenario = Scenario::multi(vec![heat_domain(n, ALPHA, how.by(n, g))]).unwrap();
+                let result = solver.solve(&scenario, &config).unwrap();
+                for (state, &t) in result.states.iter().zip(&result.times) {
+                    let u = field(state);
+                    assert_eq!(u[0].to_bits(), g(t).to_bits(), "{how:?}, {name}, t = {t}");
+                    assert_eq!(
+                        u[n - 1].to_bits(),
+                        g(t).to_bits(),
+                        "{how:?}, {name}, t = {t}"
+                    );
+                }
             }
         }
     }
@@ -886,7 +954,7 @@ mod boundary_condition_tests {
         let scenario = Scenario::multi(vec![heat_domain(
             n,
             ALPHA,
-            PinnedNodes::new(&[0, 20], g).declared(),
+            pinned(PinnedNodes::new(&[0, 20], g).declared()),
         )])
         .unwrap();
         let config = OrchestratorConfig::new(TimeConfiguration::new(
@@ -916,10 +984,15 @@ mod boundary_condition_tests {
 
     // ── Spatial order ─────────────────────────────────────────────────────────
 
-    /// Largest interior error against the exact solution, at the last saved time.
-    fn interior_error(n: usize, solver: &dyn Solver, config: &SolverConfiguration) -> f64 {
-        let bc = PinnedNodes::new(&[0, n - 1], |_| 1.0).declared();
-        let scenario = Scenario::multi(vec![heat_domain(n, ALPHA, bc)]).unwrap();
+    /// Largest interior error against the exact solution, at the last saved
+    /// time, with the ends held at 1 by `bcs`.
+    fn interior_error(
+        n: usize,
+        bcs: Conditions,
+        solver: &dyn Solver,
+        config: &SolverConfiguration,
+    ) -> f64 {
+        let scenario = Scenario::multi(vec![heat_domain(n, ALPHA, bcs)]).unwrap();
         let result = solver.solve(&scenario, config).unwrap();
         let u = field(result.states.last().unwrap());
         let t = *result.times.last().unwrap();
@@ -962,20 +1035,22 @@ mod boundary_condition_tests {
 
     #[test]
     fn held_ends_keep_second_order_in_space() {
-        for name in ["Euler", "RK4", "CrankNicolson", "BDF2"] {
-            let errors: Vec<f64> = [11, 21, 41]
-                .iter()
-                .map(|&n| {
-                    let (solver, config) = order_case(name, n);
-                    interior_error(n, solver.as_ref(), &config)
-                })
-                .collect();
-            for pair in errors.windows(2) {
-                let ratio = pair[0] / pair[1];
-                assert!(
-                    (3.8..=4.2).contains(&ratio),
-                    "{name}: errors {errors:?}, ratio {ratio}"
-                );
+        for how in HeldEnds::ALL {
+            for name in ["Euler", "RK4", "CrankNicolson", "BDF2"] {
+                let errors: Vec<f64> = [11, 21, 41]
+                    .iter()
+                    .map(|&n| {
+                        let (solver, config) = order_case(name, n);
+                        interior_error(n, how.at(n, 1.0), solver.as_ref(), &config)
+                    })
+                    .collect();
+                for pair in errors.windows(2) {
+                    let ratio = pair[0] / pair[1];
+                    assert!(
+                        (3.8..=4.2).contains(&ratio),
+                        "{how:?}, {name}: errors {errors:?}, ratio {ratio}"
+                    );
+                }
             }
         }
     }
@@ -987,7 +1062,7 @@ mod boundary_condition_tests {
         bc: PinnedNodes,
         state: &mut ContextValue,
     ) -> Result<ContextValue, OxiflowError> {
-        let domain = heat_domain(n, ALPHA, bc);
+        let domain = heat_domain(n, ALPHA, pinned(bc));
         let calc = laplacian_calculator(n);
         let chain: Vec<&dyn ContextCalculator> = vec![calc.as_ref()];
         evaluate_derivative(&domain, &chain, state, 0.0, 0.01)

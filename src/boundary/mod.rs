@@ -20,8 +20,13 @@
 //!
 //! | Type | `BoundaryType` | `BoundaryLocation` |
 //! |---|---|---|
+//! | [`Dirichlet`] | `Dirichlet` | `None` |
 //! | [`DanckwertsInlet`] | `Robin` | `Some(Inlet)` |
 //! | [`DanckwertsOutlet`] | `Neumann` | `Some(Outlet)` |
+//!
+//! Each acts on a boundary region of the mesh
+//! ([`BoundaryRegion`](crate::mesh::BoundaryRegion), DA-071), resolved by
+//! the mesh, rather than on node indices.
 //!
 //! ## Role
 //!
@@ -52,13 +57,16 @@
 //! | `required_variables()` | — (required) | Variables that must be present in `ctx` |
 //! | `optional_variables()` | `vec![]` | Variables used if present |
 //! | `depends_on()` | `vec![]` | Ordering relative to other BCs (reserved) |
-//! | `priority()` | `100` | Execution order when multiple BCs are registered |
+//! | `priority()` | `100` | Ordering relative to other BCs (reserved) |
 //!
 //! ## Execution order
 //!
-//! Multiple boundary conditions on the same domain are applied in ascending
-//! `priority()` order. `depends_on()` is available but not consumed by the
-//! engine — it is reserved for complex BC ordering, with no milestone assigned.
+//! The solver applies the boundary conditions of a domain in the order they
+//! were declared with `Domain::with_boundary_conditions`. `priority()` and
+//! `depends_on()` are available but not consumed for boundary conditions —
+//! ordering them is reserved, with no milestone assigned. Conditions that
+//! set distinct nodes and read none of the nodes another one sets do not
+//! depend on that order; conditions that share nodes do.
 //!
 //! ## Object safety
 //!
@@ -81,6 +89,9 @@ use nalgebra::DVector;
 
 pub mod danckwerts;
 pub use danckwerts::{DanckwertsInlet, DanckwertsOutlet};
+
+pub mod dirichlet;
+pub use dirichlet::Dirichlet;
 
 pub mod injection;
 pub use injection::{dirac_initial_state, InjectionInlet, TemporalInjection};

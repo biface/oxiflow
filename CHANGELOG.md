@@ -64,6 +64,14 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   normal and their distance. Their default covers the two faces of a 1D mesh
   whose nodes are ordered along the axis; any other region is refused with
   `PreconditionFailed`.
+- `boundary::Dirichlet`, a Dirichlet condition holding every node of a
+  boundary region at a prescribed value, constant (`Dirichlet::constant`) or
+  a function of time (`Dirichlet::of_t`, evaluated at the context's time).
+  It declares the nodes of its region as constrained nodes, so every saved
+  state holds the value of its own time, for every integrator. A region the
+  mesh does not define is refused with `PreconditionFailed`, a non-finite
+  value with `ExternalData`, naming the region and the time. The condition
+  is `Clone` (a clone shares the function) and is not serialisable (#202).
 
 ### Changed
 
@@ -139,6 +147,11 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the gradient at node 0, computed from the previous `u0`, which iterated
   `u0` with a factor `−κ` from one evaluation to the next. The inlet value
   no longer depends on its previous value (#201).
+- The documentation of `boundary` stated that the conditions of a domain
+  are applied in ascending `priority()` order. The solver applies them in
+  the order they are declared, as it always has; the documentation now says
+  so, and `priority()` is documented as reserved for boundary conditions
+  (#202).
 - `UniformGrid1D::new` rejects non-finite bounds: a NaN bound used to pass
   the `x_end > x_start` check and yield a grid of NaN nodes.
 - `FDGradientCalculator` and `FDLaplacianCalculator` return
