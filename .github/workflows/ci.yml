@@ -273,7 +273,7 @@ jobs:
     needs: test
     if: github.event_name == 'pull_request'
     env:
-      REFERENCE_EXAMPLES: ""
+      REFERENCE_EXAMPLES: "heat_transfer_1d"
     steps:
       - name: No reference example yet
         if: env.REFERENCE_EXAMPLES == ''

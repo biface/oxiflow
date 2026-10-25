@@ -78,6 +78,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   RK4 and Backward Euler on two mesh sizes each, so that the cost of the
   conditions can be measured locally. It does not need the `parallel`
   feature (#202).
+- `examples/heat_transfer_1d`, the heat-transfer reference example: a steel
+  bar in physical units, with both ends held by `Dirichlet` conditions and
+  the conduction term written as λT″ + λ′T′ from the Laplacian, the centred
+  gradient and two `CoefficientField`s. It cools a homogeneous bar and
+  checks Crank–Nicolson and BDF2 against the Fourier-series solution, then
+  heats a bar whose conductivity doubles along its length and checks
+  Backward Euler against the exact steady profile. It exits with an error
+  beyond its tolerances and runs in CI as the first reference example
+  (#175).
 
 ### Changed
 
