@@ -93,6 +93,14 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   call, for the graded conductivity of the heat-transfer example and for a
   costlier two-layer profile, so that the field's dispatch threshold can be
   measured locally (#175).
+- `examples/magnetic_diffusion_1d`, the electromagnetism reference example
+  (prototype of the diffusive regime): a field step of 0.1 T at the surface
+  of a copper plate and of an aluminium plate, in physical units, with both
+  faces held by `Dirichlet` conditions and BDF2 at the solver's default
+  Newton budget. It checks the field against the half-space `erfc` solution
+  and the half-field penetration depth against its sqrt(ηt) scaling, in both
+  metals and at three times, exits with an error beyond its tolerances and
+  runs in CI with the reference examples (#179).
 
 ### Changed
 

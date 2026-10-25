@@ -135,6 +135,7 @@ See the [oxiflow wiki](https://github.com/biface/oxiflow/wiki) for introductory 
 | Reaction–diffusion | Gray–Scott Turing patterns                            | engine direct    |
 | Fluid mechanics    | Burgers boundary layer                                | engine direct    |
 | Geomechanics       | Terzaghi consolidation                                | engine direct    |
+| Electromagnetism   | 1D magnetic diffusion into a conductor (proto)        | `oxiflow-em`     |
 | Surface geophysics | Lahar–lake wave generation                            | `oxiflow-geo`    |
 
 ---

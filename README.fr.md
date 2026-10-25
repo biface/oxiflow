@@ -138,6 +138,7 @@ Consultez le [wiki oxiflow](https://github.com/biface/oxiflow/wiki) pour les not
 | Réaction–diffusion     | Motifs de Turing (Gray–Scott)                                  | moteur direct    |
 | Mécanique des fluides  | Couche limite de Burgers                                       | moteur direct    |
 | Géomécanique           | Consolidation de Terzaghi                                      | moteur direct    |
+| Électromagnétisme      | Diffusion magnétique 1D dans un conducteur (proto)             | `oxiflow-em`     |
 | Géophysique de surface | Interaction lahar–lac                                          | `oxiflow-geo`    |
 
 ---
