@@ -72,6 +72,12 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   mesh does not define is refused with `PreconditionFailed`, a non-finite
   value with `ExternalData`, naming the region and the time. The condition
   is `Clone` (a clone shares the function) and is not serialisable (#202).
+- `benches/oxiflow_parallel`: a `boundary_condition_overhead` measurement
+  for `diffusion_1d`. It times full solves without boundary conditions, with
+  the two Danckwerts conditions and with two `Dirichlet` conditions, under
+  RK4 and Backward Euler on two mesh sizes each, so that the cost of the
+  conditions can be measured locally. It does not need the `parallel`
+  feature (#202).
 
 ### Changed
 

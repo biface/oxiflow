@@ -23,6 +23,7 @@ criterion_group!(
     diffusion_1d::laplacian_dispatch,
     diffusion_1d::raw_rayon_dispatch_diagnostic,
     diffusion_1d::implicit_jacobian_dispatch,
+    diffusion_1d::boundary_condition_overhead,
     viscous_burgers::full_run,
     viscous_burgers::combined_dispatch_diagnostic,
     langmuir_multi::full_run,
@@ -36,6 +37,7 @@ criterion_group!(
 criterion_group!(
     benches,
     diffusion_1d::full_run,
+    diffusion_1d::boundary_condition_overhead,
     viscous_burgers::full_run,
     langmuir_multi::full_run,
     lahar_multifield::full_run

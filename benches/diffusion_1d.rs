@@ -2,7 +2,7 @@
 //! The model comes from `rsc/models/diffusion_1d.rs`, shared with the
 //! example and the analytical test.
 //!
-//! Two distinct measurements, not one:
+//! Distinct measurements, not one:
 //!
 //! - [`full_run`] — the fixed-size performance target from #53's original
 //!   acceptance table ("1D diffusion, 1000 points, 10 000 steps, < 100
@@ -22,11 +22,14 @@
 //!   finite-difference Jacobian assembly (#199), sequential vs. parallel,
 //!   through one Backward Euler step: dense path, and banded path with the
 //!   `sparse` feature.
+//! - [`boundary_condition_overhead`] — what boundary conditions cost a
+//!   solve (#202): the same model without conditions, with the two
+//!   Danckwerts conditions and with two `Dirichlet` conditions, under RK4
+//!   and Backward Euler. Independent of the `parallel` feature.
 
 use std::hint::black_box;
 use std::sync::Arc;
 
-#[cfg(feature = "parallel")]
 use criterion::BenchmarkId;
 use criterion::Criterion;
 #[cfg(feature = "parallel")]
@@ -34,12 +37,16 @@ use nalgebra::DVector;
 #[cfg(feature = "parallel")]
 use oxiflow::context::{compute::ComputeContext, value::ContextValue, ContextCalculator};
 use oxiflow::{
-    context::calculators::FDLaplacianCalculator,
-    mesh::{Mesh, UniformGrid1D},
+    boundary::{BoundaryCondition, DanckwertsInlet, DanckwertsOutlet, Dirichlet},
+    context::{
+        calculators::{ExternalTabulated, FDLaplacianCalculator, Interpolation},
+        variable::ContextVariable,
+    },
+    mesh::{BoundaryRegion, FaceSide, Mesh, UniformGrid1D},
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
-        methods::ForwardEulerSolver,
-        scenario::Scenario,
+        methods::{BackwardEulerSolver, ForwardEulerSolver, RK4Solver},
+        scenario::{Domain, Scenario},
         Solver, SolverConfiguration,
     },
 };
@@ -254,4 +261,161 @@ fn one_backward_euler_step(n: usize) -> (Scenario, SolverConfiguration) {
             .with_parallel_threshold(usize::MAX),
     ));
     (scenario, config)
+}
+
+/// Boundary conditions of one configuration of
+/// [`boundary_condition_overhead`].
+#[derive(Clone, Copy)]
+enum Boundaries {
+    /// No condition: the solver skips every boundary step.
+    Without,
+    /// `DanckwertsInlet` on the lower face, fed by a tabulated constant,
+    /// and `DanckwertsOutlet` on the upper one.
+    Danckwerts,
+    /// A constant `Dirichlet` condition on each face.
+    Dirichlet,
+}
+
+impl Boundaries {
+    const ALL: [Self; 3] = [Self::Without, Self::Danckwerts, Self::Dirichlet];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Without => "none",
+            Self::Danckwerts => "danckwerts",
+            Self::Dirichlet => "dirichlet",
+        }
+    }
+}
+
+/// Feed concentration of the Danckwerts inlet.
+fn feed_variable() -> ContextVariable {
+    ContextVariable::External {
+        name: "feed_concentration".into(),
+    }
+}
+
+/// Scenario and configuration of `n_steps` fixed steps of `dt` on `n`
+/// nodes, under `integrator`, with the given boundary conditions.
+///
+/// The Gaussian stays small at both ends of `[-1, 1]` over these runs
+/// (below `1e-6`), so holding them at zero, or feeding zero at the inlet,
+/// barely changes the solution: the configurations differ in what the
+/// solver does, not in the problem solved. The Danckwerts configuration
+/// includes the tabulated feed calculator, part of what that condition
+/// costs a user; its dispersion and velocity only set the inlet weight
+/// `kappa = D / (v dx)`.
+fn bounded_run(
+    n: usize,
+    integrator: IntegratorKind,
+    dt: f64,
+    n_steps: u32,
+    boundaries: Boundaries,
+) -> (Scenario, SolverConfiguration) {
+    const ALPHA: f64 = 0.01;
+    let lower = BoundaryRegion::Face {
+        axis: 0,
+        side: FaceSide::Lower,
+    };
+    let upper = BoundaryRegion::Face {
+        axis: 0,
+        side: FaceSide::Upper,
+    };
+    let t_end = f64::from(n_steps) * dt;
+
+    let model = Diffusion1D {
+        alpha: ALPHA,
+        amplitude: 1.0,
+        center: 0.0,
+        sigma0: 0.05,
+    };
+    let mesh_arc: Arc<dyn Mesh> = Arc::new(UniformGrid1D::new(n, -1.0, 1.0).unwrap());
+    let mut config = SolverConfiguration::new(
+        TimeConfiguration::new(t_end, StepControl::Fixed { dt }),
+        integrator,
+    )
+    .with_calculator(Box::new(FDLaplacianCalculator::new(
+        mesh_arc,
+        laplacian_variable(),
+    )));
+
+    let conditions: Vec<Box<dyn BoundaryCondition>> = match boundaries {
+        Boundaries::Without => vec![],
+        Boundaries::Danckwerts => {
+            config = config.with_calculator(Box::new(
+                ExternalTabulated::new(
+                    feed_variable(),
+                    vec![(0.0, 0.0), (2.0 * t_end, 0.0)],
+                    Interpolation::Linear,
+                )
+                .unwrap(),
+            ));
+            vec![
+                Box::new(DanckwertsInlet::new(ALPHA, 1.0, feed_variable())),
+                Box::new(DanckwertsOutlet::new()),
+            ]
+        }
+        Boundaries::Dirichlet => vec![
+            Box::new(Dirichlet::constant(lower, 0.0)),
+            Box::new(Dirichlet::constant(upper, 0.0)),
+        ],
+    };
+    let domain = Domain::new(
+        "bar",
+        Box::new(model),
+        Box::new(UniformGrid1D::new(n, -1.0, 1.0).unwrap()),
+    )
+    .with_boundary_conditions(conditions);
+    (Scenario::multi(vec![domain]).unwrap(), config)
+}
+
+/// What boundary conditions cost a solve (#202): the model without
+/// conditions, with the two Danckwerts conditions and with two `Dirichlet`
+/// conditions, reported as `<integrator>/<conditions>` for each size.
+///
+/// - RK4, 200 steps at a fifth of the diffusion limit `dx^2 / alpha`, on
+///   101 and 1001 nodes: four derivative evaluations per step, each
+///   applying the conditions and holding their nodes (DD-070).
+/// - Backward Euler, 5 steps of `1e-3`, on 101 and 401 nodes: every
+///   column of the finite-difference Jacobian is one more derivative
+///   evaluation, so the per-evaluation cost is multiplied by `n`.
+///
+/// The difference between a configuration and `none` is the cost of the
+/// conditions, calculators they need included. It grows with the number
+/// of derivative evaluations, not with the number of nodes: the conditions
+/// set two nodes, and the solver's bookkeeping (which calculators the
+/// conditions need, which nodes they declare) runs at each evaluation
+/// whatever `n` (#201). Not tied to the `parallel` feature: the Laplacian
+/// stays below its dispatch threshold at these sizes.
+pub fn boundary_condition_overhead(c: &mut Criterion) {
+    let mut group = c.benchmark_group("diffusion_1d_boundary_condition_overhead");
+    group.sample_size(20);
+
+    for &n in &[101usize, 1001] {
+        let dx = 2.0 / (n - 1) as f64;
+        let dt = 0.2 * dx * dx / 0.01;
+        for boundaries in Boundaries::ALL {
+            let (scenario, config) = bounded_run(n, IntegratorKind::RK4, dt, 200, boundaries);
+            group.bench_with_input(
+                BenchmarkId::new(format!("rk4/{}", boundaries.label()), n),
+                &n,
+                |b, _| b.iter(|| black_box(RK4Solver.solve(&scenario, &config).unwrap())),
+            );
+        }
+    }
+
+    for &n in &[101usize, 401] {
+        for boundaries in Boundaries::ALL {
+            let (scenario, config) =
+                bounded_run(n, IntegratorKind::BackwardEuler, 1e-3, 5, boundaries);
+            let solver = BackwardEulerSolver::new();
+            group.bench_with_input(
+                BenchmarkId::new(format!("backward_euler/{}", boundaries.label()), n),
+                &n,
+                |b, _| b.iter(|| black_box(solver.solve(&scenario, &config).unwrap())),
+            );
+        }
+    }
+
+    group.finish();
 }
