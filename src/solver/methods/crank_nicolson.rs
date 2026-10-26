@@ -285,83 +285,14 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::mesh::{Mesh, UniformGrid1D};
     use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::model::{CubicDecay, ExponentialDecay, ZeroDerivative};
     use crate::solver::config::{
         IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration,
     };
-    use nalgebra::{DMatrix, DVector};
+    use crate::solver::linear::CountingLinearSolver;
+    use nalgebra::DVector;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
-
-    #[derive(Debug)]
-    struct ExponentialDecay {
-        lambda: f64,
-    }
-
-    impl RequiresContext for ExponentialDecay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ExponentialDecay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.lambda * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "exponential_decay"
-        }
-    }
-
-    #[derive(Debug)]
-    struct ZeroDerivative;
-
-    impl RequiresContext for ZeroDerivative {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ZeroDerivative {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(DVector::zeros(u.len())))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 2.5))
-        }
-
-        fn name(&self) -> &str {
-            "zero_derivative"
-        }
-    }
-
-    /// Delegates to `NalgebraDenseSolver` but counts calls.
-    #[derive(Debug)]
-    struct CountingLinearSolver {
-        calls: Arc<AtomicUsize>,
-    }
-
-    impl LinearSolver for CountingLinearSolver {
-        fn solve(&self, a: &DMatrix<f64>, b: &DVector<f64>) -> Result<DVector<f64>, OxiflowError> {
-            self.calls.fetch_add(1, Ordering::SeqCst);
-            NalgebraDenseSolver.solve(a, b)
-        }
-    }
 
     fn make_config(t_end: f64, dt: f64) -> SolverConfiguration {
         SolverConfiguration::new(
@@ -376,7 +307,7 @@ mod tests {
 
     #[test]
     fn zero_derivative_field_stays_constant() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(5));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(5));
         let config = make_config(1.0, 0.1);
         let result = CrankNicolsonSolver::new()
             .solve(&scenario, &config)
@@ -411,7 +342,7 @@ mod tests {
 
     #[test]
     fn result_times_match_expected_steps() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(3));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(3));
         let config = make_config(0.5, 0.1);
         let result = CrankNicolsonSolver::new()
             .solve(&scenario, &config)
@@ -423,7 +354,7 @@ mod tests {
 
     #[test]
     fn n_steps_is_correct() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = make_config(1.0, 0.25);
         let result = CrankNicolsonSolver::new()
             .solve(&scenario, &config)
@@ -433,7 +364,7 @@ mod tests {
 
     #[test]
     fn save_every_reduces_stored_states() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = SolverConfiguration::new(
             TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }).saving_every(5),
             IntegratorKind::CrankNicolson,
@@ -508,7 +439,7 @@ mod tests {
 
     #[test]
     fn negative_dt_returns_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = make_config(1.0, -0.1);
         assert!(CrankNicolsonSolver::new()
             .solve(&scenario, &config)
@@ -517,7 +448,8 @@ mod tests {
 
     #[test]
     fn t_end_before_t_start_returns_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2)).with_t_start(5.0);
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2))
+            .with_t_start(5.0);
         let config = make_config(1.0, 0.1);
         assert!(CrankNicolsonSolver::new()
             .solve(&scenario, &config)
@@ -560,34 +492,6 @@ mod tests {
     }
 
     // ── Iterated Newton (DD-044, #111) ─────────────────────────────────────────
-
-    #[derive(Debug)]
-    struct CubicDecay;
-
-    impl RequiresContext for CubicDecay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for CubicDecay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -v * v * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "cubic_decay_test"
-        }
-    }
 
     #[test]
     fn full_newton_resolves_nonaffine_correction_beyond_frozen_jacobian() {

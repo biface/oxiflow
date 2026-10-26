@@ -348,47 +348,21 @@ impl Solver for OperatorSplittingSolver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::compute::ComputeContext;
-    use crate::context::variable::ContextVariable;
     use crate::mesh::structured::UniformGrid1D;
-    use crate::mesh::Mesh;
-    use crate::model::{CompositeModel, PhysicalModel, RequiresContext};
+    use crate::model::{CompositeModel, ExponentialDecay, PhysicalModel};
     use crate::solver::config::{IntegratorKind, TimeConfiguration};
     use crate::solver::methods::euler::ForwardEulerSolver;
-    use nalgebra::DVector;
-
-    /// `du/dt = -rate * u` — pure decay, no time dependence.
-    struct Decay {
-        rate: f64,
-    }
-    impl RequiresContext for Decay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-    impl PhysicalModel for Decay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.rate * v)))
-        }
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-        fn name(&self) -> &str {
-            "decay"
-        }
-    }
 
     fn make_mesh() -> UniformGrid1D {
         UniformGrid1D::new(5, 0.0, 1.0).unwrap()
     }
 
     fn make_domain(rate: f64) -> Domain {
-        Domain::new("decay", Box::new(Decay { rate }), Box::new(make_mesh()))
+        Domain::new(
+            "decay",
+            Box::new(ExponentialDecay { lambda: rate }),
+            Box::new(make_mesh()),
+        )
     }
 
     fn make_solver() -> OperatorSplittingSolver {
@@ -442,8 +416,8 @@ mod tests {
 
         let composite = CompositeModel::new(
             vec![
-                Box::new(Decay { rate: 1.0 }) as Box<dyn PhysicalModel>,
-                Box::new(Decay { rate: 2.0 }) as Box<dyn PhysicalModel>,
+                Box::new(ExponentialDecay { lambda: 1.0 }) as Box<dyn PhysicalModel>,
+                Box::new(ExponentialDecay { lambda: 2.0 }) as Box<dyn PhysicalModel>,
             ],
             "combined_decay",
         )
@@ -491,7 +465,10 @@ mod tests {
             Box::new(ForwardEulerSolver),
         )
         .unwrap();
-        let scenario = Scenario::single(Box::new(Decay { rate: 1.0 }), Box::new(make_mesh()));
+        let scenario = Scenario::single(
+            Box::new(ExponentialDecay { lambda: 1.0 }),
+            Box::new(make_mesh()),
+        );
         let config = SolverConfiguration::new(
             TimeConfiguration::new(10.0, StepControl::Fixed { dt: 1.0 }),
             IntegratorKind::Euler,

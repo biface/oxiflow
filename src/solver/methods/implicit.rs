@@ -593,39 +593,10 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::mesh::{Mesh, UniformGrid1D};
     use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::model::ExponentialDecay;
     use crate::solver::chain::build_calculator_chain;
     use crate::solver::linear::NalgebraDenseSolver;
     use crate::solver::scenario::Scenario;
-
-    #[derive(Debug)]
-    struct ExponentialDecay {
-        lambda: f64,
-    }
-
-    impl RequiresContext for ExponentialDecay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ExponentialDecay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.lambda * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "exponential_decay"
-        }
-    }
 
     fn make_mesh(n: usize) -> Box<dyn Mesh> {
         Box::new(UniformGrid1D::new(n, 0.0, 1.0).unwrap())

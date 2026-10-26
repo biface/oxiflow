@@ -192,76 +192,13 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::mesh::{Mesh, UniformGrid1D};
     use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::model::{ExponentialDecay, ZeroDerivative};
     use crate::solver::config::{
         IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration,
     };
     use nalgebra::DVector;
 
     // ── Fixtures ──────────────────────────────────────────────────────────────
-
-    /// Pure exponential decay: du/dt = -lambda * u
-    /// Analytical solution: u(t) = u0 * exp(-lambda * t)
-    #[derive(Debug)]
-    struct ExponentialDecay {
-        lambda: f64,
-    }
-
-    impl RequiresContext for ExponentialDecay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ExponentialDecay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.lambda * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "exponential_decay"
-        }
-    }
-
-    /// Constant zero derivative — field stays unchanged.
-    #[derive(Debug)]
-    struct ZeroDerivative;
-
-    impl RequiresContext for ZeroDerivative {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ZeroDerivative {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(DVector::from_element(
-                u.len(),
-                0.0,
-            )))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 2.5))
-        }
-
-        fn name(&self) -> &str {
-            "zero_derivative"
-        }
-    }
 
     fn make_config(t_end: f64, dt: f64) -> SolverConfiguration {
         SolverConfiguration::new(
@@ -278,7 +215,7 @@ mod tests {
 
     #[test]
     fn zero_derivative_field_stays_constant() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(5));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(5));
         let config = make_config(1.0, 0.1);
         let result = RK4Solver.solve(&scenario, &config).unwrap();
         for state in &result.states {
@@ -307,7 +244,7 @@ mod tests {
 
     #[test]
     fn result_times_match_expected_steps() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(3));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(3));
         let config = make_config(0.5, 0.1);
         let result = RK4Solver.solve(&scenario, &config).unwrap();
 
@@ -318,7 +255,7 @@ mod tests {
 
     #[test]
     fn n_steps_is_correct() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = make_config(1.0, 0.25);
         let result = RK4Solver.solve(&scenario, &config).unwrap();
         assert_eq!(result.n_steps, 4);
@@ -326,7 +263,7 @@ mod tests {
 
     #[test]
     fn save_every_reduces_stored_states() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = SolverConfiguration::new(
             TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }).saving_every(5),
             IntegratorKind::RK4,
@@ -373,7 +310,7 @@ mod tests {
         // for a trivial model.
         let dt = 0.1;
         let t_end = 10_000.0; // n_steps = 100_000
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = make_config(t_end, dt);
         let result = RK4Solver.solve(&scenario, &config).unwrap();
 
@@ -462,8 +399,12 @@ mod tests {
         // once per stage (4 per step), not once per outer step.
         let pin = PinnedNodes::new(&[0], |_| -7.0);
         let calls = pin.calls();
-        let domain = Domain::new("pinned", Box::new(ZeroDerivative), make_mesh(3))
-            .with_boundary_conditions(vec![Box::new(pin)]);
+        let domain = Domain::new(
+            "pinned",
+            Box::new(ZeroDerivative { initial: 2.5 }),
+            make_mesh(3),
+        )
+        .with_boundary_conditions(vec![Box::new(pin)]);
         let scenario = Scenario::multi(vec![domain]).unwrap();
         let config = make_config(0.2, 0.1); // 2 steps
 
@@ -482,14 +423,15 @@ mod tests {
 
     #[test]
     fn negative_dt_returns_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = make_config(1.0, -0.1);
         assert!(RK4Solver.solve(&scenario, &config).is_err());
     }
 
     #[test]
     fn t_end_before_t_start_returns_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2)).with_t_start(5.0);
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2))
+            .with_t_start(5.0);
         let config = make_config(1.0, 0.1);
         assert!(RK4Solver.solve(&scenario, &config).is_err());
     }

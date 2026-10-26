@@ -569,72 +569,12 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::coupling::{CouplingOperator, Interface};
     use crate::mesh::{Mesh, UniformGrid1D};
-    use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::model::traits::RequiresContext;
+    use crate::model::{ExponentialDecay, ZeroDerivative};
     use crate::solver::methods::{ForwardEulerSolver, RK4Solver};
     use crate::solver::scenario::Domain;
-    use nalgebra::DVector;
 
     // ── Fixtures ──────────────────────────────────────────────────────────────
-
-    /// Exponential decay: du/dt = -lambda * u.
-    #[derive(Debug)]
-    struct DecayModel {
-        lambda: f64,
-    }
-
-    impl RequiresContext for DecayModel {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for DecayModel {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.lambda * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "decay"
-        }
-    }
-
-    /// Passive receiver: du/dt = 0.
-    #[derive(Debug)]
-    struct PassiveModel;
-
-    impl RequiresContext for PassiveModel {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for PassiveModel {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(DVector::zeros(u.len())))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::zeros(mesh.n_dof()))
-        }
-
-        fn name(&self) -> &str {
-            "passive"
-        }
-    }
 
     /// Transfers a fixed fraction of the source domain's field to the
     /// target domain at every call -- counts invocations for assertions.
@@ -695,10 +635,14 @@ mod tests {
     fn make_scenario() -> (Scenario, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         let source = Domain::new(
             source_id(),
-            Box::new(DecayModel { lambda: 0.5 }),
+            Box::new(ExponentialDecay { lambda: 0.5 }),
             make_mesh(3),
         );
-        let target = Domain::new(target_id(), Box::new(PassiveModel), make_mesh(3));
+        let target = Domain::new(
+            target_id(),
+            Box::new(ZeroDerivative { initial: 0.0 }),
+            make_mesh(3),
+        );
         let interface = Interface::new(source_id(), target_id());
         let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let coupling = Box::new(CountingMassTransfer {
@@ -809,7 +753,7 @@ mod tests {
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 5);
 
         // Cross-check via effect: target received non-zero mass, which
-        // only the coupling (never PassiveModel itself, zero derivative)
+        // only the coupling (never the passive model itself, zero derivative)
         // can produce.
         let final_state = result.states.last().unwrap();
         let target_field = final_state
