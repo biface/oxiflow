@@ -317,11 +317,13 @@ pub(crate) fn bdf2_step_newton(
             let f = evaluate_derivative(domain, chain, &mut candidate_state, t_target, dt)?;
             Ok(layout.flatten(&f)?.into_owned())
         },
-        move |candidate: &DVector<f64>| {
-            let candidate_state = layout.rebuild(candidate.clone())?;
-            finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt, dispatch)
-        },
-        linear_solver,
+        &mut newton::DenseNewtonSystem::new(
+            move |candidate: &DVector<f64>| {
+                let candidate_state = layout.rebuild(candidate.clone())?;
+                finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt, dispatch)
+            },
+            linear_solver,
+        ),
         &newton::NewtonParams {
             convergence: newton_convergence,
             jacobian_strategy,
