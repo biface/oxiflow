@@ -110,6 +110,14 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   truncated with an explicit bound on the neglected terms, exits with an
   error beyond its tolerances and runs in CI with the reference examples
   (#178).
+- `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
+  `CrankNicolsonSolver` (`sparse` feature), configured by the same
+  builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and
+  `with_jacobian_bandwidth`, counted in flat unknowns (`d·(s + 1) − 1` for
+  `d` interleaved components). The Backward Euler bootstrap step and the
+  BDF2 update both take it, through the iterated Newton loop and with the
+  solver's Newton parameters. Without these builders the solver stays on
+  the dense path, and its results are unchanged bit for bit (#133).
 
 ### Changed
 
@@ -158,6 +166,12 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Cargo.toml` sets `autobenches = false`: `oxiflow_parallel` is the only
   bench target, as intended. Cargo no longer also builds each module of
   `benches/` as an empty standalone target (#199).
+- **Breaking:** `IntegratorSpec::BDF2` gains `sparse_threshold` (default
+  100) and `jacobian_bandwidth` (default `None`), as `BackwardEuler` and
+  `CrankNicolson` have: a declared bandwidth builds the solver with
+  `FaerSparseSolver`. Code that builds the variant with a struct literal
+  must add the two fields; deserialised specifications are unaffected,
+  both fields having defaults (#133).
 - **Breaking:** `UniformGrid1D::new` returns `Result<Self, OxiflowError>`
   (`OxiflowError::PreconditionFailed`, context `"UniformGrid1D"`) instead of
   `Result<Self, String>`. `?` now works directly in functions returning

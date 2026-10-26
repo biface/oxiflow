@@ -53,6 +53,17 @@
 //! Backward Euler startup step (#192). For a `ScalarField`, results are
 //! bit-identical to the former code.
 //!
+//! ## Banded path (feature `sparse`, DD-043)
+//!
+//! Like [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)
+//! and [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver),
+//! the solver takes a banded linear system once a sparse solver
+//! (`with_sparse_solver`) and a Jacobian half-bandwidth
+//! (`with_jacobian_bandwidth`) are configured and the system has more
+//! unknowns than `with_sparse_threshold` (default 100). The bootstrap
+//! step and the BDF2 update both take it, through the same Newton loop
+//! and with the same Newton parameters as the dense path (#133).
+//!
 //! ## Stability
 //!
 //! A-stable and, unlike Crank-Nicolson, L-stable — strong damping on
@@ -67,17 +78,40 @@ use crate::solver::methods::implicit::{ImplicitBackend, ImplicitFormula, Jacobia
 use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence, NewtonParams};
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
+#[cfg(feature = "sparse")]
+use crate::solver::sparse::SparseLinearSolver;
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
 /// BDF2 solver — implicit multi-step, 2nd order.
 ///
 /// See [module docs](self) for the startup phase and the fixed-`dt`-only
 /// scope at J4a.
+///
+/// # Examples
+///
+/// ```rust
+/// use oxiflow::solver::methods::bdf2::BDF2Solver;
+///
+/// // Dense path (default).
+/// let solver = BDF2Solver::new();
+///
+/// // Banded path (feature `sparse`, DD-043): the dense path stays
+/// // untouched unless a sparse solver and a bandwidth are both configured.
+/// # #[cfg(feature = "sparse")]
+/// # {
+/// use oxiflow::solver::sparse::FaerSparseSolver;
+/// let banded = BDF2Solver::new()
+///     .with_jacobian_bandwidth(3) // two interleaved components, stencil half-width 1
+///     .with_sparse_solver(Box::new(FaerSparseSolver))
+///     .with_sparse_threshold(100); // default
+/// # }
+/// ```
 #[derive(Default)]
 pub struct BDF2Solver {
-    /// Linear-system backends (DD-013): the dense solver, set by
-    /// `with_linear_solver`, for the startup step and the BDF2 update
-    /// alike.
+    /// Linear-system backends (DD-013, DD-043): the dense solver and,
+    /// with the `sparse` feature, the banded-path configuration, set by
+    /// `with_linear_solver` and the `with_sparse_*`/`with_jacobian_bandwidth`
+    /// builders, for the startup step and the BDF2 update alike.
     backend: ImplicitBackend,
     /// Newton configuration (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
     /// Jacobian refresh strategy and iteration budget, set by the
@@ -167,6 +201,40 @@ impl BDF2Solver {
     pub fn parallel_threshold(&self) -> usize {
         self.jacobian_dispatch.threshold()
     }
+
+    /// Configures the sparse backend (DD-043), for the startup step and
+    /// the BDF2 update alike. Has no effect on its own — the banded path
+    /// also requires [`Self::with_jacobian_bandwidth`] and a system larger
+    /// than [`Self::with_sparse_threshold`] (default 100) at solve time;
+    /// otherwise the dense path is used unchanged.
+    #[cfg(feature = "sparse")]
+    pub fn with_sparse_solver(mut self, sparse_solver: Box<dyn SparseLinearSolver>) -> Self {
+        self.backend.sparse_solver = Some(sparse_solver);
+        self
+    }
+
+    /// Number of unknowns (nodes × components) above which the banded path
+    /// is used (default 100) — see [`Self::with_sparse_solver`].
+    #[cfg(feature = "sparse")]
+    pub fn with_sparse_threshold(mut self, sparse_threshold: usize) -> Self {
+        self.backend.sparse_threshold = sparse_threshold;
+        self
+    }
+
+    /// Declares the Jacobian's half-bandwidth (e.g.
+    /// `scheme.stencil_radius()`, DD-039) — see [`Self::with_sparse_solver`].
+    ///
+    /// Counted in flat unknowns. For a `ScalarField` state this is the
+    /// stencil half-width `s`; for a `VectorField` state of `d` components,
+    /// whose unknowns are interleaved by node, it is `d·(s + 1) − 1` (#192).
+    /// A band narrower than the Jacobian's leaves the Newton corrections
+    /// inexact: the step reports [`OxiflowError::NewtonNotConverged`]
+    /// rather than drifting from the dense path.
+    #[cfg(feature = "sparse")]
+    pub fn with_jacobian_bandwidth(mut self, jacobian_bandwidth: usize) -> Self {
+        self.backend.jacobian_bandwidth = Some(jacobian_bandwidth);
+        self
+    }
 }
 
 impl Solver for BDF2Solver {
@@ -232,6 +300,8 @@ mod tests {
         IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration,
     };
     use crate::solver::linear::CountingLinearSolver;
+    #[cfg(feature = "sparse")]
+    use crate::solver::sparse::CountingSparseSolver;
     use nalgebra::DVector;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -512,6 +582,19 @@ mod tests {
         u
     }
 
+    /// BDF2 root of `1.5*u + dt*u^3 = 2*u_n - 0.5*u_prev`, solved by scalar
+    /// Newton independently of the crate's loop.
+    fn bdf2_cubic_decay(u_n: f64, u_prev: f64, dt: f64) -> f64 {
+        let rhs = 2.0 * u_n - 0.5 * u_prev;
+        let mut u = u_n;
+        for _ in 0..100 {
+            let g = 1.5 * u + dt * u.powi(3) - rhs;
+            let dg = 1.5 + 3.0 * dt * u.powi(2);
+            u -= g / dg;
+        }
+        u
+    }
+
     #[test]
     fn full_newton_resolves_nonaffine_correction_beyond_frozen_jacobian() {
         // f(u) = -u^3 -- genuinely nonlinear. `dt` is small enough for the
@@ -547,13 +630,7 @@ mod tests {
         // (3/2)*u2 - 2*u1 + (1/2)*u0 = dt*(-u2^3), i.e.
         // 1.5*u2 + dt*u2^3 = 2*u1 - 0.5*u0, using the *actual* u1 of the
         // FullNewton run, so this reference checks the second step alone.
-        let rhs = 2.0 * u1_full - 0.5 * u0;
-        let mut u2_scalar = u1_full;
-        for _ in 0..100 {
-            let g = 1.5 * u2_scalar + dt * u2_scalar.powi(3) - rhs;
-            let dg = 1.5 + 3.0 * dt * u2_scalar.powi(2);
-            u2_scalar -= g / dg;
-        }
+        let u2_scalar = bdf2_cubic_decay(u1_full, u0, dt);
 
         let full_value = full_result.states[2].as_scalar_field().unwrap()[0];
         let default_value = default_result.states[2].as_scalar_field().unwrap()[0];
@@ -609,5 +686,153 @@ mod tests {
             (u1 - u1_reference).abs() < 1e-12,
             "bootstrap step: got {u1}, expected {u1_reference}"
         );
+    }
+
+    // ── Banded path (DD-043, #133) ───────────────────────────────────────────
+
+    /// Takes the banded path on every system: half-bandwidth 0 (the
+    /// Jacobians of these scalar models are diagonal), threshold 0, and a
+    /// sparse solver counting its calls in `sparse_calls`.
+    #[cfg(feature = "sparse")]
+    fn banded(solver: BDF2Solver, sparse_calls: &Arc<AtomicUsize>) -> BDF2Solver {
+        solver
+            .with_jacobian_bandwidth(0)
+            .with_sparse_threshold(0)
+            .with_sparse_solver(Box::new(CountingSparseSolver {
+                calls: Arc::clone(sparse_calls),
+            }))
+    }
+
+    #[cfg(feature = "sparse")]
+    #[test]
+    fn banded_path_runs_the_bootstrap_step_and_the_bdf2_update() {
+        // Three steps, one correction each: the bootstrap step and both
+        // BDF2 updates solve the banded system, never the dense one, and
+        // give the results of the dense path.
+        let dt = 0.1;
+        let config = make_config(3.0 * dt, dt);
+        let model = || Box::new(ExponentialDecay { lambda: 3.0 });
+
+        let dense_calls = Arc::new(AtomicUsize::new(0));
+        let sparse_calls = Arc::new(AtomicUsize::new(0));
+        let solver = banded(
+            BDF2Solver::new().with_linear_solver(Box::new(CountingLinearSolver {
+                calls: Arc::clone(&dense_calls),
+            })),
+            &sparse_calls,
+        );
+        let banded_result = solver
+            .solve(&Scenario::single(model(), make_mesh(4)), &config)
+            .unwrap();
+        assert_eq!(sparse_calls.load(Ordering::SeqCst), 3);
+        assert_eq!(dense_calls.load(Ordering::SeqCst), 0);
+
+        let dense_result = BDF2Solver::new()
+            .solve(&Scenario::single(model(), make_mesh(4)), &config)
+            .unwrap();
+        // The systems are diagonal: both factorisations reduce to one
+        // division per unknown, and the states agree bit for bit (measured).
+        assert_eq!(banded_result.states, dense_result.states);
+    }
+
+    #[cfg(feature = "sparse")]
+    #[test]
+    fn banded_path_iterates_newton_to_the_root() {
+        // f(u) = -u^3 at dt = 0.5, full Newton under a tolerance far below
+        // the default one: the bootstrap step and the BDF2 update both
+        // reach their roots on the banded path.
+        let dt = 0.5;
+        let sparse_calls = Arc::new(AtomicUsize::new(0));
+        let solver = banded(
+            BDF2Solver::new()
+                .with_newton_convergence(NewtonConvergence::ResidualOnly {
+                    tol_abs: 1e-13,
+                    tol_rel: 0.0,
+                })
+                .with_jacobian_strategy(JacobianStrategy::FullNewton)
+                .with_max_newton_iterations(10),
+            &sparse_calls,
+        );
+        let result = solver
+            .solve(
+                &Scenario::single(Box::new(CubicDecay), make_mesh(2)),
+                &make_config(2.0 * dt, dt),
+            )
+            .unwrap();
+
+        let u1 = result.states[1].as_scalar_field().unwrap()[0];
+        let u1_reference = backward_euler_cubic_decay(1.0, dt);
+        assert!(
+            (u1 - u1_reference).abs() < 1e-12,
+            "bootstrap step: got {u1}, expected {u1_reference}"
+        );
+        let u2 = result.states[2].as_scalar_field().unwrap()[0];
+        let u2_reference = bdf2_cubic_decay(u1, 1.0, dt);
+        assert!(
+            (u2 - u2_reference).abs() < 1e-12,
+            "BDF2 update: got {u2}, expected {u2_reference}"
+        );
+        // One correction per step would make two banded solves; the loop
+        // iterated on the banded system.
+        assert!(sparse_calls.load(Ordering::SeqCst) > 2);
+    }
+
+    #[cfg(feature = "sparse")]
+    #[test]
+    fn banded_path_reports_the_configured_newton_budget() {
+        // At dt = 0.5, two frozen-Jacobian corrections of f(u) = -u^3 do not
+        // reach the default tolerance, neither at the bootstrap step nor
+        // on a BDF2 update: both report the configured budget.
+        let dt = 0.5;
+        let sparse_calls = Arc::new(AtomicUsize::new(0));
+        let solver = banded(
+            BDF2Solver::new().with_max_newton_iterations(2),
+            &sparse_calls,
+        );
+        let scenario = Scenario::single(Box::new(CubicDecay), make_mesh(2));
+
+        let err = solver.solve(&scenario, &make_config(dt, dt)).unwrap_err();
+        assert!(
+            matches!(err, OxiflowError::NewtonNotConverged { iterations: 2, .. }),
+            "bootstrap step: got {err:?}"
+        );
+
+        let domain = scenario.single_domain().unwrap();
+        let chain =
+            crate::solver::chain::build_calculator_chain(&scenario.context_requirements(), &[])
+                .unwrap();
+        let mut state = domain.model.initial_state(domain.mesh.as_ref());
+        let previous = state.clone();
+        let err = solver
+            .step(domain, &chain, &mut state, &[previous], 0.0, dt)
+            .unwrap_err();
+        assert!(
+            matches!(err, OxiflowError::NewtonNotConverged { iterations: 2, .. }),
+            "BDF2 update: got {err:?}"
+        );
+    }
+
+    #[cfg(feature = "sparse")]
+    #[test]
+    fn systems_up_to_the_sparse_threshold_stay_dense() {
+        // 4 unknowns, threshold 4: the banded path needs strictly more
+        // unknowns than the threshold.
+        let dense_calls = Arc::new(AtomicUsize::new(0));
+        let sparse_calls = Arc::new(AtomicUsize::new(0));
+        let solver = banded(
+            BDF2Solver::new().with_linear_solver(Box::new(CountingLinearSolver {
+                calls: Arc::clone(&dense_calls),
+            })),
+            &sparse_calls,
+        )
+        .with_sparse_threshold(4);
+        solver
+            .solve(
+                &Scenario::single(Box::new(ExponentialDecay { lambda: 3.0 }), make_mesh(4)),
+                &make_config(0.2, 0.1),
+            )
+            .unwrap();
+        assert_eq!(dense_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(sparse_calls.load(Ordering::SeqCst), 0);
     }
 }

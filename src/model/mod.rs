@@ -131,3 +131,52 @@ impl PhysicalModel for CubicDecay {
         "cubic_decay"
     }
 }
+
+/// `du_i/dt = D·(u[i-1] − 2u[i] + u[i+1])`, zero outside the domain, from a
+/// unit spike at the middle node: a genuinely local, bandwidth-1 coupling
+/// between neighbours, for the tests of the finite-difference Jacobians
+/// (boundary conditions × the perturbed Jacobian) and of the banded path.
+/// Not a real `BoundaryCondition`.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct TridiagonalDiffusion {
+    pub(crate) diffusion: f64,
+}
+
+#[cfg(test)]
+impl RequiresContext for TridiagonalDiffusion {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl PhysicalModel for TridiagonalDiffusion {
+    fn compute_physics(
+        &self,
+        state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let u = state.as_scalar_field()?;
+        let n = u.len();
+        let d = self.diffusion;
+        let out = DVector::from_fn(n, |i, _| {
+            let left = if i > 0 { u[i - 1] } else { 0.0 };
+            let right = if i + 1 < n { u[i + 1] } else { 0.0 };
+            d * (left - 2.0 * u[i] + right)
+        });
+        Ok(ContextValue::ScalarField(out))
+    }
+
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        let n = mesh.n_dof();
+        ContextValue::ScalarField(DVector::from_fn(
+            n,
+            |i, _| if i == n / 2 { 1.0 } else { 0.0 },
+        ))
+    }
+
+    fn name(&self) -> &str {
+        "tridiagonal_diffusion"
+    }
+}

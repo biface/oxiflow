@@ -22,10 +22,9 @@
 //! ## Scope of this first increment
 //!
 //! [`IntegratorSpec::BackwardEuler`], [`IntegratorSpec::CrankNicolson`]
-//! (#115), and [`IntegratorSpec::BDF2`] (#116, Newton fields only — see
-//! that variant's own docs for why it deliberately carries no sparse
-//! fields), covering the DD-043 (#50) sparse dispatch path where
-//! applicable — this whole module is gated behind the `sparse` feature:
+//! (#115), and [`IntegratorSpec::BDF2`] (#116, sparse fields since #133),
+//! covering the DD-043 (#50) sparse dispatch path — this whole module is
+//! gated behind the `sparse` feature:
 //! without it, a config DTO for these integrators adds nothing over the
 //! existing [`super::IntegratorKind`] labels, since the dense path takes
 //! no parameters. Remaining integrators (`RK4`, `DoPri45`) and the WHAT
@@ -113,14 +112,18 @@ pub enum IntegratorSpec {
         #[cfg_attr(feature = "serde", serde(default = "default_max_newton_iterations"))]
         max_iterations: usize,
     },
-    /// BDF2 (implicit multi-step, 2nd order) — Newton configuration only
-    /// (DD-044, [#116](https://github.com/biface/oxiflow/issues/116)), deliberately **no** `sparse_threshold`/
-    /// `jacobian_bandwidth`: `BDF2Solver` has no sparse builders to map
-    /// (a DD-043 gap, not a DD-044 concern — see
-    /// [`BDF2Solver`]'s own docs).
-    /// Adding sparse-shaped fields with no backing implementation would
-    /// mislead a config author into thinking they take effect.
+    /// BDF2 (implicit multi-step, 2nd order), symmetric to
+    /// [`BackwardEuler`](Self::BackwardEuler) in every field: sparse
+    /// dispatch (DD-043, [#133](https://github.com/biface/oxiflow/issues/133)), for the Backward Euler bootstrap
+    /// step and the BDF2 update alike, and Newton configuration (DD-044,
+    /// [#116](https://github.com/biface/oxiflow/issues/116)).
     BDF2 {
+        /// See [`BackwardEuler::sparse_threshold`](Self::BackwardEuler).
+        #[cfg_attr(feature = "serde", serde(default = "default_sparse_threshold"))]
+        sparse_threshold: usize,
+        /// See [`BackwardEuler::jacobian_bandwidth`](Self::BackwardEuler).
+        #[cfg_attr(feature = "serde", serde(default))]
+        jacobian_bandwidth: Option<usize>,
         /// See [`BackwardEuler::newton_convergence`](Self::BackwardEuler).
         #[cfg_attr(feature = "serde", serde(default = "default_newton_convergence"))]
         newton_convergence: NewtonConvergence,
@@ -198,15 +201,24 @@ impl TryFrom<IntegratorSpec> for Box<dyn Solver> {
                 Ok(Box::new(solver))
             }
             IntegratorSpec::BDF2 {
+                sparse_threshold,
+                jacobian_bandwidth,
                 newton_convergence,
                 jacobian_strategy,
                 max_iterations,
-            } => Ok(Box::new(
-                BDF2Solver::new()
+            } => {
+                let mut solver = BDF2Solver::new()
+                    .with_sparse_threshold(sparse_threshold)
                     .with_newton_convergence(newton_convergence)
                     .with_jacobian_strategy(jacobian_strategy)
-                    .with_max_newton_iterations(max_iterations),
-            )),
+                    .with_max_newton_iterations(max_iterations);
+                if let Some(bandwidth) = jacobian_bandwidth {
+                    solver = solver
+                        .with_jacobian_bandwidth(bandwidth)
+                        .with_sparse_solver(Box::new(FaerSparseSolver));
+                }
+                Ok(Box::new(solver))
+            }
         }
     }
 }
@@ -216,34 +228,198 @@ impl TryFrom<IntegratorSpec> for Box<dyn Solver> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mesh::UniformGrid1D;
+    use crate::model::{CubicDecay, PhysicalModel, TridiagonalDiffusion};
+    use crate::solver::methods::implicit::stiff_jacobian_convergence;
+    use crate::solver::{IntegratorKind, Scenario, SimulationResult, SolverConfiguration};
+    use crate::solver::{StepControl, TimeConfiguration};
 
-    #[test]
-    fn dense_path_when_no_jacobian_bandwidth() {
-        let spec = IntegratorSpec::BackwardEuler {
-            sparse_threshold: 100,
-            jacobian_bandwidth: None,
-            newton_convergence: NewtonConvergence::default(),
-            jacobian_strategy: JacobianStrategy::default(),
-            max_iterations: 1,
-        };
-        let solver: Box<dyn Solver> = spec.try_into().unwrap();
-        // Object-safety + successful construction is the assertion here —
-        // BackwardEulerSolver's internal sparse_solver field is private,
-        // not observable from outside the crate.
-        let _ = solver;
+    // ── Behaviour of the built solvers, every implicit variant ────────────────
+
+    /// The integrators an `IntegratorSpec` can build.
+    fn implicit_kinds() -> [IntegratorKind; 3] {
+        [
+            IntegratorKind::BackwardEuler,
+            IntegratorKind::CrankNicolson,
+            IntegratorKind::BDF2,
+        ]
+    }
+
+    /// The `kind` variant with the given fields.
+    fn spec(
+        kind: &IntegratorKind,
+        sparse_threshold: usize,
+        jacobian_bandwidth: Option<usize>,
+        newton_convergence: NewtonConvergence,
+        jacobian_strategy: JacobianStrategy,
+        max_iterations: usize,
+    ) -> IntegratorSpec {
+        match kind {
+            IntegratorKind::BackwardEuler => IntegratorSpec::BackwardEuler {
+                sparse_threshold,
+                jacobian_bandwidth,
+                newton_convergence,
+                jacobian_strategy,
+                max_iterations,
+            },
+            IntegratorKind::CrankNicolson => IntegratorSpec::CrankNicolson {
+                sparse_threshold,
+                jacobian_bandwidth,
+                newton_convergence,
+                jacobian_strategy,
+                max_iterations,
+            },
+            IntegratorKind::BDF2 => IntegratorSpec::BDF2 {
+                sparse_threshold,
+                jacobian_bandwidth,
+                newton_convergence,
+                jacobian_strategy,
+                max_iterations,
+            },
+            other => panic!("not built from an IntegratorSpec: {other:?}"),
+        }
+    }
+
+    /// The `kind` variant with the solvers' default Newton configuration
+    /// and the given sparse fields.
+    fn sparse_spec(
+        kind: &IntegratorKind,
+        sparse_threshold: usize,
+        jacobian_bandwidth: Option<usize>,
+    ) -> IntegratorSpec {
+        spec(
+            kind,
+            sparse_threshold,
+            jacobian_bandwidth,
+            stiff_jacobian_convergence(),
+            JacobianStrategy::default(),
+            1,
+        )
+    }
+
+    /// Runs the solver built from `spec` on `model`, over `nodes` nodes,
+    /// for `steps` steps of `dt`.
+    fn run(
+        spec: IntegratorSpec,
+        kind: &IntegratorKind,
+        model: Box<dyn PhysicalModel>,
+        nodes: usize,
+        dt: f64,
+        steps: usize,
+    ) -> Result<SimulationResult, OxiflowError> {
+        let solver: Box<dyn Solver> = spec.try_into()?;
+        let scenario = Scenario::single(model, Box::new(UniformGrid1D::new(nodes, 0.0, 1.0)?));
+        let config = SolverConfiguration::new(
+            TimeConfiguration::new(steps as f64 * dt, StepControl::Fixed { dt }),
+            kind.clone(),
+        );
+        solver.solve(&scenario, &config)
+    }
+
+    /// Two steps of `TridiagonalDiffusion` on 10 unknowns -- the bootstrap
+    /// step and the BDF2 update for `BDF2`.
+    fn run_diffusion(
+        spec: IntegratorSpec,
+        kind: &IntegratorKind,
+    ) -> Result<SimulationResult, OxiflowError> {
+        run(
+            spec,
+            kind,
+            Box::new(TridiagonalDiffusion { diffusion: 1.0 }),
+            10,
+            0.1,
+            2,
+        )
     }
 
     #[test]
-    fn sparse_path_when_jacobian_bandwidth_given() {
-        let spec = IntegratorSpec::BackwardEuler {
-            sparse_threshold: 50,
-            jacobian_bandwidth: Some(3),
-            newton_convergence: NewtonConvergence::default(),
-            jacobian_strategy: JacobianStrategy::default(),
-            max_iterations: 1,
-        };
-        let solver: Box<dyn Solver> = spec.try_into().unwrap();
-        let _ = solver;
+    fn declared_bandwidth_selects_the_banded_path() {
+        // The diffusion is tridiagonal: a declared half-bandwidth of 0
+        // drops its off-diagonal entries, so the single default correction
+        // is inexact on the banded path and the step reports it. The dense
+        // path, taken without a bandwidth, is exact on this affine model.
+        for kind in implicit_kinds() {
+            let err = run_diffusion(sparse_spec(&kind, 0, Some(0)), &kind).unwrap_err();
+            assert!(
+                matches!(err, OxiflowError::NewtonNotConverged { iterations: 1, .. }),
+                "{kind:?}, band 0: got {err:?}"
+            );
+            run_diffusion(sparse_spec(&kind, 0, None), &kind)
+                .unwrap_or_else(|e| panic!("{kind:?}, no band: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn systems_up_to_the_sparse_threshold_stay_dense() {
+        // 10 unknowns, threshold 10: the banded path needs strictly more
+        // unknowns than the threshold, so the too-narrow band is never used.
+        for kind in implicit_kinds() {
+            run_diffusion(sparse_spec(&kind, 10, Some(0)), &kind)
+                .unwrap_or_else(|e| panic!("{kind:?}: {e:?}"));
+        }
+    }
+
+    /// Root of one theta-method step of f(u) = -u^3 from u = 1:
+    /// u + theta*dt*u^3 = 1 - (1 - theta)*dt, solved by scalar Newton.
+    fn cubic_decay_root(theta: f64, dt: f64) -> f64 {
+        let rhs = 1.0 - (1.0 - theta) * dt;
+        let mut u = 1.0_f64;
+        for _ in 0..100 {
+            let g = u + theta * dt * u.powi(3) - rhs;
+            let dg = 1.0 + 3.0 * theta * dt * u.powi(2);
+            u -= g / dg;
+        }
+        u
+    }
+
+    #[test]
+    fn newton_fields_take_effect() {
+        // One step of f(u) = -u^3 at dt = 0.5 (the Backward Euler bootstrap
+        // step for BDF2). Two frozen-Jacobian corrections do not reach the
+        // default tolerance: the step reports the configured budget. A
+        // full Newton loop under a tolerance far below the default one
+        // reaches the root.
+        let dt = 0.5;
+        for kind in implicit_kinds() {
+            let short = spec(
+                &kind,
+                100,
+                None,
+                stiff_jacobian_convergence(),
+                JacobianStrategy::ModifiedFrozen,
+                2,
+            );
+            let err = run(short, &kind, Box::new(CubicDecay), 2, dt, 1).unwrap_err();
+            assert!(
+                matches!(err, OxiflowError::NewtonNotConverged { iterations: 2, .. }),
+                "{kind:?}, budget 2: got {err:?}"
+            );
+
+            let tight = spec(
+                &kind,
+                100,
+                None,
+                NewtonConvergence::ResidualOnly {
+                    tol_abs: 1e-13,
+                    tol_rel: 0.0,
+                },
+                JacobianStrategy::FullNewton,
+                10,
+            );
+            let result = run(tight, &kind, Box::new(CubicDecay), 2, dt, 1).unwrap();
+            let theta = if kind == IntegratorKind::CrankNicolson {
+                0.5
+            } else {
+                1.0
+            };
+            let expected = cubic_decay_root(theta, dt);
+            for v in result.states[1].as_scalar_field().unwrap().iter() {
+                assert!(
+                    (v - expected).abs() < 1e-12,
+                    "{kind:?}: got {v}, expected {expected}"
+                );
+            }
+        }
     }
 
     #[cfg(feature = "serde")]
@@ -351,52 +527,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn newton_fields_take_effect_through_try_from() {
-        // Object-safety + successful construction, mirroring
-        // `dense_path_when_no_jacobian_bandwidth` above -- `BackwardEulerSolver`'s
-        // Newton fields are private, not observable from outside the
-        // crate, so this only proves the builders are actually called
-        // (a typo'd builder name would fail to compile, not silently
-        // no-op).
-        let spec = IntegratorSpec::BackwardEuler {
-            sparse_threshold: 100,
-            jacobian_bandwidth: None,
-            newton_convergence: NewtonConvergence::default(),
-            jacobian_strategy: JacobianStrategy::FullNewton,
-            max_iterations: 25,
-        };
-        let solver: Box<dyn Solver> = spec.try_into().unwrap();
-        let _ = solver;
-    }
-
     // ── CrankNicolson (#115) — mirrors the BackwardEuler coverage above ────────
-
-    #[test]
-    fn crank_nicolson_dense_path_when_no_jacobian_bandwidth() {
-        let spec = IntegratorSpec::CrankNicolson {
-            sparse_threshold: 100,
-            jacobian_bandwidth: None,
-            newton_convergence: NewtonConvergence::default(),
-            jacobian_strategy: JacobianStrategy::default(),
-            max_iterations: 1,
-        };
-        let solver: Box<dyn Solver> = spec.try_into().unwrap();
-        let _ = solver;
-    }
-
-    #[test]
-    fn crank_nicolson_sparse_path_when_jacobian_bandwidth_given() {
-        let spec = IntegratorSpec::CrankNicolson {
-            sparse_threshold: 50,
-            jacobian_bandwidth: Some(3),
-            newton_convergence: NewtonConvergence::default(),
-            jacobian_strategy: JacobianStrategy::default(),
-            max_iterations: 1,
-        };
-        let solver: Box<dyn Solver> = spec.try_into().unwrap();
-        let _ = solver;
-    }
 
     #[cfg(feature = "serde")]
     #[test]
@@ -464,18 +595,7 @@ mod tests {
         }
     }
 
-    // ── BDF2 (#116) — Newton fields only, no sparse ────────────────────────────
-
-    #[test]
-    fn bdf2_construction_succeeds() {
-        let spec = IntegratorSpec::BDF2 {
-            newton_convergence: NewtonConvergence::default(),
-            jacobian_strategy: JacobianStrategy::default(),
-            max_iterations: 1,
-        };
-        let solver: Box<dyn Solver> = spec.try_into().unwrap();
-        let _ = solver;
-    }
+    // ── BDF2 (#116, sparse fields since #133) ──────────────────────────────────
 
     #[cfg(feature = "serde")]
     #[test]
@@ -484,10 +604,14 @@ mod tests {
         let spec: IntegratorSpec = serde_json::from_str(json).unwrap();
         match spec {
             IntegratorSpec::BDF2 {
+                sparse_threshold,
+                jacobian_bandwidth,
                 newton_convergence,
                 jacobian_strategy,
                 max_iterations,
             } => {
+                assert_eq!(sparse_threshold, default_sparse_threshold());
+                assert_eq!(jacobian_bandwidth, None);
                 assert_eq!(newton_convergence, default_newton_convergence());
                 assert_eq!(jacobian_strategy, JacobianStrategy::default());
                 assert_eq!(max_iterations, default_max_newton_iterations());
@@ -501,6 +625,8 @@ mod tests {
     fn bdf2_deserialises_explicit_fields() {
         let json = r#"{
             "BDF2": {
+                "sparse_threshold": 42,
+                "jacobian_bandwidth": 2,
                 "newton_convergence": { "ResidualOnly": { "tol_abs": 1e-9, "tol_rel": 1e-7 } },
                 "jacobian_strategy": "FullNewton",
                 "max_iterations": 30
@@ -509,10 +635,14 @@ mod tests {
         let spec: IntegratorSpec = serde_json::from_str(json).unwrap();
         match spec {
             IntegratorSpec::BDF2 {
+                sparse_threshold,
+                jacobian_bandwidth,
                 newton_convergence,
                 jacobian_strategy,
                 max_iterations,
             } => {
+                assert_eq!(sparse_threshold, 42);
+                assert_eq!(jacobian_bandwidth, Some(2));
                 assert_eq!(
                     newton_convergence,
                     NewtonConvergence::ResidualOnly {

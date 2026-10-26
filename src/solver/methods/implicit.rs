@@ -1279,54 +1279,7 @@ mod tests {
     // ── Dirichlet BC × perturbed Jacobian (#113) ───────────────────────────────
 
     use crate::boundary::PinnedNodes;
-
-    /// Discrete tridiagonal diffusion with a spike initial condition —
-    /// genuine spatial coupling to neighbours, needed to distinguish
-    /// "legitimate physics coupling" from "spurious coupling introduced by
-    /// BC re-application" in the test below. A local copy rather than
-    /// reusing `sparse_tests::TridiagonalDiffusion`: that fixture only
-    /// exists under `feature = "sparse"`, and this test needs no sparse
-    /// machinery.
-    #[derive(Debug)]
-    struct TridiagonalDiffusion {
-        diffusion: f64,
-    }
-
-    impl RequiresContext for TridiagonalDiffusion {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for TridiagonalDiffusion {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            let n = u.len();
-            let d = self.diffusion;
-            let out = DVector::from_fn(n, |i, _| {
-                let left = if i > 0 { u[i - 1] } else { 0.0 };
-                let right = if i + 1 < n { u[i + 1] } else { 0.0 };
-                d * (left - 2.0 * u[i] + right)
-            });
-            Ok(ContextValue::ScalarField(out))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            let n = mesh.n_dof();
-            ContextValue::ScalarField(DVector::from_fn(
-                n,
-                |i, _| if i == n / 2 { 1.0 } else { 0.0 },
-            ))
-        }
-
-        fn name(&self) -> &str {
-            "tridiagonal_diffusion_dirichlet_test"
-        }
-    }
+    use crate::model::TridiagonalDiffusion;
 
     #[test]
     fn dirichlet_constrained_column_is_exactly_zero_row_keeps_real_coupling() {
@@ -1447,63 +1400,12 @@ mod tests {
 #[cfg(all(test, feature = "sparse"))]
 mod sparse_tests {
     use super::*;
-    use crate::context::compute::ComputeContext;
-    use crate::context::variable::ContextVariable;
     use crate::mesh::{Mesh, UniformGrid1D};
-    use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::model::TridiagonalDiffusion;
     use crate::solver::chain::build_calculator_chain;
     use crate::solver::linear::NalgebraDenseSolver;
     use crate::solver::scenario::Scenario;
     use crate::solver::sparse::FaerSparseSolver;
-
-    /// Discrete tridiagonal diffusion — `du_i/dt = D*(u[i-1] - 2u[i] +
-    /// u[i+1])`, zero outside the domain. Not a real `BoundaryCondition` —
-    /// this fixture exists only to exercise the banded path with a
-    /// genuinely local, bandwidth-1 coupling (real Dirichlet/Neumann
-    /// boundary handling is covered separately, see the module's own docs
-    /// on boundary conditions × the perturbed Jacobian, and
-    /// `tests::dirichlet_constrained_column_is_exactly_zero_row_keeps_real_coupling`,
-    /// #113).
-    #[derive(Debug)]
-    struct TridiagonalDiffusion {
-        diffusion: f64,
-    }
-
-    impl RequiresContext for TridiagonalDiffusion {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for TridiagonalDiffusion {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            let n = u.len();
-            let d = self.diffusion;
-            let out = DVector::from_fn(n, |i, _| {
-                let left = if i > 0 { u[i - 1] } else { 0.0 };
-                let right = if i + 1 < n { u[i + 1] } else { 0.0 };
-                d * (left - 2.0 * u[i] + right)
-            });
-            Ok(ContextValue::ScalarField(out))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            let n = mesh.n_dof();
-            ContextValue::ScalarField(DVector::from_fn(
-                n,
-                |i, _| if i == n / 2 { 1.0 } else { 0.0 },
-            ))
-        }
-
-        fn name(&self) -> &str {
-            "tridiagonal_diffusion_test"
-        }
-    }
 
     /// A [`SparseLinearSolver`] that panics if ever called — used to prove
     /// the dense path was actually taken (threshold/bandwidth conditions

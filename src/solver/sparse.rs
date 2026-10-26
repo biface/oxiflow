@@ -103,6 +103,27 @@ impl SparseLinearSolver for FaerSparseSolver {
     }
 }
 
+/// Delegates to [`FaerSparseSolver`] and counts its calls, for the tests
+/// of the implicit solvers' banded path — the sparse counterpart of
+/// `CountingLinearSolver`.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct CountingSparseSolver {
+    pub(crate) calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[cfg(test)]
+impl SparseLinearSolver for CountingSparseSolver {
+    fn solve(
+        &self,
+        a: &faer::sparse::SparseColMat<usize, f64>,
+        b: &DVector<f64>,
+    ) -> Result<DVector<f64>, OxiflowError> {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        FaerSparseSolver.solve(a, b)
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
