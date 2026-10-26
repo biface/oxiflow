@@ -93,7 +93,7 @@ use super::state_layout::StateLayout;
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
-use crate::solver::linear::LinearSolver;
+use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 #[cfg(feature = "parallel")]
 use crate::solver::parallel::ParallelThreshold;
 use crate::solver::scenario::Domain;
@@ -690,6 +690,115 @@ pub(crate) fn implicit_step_adaptive(
             newton,
             dispatch,
         ),
+    }
+}
+
+// ── Linear-system backends of the implicit solvers ─────────────────────────
+
+/// Number of unknowns above which the banded path is taken by default,
+/// once a sparse solver and a Jacobian bandwidth are configured (DD-043).
+/// Shared by the implicit solvers and by
+/// [`IntegratorSpec`](crate::solver::spec::IntegratorSpec)'s defaults.
+#[cfg(feature = "sparse")]
+pub(crate) const DEFAULT_SPARSE_THRESHOLD: usize = 100;
+
+/// Linear-system backends of an implicit solver (DD-013, DD-043): the
+/// dense [`LinearSolver`] and, with the `sparse` feature, the banded-path
+/// configuration. Held once for
+/// [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
+/// [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver) and
+/// [`BDF2Solver`](super::bdf2::BDF2Solver), which set it through their
+/// own builders and step through [`ImplicitBackend::step`].
+pub(crate) struct ImplicitBackend {
+    /// Dense backend (DD-013), [`NalgebraDenseSolver`] by default.
+    pub(crate) linear_solver: Box<dyn LinearSolver>,
+    /// Sparse backend (DD-043) — `None` by default: the dense path
+    /// (`implicit_step_newton`) is used unless this is configured
+    /// explicitly. The banded path runs the same iterated Newton loop as
+    /// the dense one, with the solver's Newton parameters.
+    #[cfg(feature = "sparse")]
+    pub(crate) sparse_solver: Option<Box<dyn SparseLinearSolver>>,
+    /// Number of unknowns above which the banded path is used, once a
+    /// `sparse_solver` and a `jacobian_bandwidth` are both configured
+    /// ([`DEFAULT_SPARSE_THRESHOLD`] by default). Ignored if
+    /// `sparse_solver` is `None`.
+    #[cfg(feature = "sparse")]
+    pub(crate) sparse_threshold: usize,
+    /// Half-bandwidth of the Jacobian, in flat unknowns — a HOW-side
+    /// assertion supplied by the caller (e.g. `scheme.stencil_radius()`,
+    /// DD-039, or `d·(s + 1) − 1` for `d` interleaved components), never
+    /// read from `Domain`/`PhysicalModel` (DD-043, amendment 1). `None` by
+    /// default: no assumption about locality, dense path only.
+    #[cfg(feature = "sparse")]
+    pub(crate) jacobian_bandwidth: Option<usize>,
+}
+
+impl Default for ImplicitBackend {
+    fn default() -> Self {
+        Self {
+            linear_solver: Box::new(NalgebraDenseSolver),
+            #[cfg(feature = "sparse")]
+            sparse_solver: None,
+            #[cfg(feature = "sparse")]
+            sparse_threshold: DEFAULT_SPARSE_THRESHOLD,
+            #[cfg(feature = "sparse")]
+            jacobian_bandwidth: None,
+        }
+    }
+}
+
+impl ImplicitBackend {
+    /// Performs one implicit step of `formula` with these backends, under
+    /// the solver's Newton parameters and Jacobian dispatch: through
+    /// `implicit_step_adaptive` when a sparse solver is configured,
+    /// through [`implicit_step_newton`] otherwise.
+    ///
+    /// The choice is gated on `sparse_solver` alone: with no solver
+    /// configured there is nothing to hand `implicit_step_adaptive`, so
+    /// the dense path is taken directly rather than through it with a
+    /// `None` bandwidth (same result, one fewer branch to reason about).
+    /// The `n > sparse_threshold` and declared-bandwidth conditions are
+    /// `implicit_step_adaptive`'s own responsibility.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn step(
+        &self,
+        domain: &Domain,
+        chain: &[&dyn ContextCalculator],
+        state: &mut ContextValue,
+        t: f64,
+        dt: f64,
+        formula: ImplicitFormula<'_>,
+        newton: &NewtonParams,
+        dispatch: &JacobianDispatch,
+    ) -> Result<ContextValue, OxiflowError> {
+        #[cfg(feature = "sparse")]
+        if let Some(sparse_solver) = &self.sparse_solver {
+            return implicit_step_adaptive(
+                domain,
+                chain,
+                state,
+                t,
+                dt,
+                formula,
+                self.linear_solver.as_ref(),
+                sparse_solver.as_ref(),
+                self.sparse_threshold,
+                self.jacobian_bandwidth,
+                newton,
+                dispatch,
+            );
+        }
+        implicit_step_newton(
+            domain,
+            chain,
+            state,
+            t,
+            dt,
+            formula,
+            self.linear_solver.as_ref(),
+            newton,
+            dispatch,
+        )
     }
 }
 

@@ -45,7 +45,7 @@ use super::methods::backward_euler::BackwardEulerSolver;
 use super::methods::bdf2::BDF2Solver;
 use super::methods::crank_nicolson::CrankNicolsonSolver;
 #[cfg(feature = "serde")]
-use super::methods::implicit::stiff_jacobian_convergence;
+use super::methods::implicit::{stiff_jacobian_convergence, DEFAULT_SPARSE_THRESHOLD};
 use super::methods::newton::{JacobianStrategy, NewtonConvergence};
 use super::sparse::FaerSparseSolver;
 use super::Solver;
@@ -133,15 +133,11 @@ pub enum IntegratorSpec {
     },
 }
 
-/// Default for `sparse_threshold` when omitted from a deserialised config.
-///
-/// Duplicates the literal `100` from `BackwardEulerSolver`'s private
-/// `Default` impl (`backward_euler.rs`) — that field isn't publicly
-/// readable, so this can't delegate to it directly. If that default ever
-/// changes, update this constant too.
+/// Default for `sparse_threshold` when omitted from a deserialised config:
+/// the implicit solvers' own default, [`DEFAULT_SPARSE_THRESHOLD`].
 #[cfg(feature = "serde")]
 fn default_sparse_threshold() -> usize {
-    100
+    DEFAULT_SPARSE_THRESHOLD
 }
 
 /// Default for `newton_convergence` when omitted — see the field's own

@@ -62,8 +62,8 @@
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
-use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
-use crate::solver::methods::implicit::{implicit_step_newton, ImplicitFormula, JacobianDispatch};
+use crate::solver::linear::LinearSolver;
+use crate::solver::methods::implicit::{ImplicitBackend, ImplicitFormula, JacobianDispatch};
 use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence, NewtonParams};
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
@@ -73,8 +73,12 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 ///
 /// See [module docs](self) for the startup phase and the fixed-`dt`-only
 /// scope at J4a.
+#[derive(Default)]
 pub struct BDF2Solver {
-    linear_solver: Box<dyn LinearSolver>,
+    /// Linear-system backends (DD-013): the dense solver, set by
+    /// `with_linear_solver`, for the startup step and the BDF2 update
+    /// alike.
+    backend: ImplicitBackend,
     /// Newton configuration (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
     /// Jacobian refresh strategy and iteration budget, set by the
     /// `with_newton_convergence`/`with_jacobian_strategy`/
@@ -92,16 +96,6 @@ pub struct BDF2Solver {
     jacobian_dispatch: JacobianDispatch,
 }
 
-impl Default for BDF2Solver {
-    fn default() -> Self {
-        Self {
-            linear_solver: Box::new(NalgebraDenseSolver),
-            newton: NewtonParams::default(),
-            jacobian_dispatch: JacobianDispatch::default(),
-        }
-    }
-}
-
 impl BDF2Solver {
     /// Creates a solver using the default `nalgebra` dense backend.
     pub fn new() -> Self {
@@ -110,7 +104,7 @@ impl BDF2Solver {
 
     /// Substitutes the linear solver backend (DD-013).
     pub fn with_linear_solver(mut self, linear_solver: Box<dyn LinearSolver>) -> Self {
-        self.linear_solver = linear_solver;
+        self.backend.linear_solver = linear_solver;
         self
     }
 
@@ -211,14 +205,13 @@ impl SteppableSolver for BDF2Solver {
             None => ImplicitFormula::Theta(1.0),
             Some(previous) => ImplicitFormula::Bdf2 { previous },
         };
-        implicit_step_newton(
+        self.backend.step(
             domain,
             chain,
             state,
             t,
             dt,
             formula,
-            self.linear_solver.as_ref(),
             &self.newton,
             &self.jacobian_dispatch,
         )
@@ -496,20 +489,9 @@ mod tests {
         let mut state = domain.model.initial_state(domain.mesh.as_ref());
         let wrong_length_prev = ContextValue::ScalarField(DVector::from_element(2, 1.0)); // mesh has 3 nodes
 
-        let err = implicit_step_newton(
-            domain,
-            &chain,
-            &mut state,
-            0.0,
-            0.1,
-            ImplicitFormula::Bdf2 {
-                previous: &wrong_length_prev,
-            },
-            &NalgebraDenseSolver,
-            &NewtonParams::default(),
-            &JacobianDispatch::default(),
-        )
-        .unwrap_err();
+        let err = BDF2Solver::new()
+            .step(domain, &chain, &mut state, &[wrong_length_prev], 0.0, 0.1)
+            .unwrap_err();
         assert!(
             matches!(&err, OxiflowError::InvalidDomain(message) if message.starts_with("history state:")),
             "got {err:?}"

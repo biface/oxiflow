@@ -30,10 +30,8 @@
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
-use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
-#[cfg(feature = "sparse")]
-use crate::solver::methods::implicit::implicit_step_adaptive;
-use crate::solver::methods::implicit::{implicit_step_newton, ImplicitFormula, JacobianDispatch};
+use crate::solver::linear::LinearSolver;
+use crate::solver::methods::implicit::{ImplicitBackend, ImplicitFormula, JacobianDispatch};
 use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence, NewtonParams};
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
@@ -42,8 +40,13 @@ use crate::solver::sparse::SparseLinearSolver;
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
 /// Crank-Nicolson solver — semi-implicit, 2nd order.
+#[derive(Default)]
 pub struct CrankNicolsonSolver {
-    linear_solver: Box<dyn LinearSolver>,
+    /// Linear-system backends (DD-013, DD-043): the dense solver and,
+    /// with the `sparse` feature, the banded-path configuration, set by
+    /// `with_linear_solver` and the `with_sparse_*`/`with_jacobian_bandwidth`
+    /// builders.
+    backend: ImplicitBackend,
     /// Newton configuration (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
     /// Jacobian refresh strategy and iteration budget, set by the
     /// `with_newton_convergence`/`with_jacobian_strategy`/
@@ -58,31 +61,6 @@ pub struct CrankNicolsonSolver {
     /// (DT-069, #198). Its threshold exists only with the `parallel`
     /// feature — see `with_parallel_threshold`.
     jacobian_dispatch: JacobianDispatch,
-    /// Sparse backend (DD-043) — see
-    /// [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)'s
-    /// fields for the full rationale, identical here.
-    #[cfg(feature = "sparse")]
-    sparse_solver: Option<Box<dyn SparseLinearSolver>>,
-    #[cfg(feature = "sparse")]
-    sparse_threshold: usize,
-    #[cfg(feature = "sparse")]
-    jacobian_bandwidth: Option<usize>,
-}
-
-impl Default for CrankNicolsonSolver {
-    fn default() -> Self {
-        Self {
-            linear_solver: Box::new(NalgebraDenseSolver),
-            newton: NewtonParams::default(),
-            jacobian_dispatch: JacobianDispatch::default(),
-            #[cfg(feature = "sparse")]
-            sparse_solver: None,
-            #[cfg(feature = "sparse")]
-            sparse_threshold: 100,
-            #[cfg(feature = "sparse")]
-            jacobian_bandwidth: None,
-        }
-    }
 }
 
 impl CrankNicolsonSolver {
@@ -93,7 +71,7 @@ impl CrankNicolsonSolver {
 
     /// Substitutes the linear solver backend (DD-013).
     pub fn with_linear_solver(mut self, linear_solver: Box<dyn LinearSolver>) -> Self {
-        self.linear_solver = linear_solver;
+        self.backend.linear_solver = linear_solver;
         self
     }
 
@@ -159,7 +137,7 @@ impl CrankNicolsonSolver {
     /// [`BackwardEulerSolver::with_sparse_solver`](super::backward_euler::BackwardEulerSolver::with_sparse_solver).
     #[cfg(feature = "sparse")]
     pub fn with_sparse_solver(mut self, sparse_solver: Box<dyn SparseLinearSolver>) -> Self {
-        self.sparse_solver = Some(sparse_solver);
+        self.backend.sparse_solver = Some(sparse_solver);
         self
     }
 
@@ -167,7 +145,7 @@ impl CrankNicolsonSolver {
     /// is used (default 100).
     #[cfg(feature = "sparse")]
     pub fn with_sparse_threshold(mut self, sparse_threshold: usize) -> Self {
-        self.sparse_threshold = sparse_threshold;
+        self.backend.sparse_threshold = sparse_threshold;
         self
     }
 
@@ -179,7 +157,7 @@ impl CrankNicolsonSolver {
     /// whose unknowns are interleaved by node, it is `d·(s + 1) − 1` (#192).
     #[cfg(feature = "sparse")]
     pub fn with_jacobian_bandwidth(mut self, jacobian_bandwidth: usize) -> Self {
-        self.jacobian_bandwidth = Some(jacobian_bandwidth);
+        self.backend.jacobian_bandwidth = Some(jacobian_bandwidth);
         self
     }
 }
@@ -194,7 +172,6 @@ impl Solver for CrankNicolsonSolver {
     }
 }
 
-#[cfg(feature = "sparse")]
 impl SteppableSolver for CrankNicolsonSolver {
     fn step(
         &self,
@@ -207,60 +184,13 @@ impl SteppableSolver for CrankNicolsonSolver {
     ) -> Result<ContextValue, OxiflowError> {
         // history_depth() defaults to 0 -- Crank-Nicolson is a one-step
         // method, `_history` is always empty here and intentionally unused.
-        //
-        // See BackwardEulerSolver::step for why dispatch is gated on
-        // `sparse_solver` alone.
-        match &self.sparse_solver {
-            Some(sparse_solver) => implicit_step_adaptive(
-                domain,
-                chain,
-                state,
-                t,
-                dt,
-                ImplicitFormula::Theta(0.5),
-                self.linear_solver.as_ref(),
-                sparse_solver.as_ref(),
-                self.sparse_threshold,
-                self.jacobian_bandwidth,
-                &self.newton,
-                &self.jacobian_dispatch,
-            ),
-            None => implicit_step_newton(
-                domain,
-                chain,
-                state,
-                t,
-                dt,
-                ImplicitFormula::Theta(0.5),
-                self.linear_solver.as_ref(),
-                &self.newton,
-                &self.jacobian_dispatch,
-            ),
-        }
-    }
-}
-
-#[cfg(not(feature = "sparse"))]
-impl SteppableSolver for CrankNicolsonSolver {
-    fn step(
-        &self,
-        domain: &Domain,
-        chain: &[&dyn ContextCalculator],
-        state: &mut ContextValue,
-        _history: &[ContextValue],
-        t: f64,
-        dt: f64,
-    ) -> Result<ContextValue, OxiflowError> {
-        // history_depth() defaults to 0 -- Crank-Nicolson is a one-step
-        // method, `_history` is always empty here and intentionally unused.
-        implicit_step_newton(
+        self.backend.step(
             domain,
             chain,
             state,
             t,
             dt,
             ImplicitFormula::Theta(0.5),
-            self.linear_solver.as_ref(),
             &self.newton,
             &self.jacobian_dispatch,
         )
