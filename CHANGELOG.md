@@ -101,6 +101,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the half-field penetration depth against its sqrt(ηt) scaling, in both
   metals and at three times, exits with an error beyond its tolerances and
   runs in CI with the reference examples (#179).
+- `examples/consolidation_1d`, the geomechanics reference example: Terzaghi
+  consolidation of a clay layer under a 100 kPa load, in physical units,
+  with both faces drained by `Dirichlet` conditions and BDF2 at the solver's
+  default Newton budget. By symmetry the run also stands for a layer half as
+  thick on an impermeable base. It checks the excess pore-pressure profiles
+  and the average degree of consolidation U(Tv) against Terzaghi's series,
+  truncated with an explicit bound on the neglected terms, exits with an
+  error beyond its tolerances and runs in CI with the reference examples
+  (#178).
 
 ### Changed
 

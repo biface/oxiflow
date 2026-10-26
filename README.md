@@ -134,7 +134,7 @@ See the [oxiflow wiki](https://github.com/biface/oxiflow/wiki) for introductory 
 | Heat transfer      | 1D transient conduction in a bar (uniform and graded) | `oxiflow-thermo` |
 | Reaction–diffusion | Gray–Scott Turing patterns                            | engine direct    |
 | Fluid mechanics    | Burgers boundary layer                                | engine direct    |
-| Geomechanics       | Terzaghi consolidation                                | engine direct    |
+| Geomechanics       | 1D consolidation of a clay layer (Terzaghi)           | engine direct    |
 | Electromagnetism   | 1D magnetic diffusion into a conductor (proto)        | `oxiflow-em`     |
 | Surface geophysics | Lahar–lake wave generation                            | `oxiflow-geo`    |
 
