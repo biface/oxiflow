@@ -6,11 +6,11 @@
 //!
 //! $$u^{n+1} = u^n + \frac{\Delta t}{2}\left[f(u^n, t^n) + f(u^{n+1}, t^{n+1})\right]$$
 //!
-//! A thin wrapper around the shared generalised theta method
-//! (`theta_method_step_newton`, θ=0.5, DD-044, [#111](https://github.com/biface/oxiflow/issues/111))
-//! — see that module's docs for the frozen-Jacobian default and the
-//! iterated Newton path configurable via [`CrankNicolsonSolver`]'s
-//! builders. Identical structure to
+//! A thin wrapper around the shared generalised theta method, θ=0.5, of
+//! [`super::implicit`] (DD-044,
+//! [#111](https://github.com/biface/oxiflow/issues/111)) — see that
+//! module's docs for the frozen-Jacobian default and the iterated Newton
+//! path configurable via [`CrankNicolsonSolver`]'s builders. Identical structure to
 //! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver) —
 //! only `theta` differs.
 //!
@@ -32,8 +32,8 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 #[cfg(feature = "sparse")]
-use crate::solver::methods::implicit::theta_method_step_adaptive;
-use crate::solver::methods::implicit::{theta_method_step_newton, JacobianDispatch};
+use crate::solver::methods::implicit::implicit_step_adaptive;
+use crate::solver::methods::implicit::{implicit_step_newton, ImplicitFormula, JacobianDispatch};
 use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence, NewtonParams};
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
@@ -211,13 +211,13 @@ impl SteppableSolver for CrankNicolsonSolver {
         // See BackwardEulerSolver::step for why dispatch is gated on
         // `sparse_solver` alone.
         match &self.sparse_solver {
-            Some(sparse_solver) => theta_method_step_adaptive(
+            Some(sparse_solver) => implicit_step_adaptive(
                 domain,
                 chain,
                 state,
                 t,
                 dt,
-                0.5,
+                ImplicitFormula::Theta(0.5),
                 self.linear_solver.as_ref(),
                 sparse_solver.as_ref(),
                 self.sparse_threshold,
@@ -225,13 +225,13 @@ impl SteppableSolver for CrankNicolsonSolver {
                 &self.newton,
                 &self.jacobian_dispatch,
             ),
-            None => theta_method_step_newton(
+            None => implicit_step_newton(
                 domain,
                 chain,
                 state,
                 t,
                 dt,
-                0.5,
+                ImplicitFormula::Theta(0.5),
                 self.linear_solver.as_ref(),
                 &self.newton,
                 &self.jacobian_dispatch,
@@ -253,13 +253,13 @@ impl SteppableSolver for CrankNicolsonSolver {
     ) -> Result<ContextValue, OxiflowError> {
         // history_depth() defaults to 0 -- Crank-Nicolson is a one-step
         // method, `_history` is always empty here and intentionally unused.
-        theta_method_step_newton(
+        implicit_step_newton(
             domain,
             chain,
             state,
             t,
             dt,
-            0.5,
+            ImplicitFormula::Theta(0.5),
             self.linear_solver.as_ref(),
             &self.newton,
             &self.jacobian_dispatch,

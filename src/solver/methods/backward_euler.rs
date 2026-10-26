@@ -6,11 +6,11 @@
 //!
 //! $$u^{n+1} = u^n + \Delta t \cdot f(u^{n+1}, t^{n+1})$$
 //!
-//! A thin wrapper around the shared generalised theta method
-//! (`theta_method_step_newton`, θ=1, DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) —
-//! see that module's docs for the frozen-Jacobian default and the
-//! iterated Newton path configurable via [`BackwardEulerSolver`]'s
-//! builders.
+//! A thin wrapper around the shared generalised theta method, θ=1, of
+//! [`super::implicit`] (DD-044,
+//! [#111](https://github.com/biface/oxiflow/issues/111)) — see that
+//! module's docs for the frozen-Jacobian default and the iterated Newton
+//! path configurable via [`BackwardEulerSolver`]'s builders.
 //!
 //! ## Stability
 //!
@@ -32,8 +32,8 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 #[cfg(feature = "sparse")]
-use crate::solver::methods::implicit::theta_method_step_adaptive;
-use crate::solver::methods::implicit::{theta_method_step_newton, JacobianDispatch};
+use crate::solver::methods::implicit::implicit_step_adaptive;
+use crate::solver::methods::implicit::{implicit_step_newton, ImplicitFormula, JacobianDispatch};
 use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence, NewtonParams};
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
@@ -79,7 +79,7 @@ pub struct BackwardEulerSolver {
     /// feature — see `with_parallel_threshold`.
     jacobian_dispatch: JacobianDispatch,
     /// Sparse backend (DD-043) — `None` by default: the dense path
-    /// ([`theta_method_step_newton`]) is unconditionally used unless this is
+    /// (`implicit_step_newton`) is unconditionally used unless this is
     /// explicitly configured via [`Self::with_sparse_solver`]. The banded
     /// path runs the same iterated Newton loop as the dense one, with
     /// `newton` (see [`super::implicit`]'s module docs).
@@ -241,19 +241,19 @@ impl SteppableSolver for BackwardEulerSolver {
         // method, `_history` is always empty here and intentionally unused.
         //
         // Dispatch is gated on `sparse_solver` alone: with no solver
-        // configured there is nothing to hand `theta_method_step_adaptive`,
+        // configured there is nothing to hand `implicit_step_adaptive`,
         // so the dense path is taken directly rather than going through it
         // with a `None` bandwidth (equivalent result, one fewer branch to
         // reason about). The `n > sparse_threshold && bandwidth.is_some()`
-        // condition is `theta_method_step_adaptive`'s own responsibility.
+        // condition is `implicit_step_adaptive`'s own responsibility.
         match &self.sparse_solver {
-            Some(sparse_solver) => theta_method_step_adaptive(
+            Some(sparse_solver) => implicit_step_adaptive(
                 domain,
                 chain,
                 state,
                 t,
                 dt,
-                1.0,
+                ImplicitFormula::Theta(1.0),
                 self.linear_solver.as_ref(),
                 sparse_solver.as_ref(),
                 self.sparse_threshold,
@@ -261,13 +261,13 @@ impl SteppableSolver for BackwardEulerSolver {
                 &self.newton,
                 &self.jacobian_dispatch,
             ),
-            None => theta_method_step_newton(
+            None => implicit_step_newton(
                 domain,
                 chain,
                 state,
                 t,
                 dt,
-                1.0,
+                ImplicitFormula::Theta(1.0),
                 self.linear_solver.as_ref(),
                 &self.newton,
                 &self.jacobian_dispatch,
@@ -289,13 +289,13 @@ impl SteppableSolver for BackwardEulerSolver {
     ) -> Result<ContextValue, OxiflowError> {
         // history_depth() defaults to 0 -- Backward Euler is a one-step
         // method, `_history` is always empty here and intentionally unused.
-        theta_method_step_newton(
+        implicit_step_newton(
             domain,
             chain,
             state,
             t,
             dt,
-            1.0,
+            ImplicitFormula::Theta(1.0),
             self.linear_solver.as_ref(),
             &self.newton,
             &self.jacobian_dispatch,

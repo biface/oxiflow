@@ -48,14 +48,17 @@
 //!
 //! ## Wiring status
 //!
-//! `solve` is called from
-//! `super::implicit::theta_method_step_newton` (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) and
-//! `super::bdf2::bdf2_step_newton` (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — used respectively by
-//! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)/
+//! `solve` is called from a single place, the implicit step of
+//! [`super::implicit`] (DD-044,
+//! [#111](https://github.com/biface/oxiflow/issues/111),
+//! [#112](https://github.com/biface/oxiflow/issues/112)), which expresses
+//! each integrator's equation in the residual convention above
+//! (`ImplicitFormula`) and supplies the dense or the banded
+//! `NewtonSystem`. It serves
+//! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
 //! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver) and
 //! [`BDF2Solver`](super::bdf2::BDF2Solver), whose Backward Euler
-//! bootstrap step goes through `theta_method_step_newton` with the same
-//! configuration as its BDF2 update.
+//! bootstrap step runs with the same configuration as its BDF2 update.
 
 use nalgebra::{DMatrix, DVector};
 

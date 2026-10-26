@@ -3,15 +3,19 @@
 //! Shared machinery for implicit (theta-method) integrators — DD-033
 //! ([#86](https://github.com/biface/oxiflow/issues/86)).
 //!
-//! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver) (θ=1)
-//! and [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
-//! (θ=0.5) are thin wrappers around `theta_method_step_newton` (DD-044,
-//! [#111](https://github.com/biface/oxiflow/issues/111)) and, with the
-//! `sparse` feature, `theta_method_step_adaptive` (DD-043). Both run the
-//! shared [`super::newton`] loop; they differ only in the storage format
-//! of the linear system, dense or banded.
+//! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver) (θ=1),
+//! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
+//! (θ=0.5) and [`BDF2Solver`](super::bdf2::BDF2Solver) are thin wrappers
+//! around `implicit_step_newton` (DD-044,
+//! [#111](https://github.com/biface/oxiflow/issues/111),
+//! [#112](https://github.com/biface/oxiflow/issues/112)) and, with the
+//! `sparse` feature, `implicit_step_adaptive` (DD-043). Each solver names
+//! its implicit equation with an `ImplicitFormula` — the theta method or
+//! BDF2 — and every formula runs the shared [`super::newton`] loop; the
+//! two paths differ only in the storage format of the linear system, dense
+//! or banded.
 //!
-//! ## Why a single shared function for two methods
+//! ## Why one theta formula serves two methods
 //!
 //! The generalised theta method is:
 //!
@@ -40,9 +44,10 @@
 //! approximation on a nonlinear one.
 //!
 //! The dense and the banded paths share the loop, the residual and the
-//! configuration: the banded path assembles $I - \theta \Delta t J_f$ in
-//! compressed columns from `banded_finite_difference_jacobian` and
-//! solves it with the solver's `SparseLinearSolver`, nothing more.
+//! configuration, whatever the formula: the banded path assembles
+//! $\alpha I - c J_f$ in compressed columns from
+//! `banded_finite_difference_jacobian` and solves it with the solver's
+//! `SparseLinearSolver`, nothing more.
 //!
 //! ## State variants
 //!
@@ -313,40 +318,99 @@ impl Default for NewtonParams {
     }
 }
 
-/// Performs one step of the generalised theta method through the iterated
-/// Newton loop ([`newton::solve`]) with the dense linear system, under the
-/// caller's Newton parameters (DD-044, #111).
+/// Implicit step formula: how the implicit equation of an integrator is
+/// written in [`newton`]'s residual convention $g(u) = \alpha (u - u^{*}) - c
+/// f(u)$. Only the triple $(u^{*}, \alpha, c)$ differs between the
+/// integrators; the Newton loop, the residual, the Jacobians and the
+/// choice of storage format are shared (see [`implicit_step_newton`] and,
+/// with the `sparse` feature, `implicit_step_adaptive`).
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ImplicitFormula<'a> {
+    /// Generalised theta method: $\alpha = 1$, $c = \theta \Delta t$,
+    /// $u^{*} = u^n + \Delta t(1-\theta)f(u^n)$. `θ = 1` is Backward Euler,
+    /// `θ = 0.5` Crank-Nicolson.
+    Theta(f64),
+    /// BDF2 with fixed step: $\alpha = 3/2$, $c = \Delta t$, $u^{*} =
+    /// \frac{4u^n - u^{n-1}}{3}$, derived from $g(u) = \frac{3}{2}u - 2u^n +
+    /// \frac{1}{2}u^{n-1} - \Delta t f(u)$. `previous` is $u^{n-1}$ and must
+    /// have the layout of $u^n$.
+    Bdf2 {
+        /// The state $u^{n-1}$.
+        previous: &'a ContextValue,
+    },
+}
+
+impl ImplicitFormula<'_> {
+    /// Returns $(u^{*}, \alpha, c)$ for the step from `u_n`, given
+    /// $f(u^n)$ (`f_n`) and the time step.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`OxiflowError::InvalidDomain`] (prefixed with `history
+    /// state:`) if the BDF2 `previous` state does not have the layout of
+    /// `u_n`, and propagates the flattening errors of `f_n`.
+    fn residual_terms(
+        &self,
+        layout: &StateLayout,
+        u_n: DVector<f64>,
+        f_n: &ContextValue,
+        dt: f64,
+    ) -> Result<(DVector<f64>, f64, f64), OxiflowError> {
+        match *self {
+            Self::Theta(theta) => {
+                let f_n = layout.flatten(f_n)?.into_owned();
+                Ok((u_n + f_n * (dt * (1.0 - theta)), 1.0, theta * dt))
+            }
+            Self::Bdf2 { previous } => {
+                let u_prev = layout
+                    .flatten(previous)
+                    .map_err(|e| match e {
+                        OxiflowError::InvalidDomain(message) => {
+                            OxiflowError::InvalidDomain(format!("history state: {message}"))
+                        }
+                        other => other,
+                    })?
+                    .into_owned();
+                Ok(((u_n * 4.0 - u_prev) / 3.0, 1.5, dt))
+            }
+        }
+    }
+}
+
+/// Performs one implicit step of `formula` through the iterated Newton
+/// loop ([`newton::solve`]) with the dense linear system, under the
+/// caller's Newton parameters (DD-044, #111, #112).
 ///
-/// `theta = 1.0` is Backward Euler; `theta = 0.5` is Crank-Nicolson.
-/// [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
-/// [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver) and
-/// the bootstrap step of [`BDF2Solver`](super::bdf2::BDF2Solver) call
-/// this, passing their own configuration and Jacobian dispatch (DT-069,
-/// #198).
+/// Every implicit solver calls this
+/// ([`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
+/// [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver),
+/// [`BDF2Solver`](super::bdf2::BDF2Solver) and its bootstrap step) when
+/// no banded path is configured, with the solver's own configuration and
+/// Jacobian dispatch (DT-069, #198).
 ///
 /// `state` is mutated in-place by boundary condition application — same
 /// contract as the explicit solvers (see
 /// [`crate::solver::methods::evaluate_derivative`]): callers should not
 /// assume `state` is left unchanged after this call.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn theta_method_step_newton(
+pub(crate) fn implicit_step_newton(
     domain: &Domain,
     chain: &[&dyn ContextCalculator],
     state: &mut ContextValue,
     t: f64,
     dt: f64,
-    theta: f64,
+    formula: ImplicitFormula<'_>,
     linear_solver: &dyn LinearSolver,
     newton: &NewtonParams,
     dispatch: &JacobianDispatch,
 ) -> Result<ContextValue, OxiflowError> {
-    theta_method_newton(
+    implicit_newton(
         domain,
         chain,
         state,
         t,
         dt,
-        theta,
+        formula,
         newton,
         |layout, t_target| {
             newton::DenseNewtonSystem::new(
@@ -367,23 +431,24 @@ pub(crate) fn theta_method_step_newton(
     )
 }
 
-/// The theta-method step common to every storage format: builds the
-/// residual and runs [`newton::solve`] with the [`NewtonSystem`] that
-/// `system` returns for the state layout and the target time `t + dt`.
+/// The implicit step common to every formula and every storage format:
+/// builds the residual of `formula` and runs [`newton::solve`] with the
+/// [`NewtonSystem`] that `system` returns for the state layout and the
+/// target time `t + dt`.
 ///
-/// Follows [`newton`]'s residual convention with $\alpha = 1$, $c = \theta
-/// \Delta t$, $u^{*} = u^n + \Delta t(1-\theta)f(u^n)$ — see that
-/// module's docs. `f(u^n)` is evaluated once, at time `t` (the known
-/// term); every subsequent candidate `f`/Jacobian evaluation inside the
-/// Newton loop is at time `t + dt` (the implicit/target time).
+/// `f(u^n)` is evaluated once, at time `t` — it applies the boundary
+/// conditions to `state` in every case, and is the known term of the
+/// theta method (BDF2 does not use it); every subsequent candidate
+/// `f`/Jacobian evaluation inside the Newton loop is at time `t + dt`
+/// (the implicit/target time).
 #[allow(clippy::too_many_arguments)]
-fn theta_method_newton<S: NewtonSystem>(
+fn implicit_newton<S: NewtonSystem>(
     domain: &Domain,
     chain: &[&dyn ContextCalculator],
     state: &mut ContextValue,
     t: f64,
     dt: f64,
-    theta: f64,
+    formula: ImplicitFormula<'_>,
     newton: &NewtonParams,
     system: impl FnOnce(StateLayout, f64) -> S,
 ) -> Result<ContextValue, OxiflowError> {
@@ -393,17 +458,15 @@ fn theta_method_newton<S: NewtonSystem>(
     // Newton works on the flat vector of unknowns (#192).
     let layout = StateLayout::of(state)?;
     let u_n_field = layout.flatten(state)?.into_owned();
-    let f_n_field = layout.flatten(&f_n)?.into_owned();
 
     let u0 = u_n_field.clone();
-    let u_star: DVector<f64> = u_n_field + f_n_field * (dt * (1.0 - theta));
-    let coeff = theta * dt;
+    let (u_star, alpha, coeff) = formula.residual_terms(&layout, u_n_field, &f_n, dt)?;
     let t_target = t + dt;
 
     let u_next = newton::solve(
         u0,
         &u_star,
-        1.0,
+        alpha,
         coeff,
         move |candidate: &DVector<f64>| {
             let mut candidate_state = layout.rebuild(candidate.clone())?;
@@ -557,13 +620,13 @@ where
     }
 }
 
-/// Same contract as [`theta_method_step_newton`], with a banded path: when
+/// Same contract as [`implicit_step_newton`], with a banded path: when
 /// `jacobian_bandwidth` is `Some(k)` **and** `n > sparse_threshold`, the
 /// Newton loop runs over a banded system, the Jacobian assembled by
 /// [`banded_finite_difference_jacobian`] and the corrections solved with
 /// `sparse_solver`. Every other case — `None` bandwidth, or a small enough
 /// system that the dense path is cheaper regardless of bandwidth — takes
-/// [`theta_method_step_newton`]. Both paths run the same iterated loop
+/// [`implicit_step_newton`]. Both paths run the same iterated loop
 /// with the caller's Newton parameters; they differ only in the storage
 /// format of the linear system.
 ///
@@ -573,13 +636,13 @@ where
 /// applies to both paths.
 #[cfg(feature = "sparse")]
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn theta_method_step_adaptive(
+pub(crate) fn implicit_step_adaptive(
     domain: &Domain,
     chain: &[&dyn ContextCalculator],
     state: &mut ContextValue,
     t: f64,
     dt: f64,
-    theta: f64,
+    formula: ImplicitFormula<'_>,
     dense_solver: &dyn LinearSolver,
     sparse_solver: &dyn SparseLinearSolver,
     sparse_threshold: usize,
@@ -590,13 +653,13 @@ pub(crate) fn theta_method_step_adaptive(
     let n = StateLayout::of(state)?.len();
 
     match jacobian_bandwidth {
-        Some(bandwidth) if n > sparse_threshold => theta_method_newton(
+        Some(bandwidth) if n > sparse_threshold => implicit_newton(
             domain,
             chain,
             state,
             t,
             dt,
-            theta,
+            formula,
             newton,
             |layout, t_target| BandedNewtonSystem {
                 jacobian: move |candidate: &DVector<f64>| {
@@ -616,13 +679,13 @@ pub(crate) fn theta_method_step_adaptive(
                 matrix: None,
             },
         ),
-        _ => theta_method_step_newton(
+        _ => implicit_step_newton(
             domain,
             chain,
             state,
             t,
             dt,
-            theta,
+            formula,
             dense_solver,
             newton,
             dispatch,
@@ -1020,13 +1083,13 @@ mod tests {
         let chain = build_calculator_chain(&requirements, &[]).unwrap();
 
         let mut state = domain.model.initial_state(domain.mesh.as_ref());
-        let next = theta_method_step_newton(
+        let next = implicit_step_newton(
             domain,
             &chain,
             &mut state,
             0.0,
             dt,
-            1.0,
+            ImplicitFormula::Theta(1.0),
             &NalgebraDenseSolver,
             &NewtonParams::default(),
             &JacobianDispatch::default(),
@@ -1052,13 +1115,13 @@ mod tests {
         let chain = build_calculator_chain(&requirements, &[]).unwrap();
 
         let mut state = domain.model.initial_state(domain.mesh.as_ref());
-        let next = theta_method_step_newton(
+        let next = implicit_step_newton(
             domain,
             &chain,
             &mut state,
             0.0,
             dt,
-            0.5,
+            ImplicitFormula::Theta(0.5),
             &NalgebraDenseSolver,
             &NewtonParams::default(),
             &JacobianDispatch::default(),
@@ -1084,13 +1147,13 @@ mod tests {
         let chain = build_calculator_chain(&requirements, &[]).unwrap();
 
         let mut state = domain.model.initial_state(domain.mesh.as_ref());
-        let next = theta_method_step_newton(
+        let next = implicit_step_newton(
             domain,
             &chain,
             &mut state,
             0.0,
             dt,
-            1.0,
+            ImplicitFormula::Theta(1.0),
             &NalgebraDenseSolver,
             &NewtonParams::default(),
             &JacobianDispatch::default(),
@@ -1492,7 +1555,7 @@ mod sparse_tests {
     }
 
     #[test]
-    fn adaptive_step_with_no_bandwidth_matches_theta_method_step_exactly() {
+    fn adaptive_step_with_no_bandwidth_matches_the_dense_step_exactly() {
         let n = 6;
         let scenario = Scenario::single(
             Box::new(TridiagonalDiffusion { diffusion: 0.5 }),
@@ -1505,13 +1568,13 @@ mod sparse_tests {
         let mut state_a = domain.model.initial_state(domain.mesh.as_ref());
         let mut state_b = state_a.clone();
 
-        let via_adaptive = theta_method_step_adaptive(
+        let via_adaptive = implicit_step_adaptive(
             domain,
             &chain,
             &mut state_a,
             0.0,
             0.05,
-            1.0,
+            ImplicitFormula::Theta(1.0),
             &NalgebraDenseSolver,
             &PanicIfCalled,
             100,
@@ -1521,13 +1584,13 @@ mod sparse_tests {
         )
         .unwrap();
 
-        let via_plain = theta_method_step_newton(
+        let via_plain = implicit_step_newton(
             domain,
             &chain,
             &mut state_b,
             0.0,
             0.05,
-            1.0,
+            ImplicitFormula::Theta(1.0),
             &NalgebraDenseSolver,
             &NewtonParams::default(),
             &JacobianDispatch::default(),
@@ -1561,13 +1624,13 @@ mod sparse_tests {
         // PanicIfCalled proves the sparse path was never entered: bandwidth
         // is declared (Some(1)) but n (6) does not exceed sparse_threshold
         // (100), so the dense path must be taken regardless.
-        let result = theta_method_step_adaptive(
+        let result = implicit_step_adaptive(
             domain,
             &chain,
             &mut state,
             0.0,
             0.05,
-            1.0,
+            ImplicitFormula::Theta(1.0),
             &NalgebraDenseSolver,
             &PanicIfCalled,
             100,
@@ -1604,13 +1667,13 @@ mod sparse_tests {
         let chain_b = build_calculator_chain(&requirements_b, &[]).unwrap();
         let mut state_b = domain_b.model.initial_state(domain_b.mesh.as_ref());
 
-        let via_sparse = theta_method_step_adaptive(
+        let via_sparse = implicit_step_adaptive(
             domain_a,
             &chain_a,
             &mut state_a,
             0.0,
             dt,
-            1.0,
+            ImplicitFormula::Theta(1.0),
             &NalgebraDenseSolver,
             &FaerSparseSolver,
             10, // sparse_threshold well below n=40
@@ -1620,13 +1683,13 @@ mod sparse_tests {
         )
         .unwrap();
 
-        let via_dense = theta_method_step_newton(
+        let via_dense = implicit_step_newton(
             domain_b,
             &chain_b,
             &mut state_b,
             0.0,
             dt,
-            1.0,
+            ImplicitFormula::Theta(1.0),
             &NalgebraDenseSolver,
             &NewtonParams::default(),
             &JacobianDispatch::default(),
@@ -1650,7 +1713,7 @@ mod sparse_tests {
     use crate::model::CubicDecay;
 
     /// One theta-method step of f(u) = -u^3 from u = 1 at `dt` = 0.5,
-    /// through `theta_method_step_adaptive` with a declared bandwidth of 1.
+    /// through `implicit_step_adaptive` with a declared bandwidth of 1.
     fn cubic_decay_step(
         theta: f64,
         sparse_solver: &dyn SparseLinearSolver,
@@ -1661,13 +1724,13 @@ mod sparse_tests {
         let domain = scenario.single_domain().unwrap();
         let chain = build_calculator_chain(&scenario.context_requirements(), &[]).unwrap();
         let mut state = domain.model.initial_state(domain.mesh.as_ref());
-        theta_method_step_adaptive(
+        implicit_step_adaptive(
             domain,
             &chain,
             &mut state,
             0.0,
             0.5,
-            theta,
+            ImplicitFormula::Theta(theta),
             &NalgebraDenseSolver,
             sparse_solver,
             sparse_threshold,

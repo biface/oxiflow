@@ -11,21 +11,19 @@
 //! returns `1` here (DD-034), and [`BDF2Solver::step`] receives `u^{n-1}`
 //! via the `history` parameter.
 //!
-//! `bdf2_step_newton` (below) is BDF2-specific and stays in this file
-//! rather than [`super::implicit`]: unlike `theta_method_step_newton`,
-//! which serves two solvers (Backward Euler, Crank-Nicolson), this
-//! formula has exactly one consumer. It still reuses
-//! `super::implicit::finite_difference_jacobian`,
-//! `super::evaluate_derivative`, and the shared [`super::newton`] loop
-//! (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — the genuinely shared pieces.
-//! `bdf2_step_newton` is called directly, both by [`BDF2Solver::step`]
-//! and by this module's own tests, with the solver's `NewtonParams`.
+//! The BDF2 update is the `ImplicitFormula::Bdf2` formula of
+//! [`super::implicit`]: $\alpha = 3/2$, $c = \Delta t$, $u^{*} =
+//! \frac{4u^n - u^{n-1}}{3}$ in [`super::newton`]'s residual convention.
+//! It runs through `super::implicit::implicit_step_newton`, like the
+//! theta method, so the Newton loop, the residual, the finite-difference
+//! Jacobian and the solver's `NewtonParams` are those of the other
+//! implicit solvers (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)).
 //!
 //! ## Startup (acceptance criterion, #44)
 //!
 //! BDF2 needs `u^{n-1}`, which doesn't exist at the very first step. When
 //! `history` is empty, [`BDF2Solver::step`] falls back to a single
-//! Backward Euler step (θ=1, via `super::implicit::theta_method_step_newton`)
+//! Backward Euler step (`ImplicitFormula::Theta(1.0)`)
 //! to produce `u^1` from `u^0` — the standard bootstrap for 2-step methods.
 //! From the second step onward, the real BDF2 update runs.
 //!
@@ -61,18 +59,13 @@
 //! stiff modes, same qualitative behaviour as Backward Euler but 2nd
 //! order accurate.
 
-use nalgebra::DVector;
-
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
-use crate::solver::methods::implicit::{
-    finite_difference_jacobian, theta_method_step_newton, JacobianDispatch,
-};
-use crate::solver::methods::newton::{self, JacobianStrategy, NewtonConvergence, NewtonParams};
-use crate::solver::methods::state_layout::StateLayout;
-use crate::solver::methods::{evaluate_derivative, SteppableSolver};
+use crate::solver::methods::implicit::{implicit_step_newton, ImplicitFormula, JacobianDispatch};
+use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence, NewtonParams};
+use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -211,107 +204,25 @@ impl SteppableSolver for BDF2Solver {
         t: f64,
         dt: f64,
     ) -> Result<ContextValue, OxiflowError> {
-        match history.first() {
+        let formula = match history.first() {
             // Startup (#44 acceptance criterion): no u^{n-1} yet -- bootstrap
             // with one Backward Euler step to produce u^1 from u^0, under
             // the solver's own Newton configuration.
-            None => theta_method_step_newton(
-                domain,
-                chain,
-                state,
-                t,
-                dt,
-                1.0,
-                self.linear_solver.as_ref(),
-                &self.newton,
-                &self.jacobian_dispatch,
-            ),
-            Some(u_prev) => bdf2_step_newton(
-                domain,
-                chain,
-                state,
-                u_prev,
-                t,
-                dt,
-                self.linear_solver.as_ref(),
-                &self.newton,
-                &self.jacobian_dispatch,
-            ),
-        }
+            None => ImplicitFormula::Theta(1.0),
+            Some(previous) => ImplicitFormula::Bdf2 { previous },
+        };
+        implicit_step_newton(
+            domain,
+            chain,
+            state,
+            t,
+            dt,
+            formula,
+            self.linear_solver.as_ref(),
+            &self.newton,
+            &self.jacobian_dispatch,
+        )
     }
-}
-
-/// Same contract as the pre-DD-044 single-correction BDF2 step, routed
-/// through the generic iterated Newton loop ([`newton::solve`]) with
-/// caller-supplied convergence/Jacobian-strategy/iteration-budget
-/// configuration (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — [`BDF2Solver`] calls this directly,
-/// passing its own Newton parameters; `NewtonParams::default()` reproduces
-/// the pre-DD-044 single correction exactly on affine problems.
-///
-/// Follows [`newton`]'s residual convention with $\alpha =
-/// 3/2$, $c = \Delta t$, $u^{*} = \frac{4u^n - u^{n-1}}{3}$ — derived from
-/// $g(u) = \frac{3}{2}u - 2u^n + \frac{1}{2}u^{n-1} - \Delta t f(u) =
-/// \frac{3}{2}(u - u^{*}) - \Delta t f(u)$ (see [module docs](self)).
-/// `f(u^n)` is evaluated once, at time `t`; every subsequent candidate
-/// `f`/Jacobian evaluation inside the Newton loop is at time `t + dt`.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn bdf2_step_newton(
-    domain: &Domain,
-    chain: &[&dyn ContextCalculator],
-    state: &mut ContextValue,
-    u_prev: &ContextValue,
-    t: f64,
-    dt: f64,
-    linear_solver: &dyn LinearSolver,
-    newton: &NewtonParams,
-    dispatch: &JacobianDispatch,
-) -> Result<ContextValue, OxiflowError> {
-    // Applies calculators + BCs to `state` itself (same contract as
-    // `theta_method_step_newton`) -- the returned f(u^n) itself isn't
-    // needed: unlike theta-method's u_star, BDF2's u_star (below) carries
-    // no f(u^n) term, only u^n and u^{n-1}.
-    let _f_n = evaluate_derivative(domain, chain, state, t, dt)?;
-    // Newton works on the flat vector of unknowns (#192); `u^{n-1}` must
-    // have the layout of `u^n`.
-    let layout = StateLayout::of(state)?;
-    let u_n_field = layout.flatten(state)?.into_owned();
-    let u_prev_field = layout
-        .flatten(u_prev)
-        .map_err(|e| match e {
-            OxiflowError::InvalidDomain(message) => {
-                OxiflowError::InvalidDomain(format!("history state: {message}"))
-            }
-            other => other,
-        })?
-        .into_owned();
-
-    let u0 = u_n_field.clone();
-    let u_star: DVector<f64> = (u_n_field * 4.0 - u_prev_field) / 3.0;
-    let alpha = 1.5;
-    let coeff = dt;
-    let t_target = t + dt;
-
-    let u_next = newton::solve(
-        u0,
-        &u_star,
-        alpha,
-        coeff,
-        move |candidate: &DVector<f64>| {
-            let mut candidate_state = layout.rebuild(candidate.clone())?;
-            let f = evaluate_derivative(domain, chain, &mut candidate_state, t_target, dt)?;
-            Ok(layout.flatten(&f)?.into_owned())
-        },
-        &mut newton::DenseNewtonSystem::new(
-            move |candidate: &DVector<f64>| {
-                let candidate_state = layout.rebuild(candidate.clone())?;
-                finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt, dispatch)
-            },
-            linear_solver,
-        ),
-        newton,
-    )?;
-
-    layout.rebuild(u_next)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -328,6 +239,7 @@ mod tests {
         IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration,
     };
     use crate::solver::linear::CountingLinearSolver;
+    use nalgebra::DVector;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
@@ -584,19 +496,24 @@ mod tests {
         let mut state = domain.model.initial_state(domain.mesh.as_ref());
         let wrong_length_prev = ContextValue::ScalarField(DVector::from_element(2, 1.0)); // mesh has 3 nodes
 
-        let err = bdf2_step_newton(
+        let err = implicit_step_newton(
             domain,
             &chain,
             &mut state,
-            &wrong_length_prev,
             0.0,
             0.1,
+            ImplicitFormula::Bdf2 {
+                previous: &wrong_length_prev,
+            },
             &NalgebraDenseSolver,
             &NewtonParams::default(),
             &JacobianDispatch::default(),
         )
         .unwrap_err();
-        assert!(matches!(err, OxiflowError::InvalidDomain(_)));
+        assert!(
+            matches!(&err, OxiflowError::InvalidDomain(message) if message.starts_with("history state:")),
+            "got {err:?}"
+        );
     }
 
     // ── Iterated Newton (DD-044, #112) ─────────────────────────────────────────
