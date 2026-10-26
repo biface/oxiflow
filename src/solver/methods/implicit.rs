@@ -6,9 +6,10 @@
 //! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver) (θ=1)
 //! and [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
 //! (θ=0.5) are thin wrappers around `theta_method_step_newton` (DD-044,
-//! [#111](https://github.com/biface/oxiflow/issues/111)), which itself relies on `finite_difference_jacobian` and the
-//! shared [`super::newton`] loop. `theta_method_step` keeps the
-//! original, non-configurable entry point for direct callers — see below.
+//! [#111](https://github.com/biface/oxiflow/issues/111)) and, with the
+//! `sparse` feature, `theta_method_step_adaptive` (DD-043). Both run the
+//! shared [`super::newton`] loop; they differ only in the storage format
+//! of the linear system, dense or banded.
 //!
 //! ## Why a single shared function for two methods
 //!
@@ -22,41 +23,26 @@
 //! depend on θ at all. Only the system matrix does
 //! ($I - \theta \Delta t J_f$). One function, one parameter.
 //!
-//! ## v1 scope — frozen Jacobian, single correction (DD-033,
-//! [#86](https://github.com/biface/oxiflow/issues/86)) by default
+//! ## Iterated Newton, single correction by default (DD-033, DD-044)
 //!
-//! `theta_method_step` performs exactly **one** Newton-style correction,
-//! with the Jacobian frozen at $u^n$ — this is exact when `compute_physics`
-//! is affine in `u` and a first-order approximation otherwise, and stays
-//! the behaviour of `theta_method_step` itself (used directly by
-//! callers that don't need more) and of
-//! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)/
-//! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
-//! when left unconfigured.
-//!
-//! `theta_method_step_newton` (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) is the genuinely iterated
-//! alternative DD-033 anticipated: it routes through the shared
-//! [`super::newton`] loop with caller-supplied convergence/Jacobian-
-//! strategy/iteration-budget configuration.
-//! `BackwardEulerSolver`/`CrankNicolsonSolver` call it directly (with
+//! DD-033 ([#86](https://github.com/biface/oxiflow/issues/86)) started with
+//! exactly **one** Newton-style correction, with the Jacobian frozen at
+//! $u^n$ — exact when `compute_physics` is affine in `u`, a first-order
+//! approximation otherwise. DD-044
+//! ([#111](https://github.com/biface/oxiflow/issues/111)) replaced it with
+//! the iterated [`super::newton`] loop, configured by the solver's
 //! `with_newton_convergence`/`with_jacobian_strategy`/
-//! `with_max_newton_iterations` builders); `theta_method_step` itself
-//! keeps its original signature, plus the Jacobian dispatch configuration
-//! (DT-069, #198), by delegating to it with
-//! `k_max = 1`/[`JacobianStrategy::ModifiedFrozen`]
-//! baked in, reproducing its historical output exactly (see
-//! [`super::newton`]'s own docs for why no special-casing is needed for
-//! this to hold on affine problems).
+//! `with_max_newton_iterations` builders. Their defaults
+//! (`NewtonParams::default()`) keep a single frozen-Jacobian correction,
+//! which reproduces the historical output exactly on affine problems (see
+//! [`super::newton`]'s own docs for why no special-casing is needed), and
+//! report [`OxiflowError::NewtonNotConverged`] rather than a first-order
+//! approximation on a nonlinear one.
 //!
-//! ## Known gap — sparse path not yet Newton-aware
-//!
-//! `theta_method_step_adaptive` (the sparse/banded dispatch, DD-043)
-//! still performs a single frozen-Jacobian correction unconditionally —
-//! it is not wired through [`super::newton`] at this increment. Composing
-//! the two was verified, not implemented, per [#111](https://github.com/biface/oxiflow/issues/111)'s stated scope:
-//! configuring both a sparse backend *and* a non-default Newton budget on
-//! the same solver silently keeps the sparse path single-shot. Tracked as
-//! a follow-up, mirroring the existing BDF2/sparse gap.
+//! The dense and the banded paths share the loop, the residual and the
+//! configuration: the banded path assembles $I - \theta \Delta t J_f$ in
+//! compressed columns from `banded_finite_difference_jacobian` and
+//! solves it with the solver's `SparseLinearSolver`, nothing more.
 //!
 //! ## State variants
 //!
@@ -65,8 +51,7 @@
 //! as is, a `VectorField` interleaved by node, so a `VectorField` state is
 //! advanced like a `ScalarField` (#192). The banded path therefore takes a
 //! half-bandwidth counted in flat unknowns, `d·(s + 1) − 1` for `d`
-//! components and a stencil of half-width `s`. For a `ScalarField`,
-//! results are bit-identical to the former code.
+//! components and a stencil of half-width `s`.
 //!
 //! ## Boundary conditions × the perturbed Jacobian
 //!
@@ -98,7 +83,7 @@
 use nalgebra::{DMatrix, DVector};
 
 use super::evaluate_derivative;
-use super::newton::{self, JacobianStrategy, NewtonConvergence};
+use super::newton::{self, JacobianStrategy, NewtonConvergence, NewtonParams, NewtonSystem};
 use super::state_layout::StateLayout;
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
@@ -282,8 +267,8 @@ pub(crate) fn finite_difference_jacobian(
     Ok(jacobian)
 }
 
-/// Convergence criterion guaranteeing `theta_method_step`'s
-/// single-correction contract succeeds on the stiffest affine problems
+/// Convergence criterion guaranteeing that the single-correction default of
+/// the implicit solvers succeeds on the stiffest affine problems
 /// this crate currently tests (`λ = 1e4`-scale exponential decay).
 ///
 /// Deliberately distinct from [`NewtonConvergence::default`] (`tol_abs =
@@ -310,70 +295,39 @@ pub(crate) fn stiff_jacobian_convergence() -> NewtonConvergence {
     }
 }
 
-/// Performs one step of the generalised theta method, with the Jacobian
-/// frozen at `state` (one Newton-style correction, not iterated — see
-/// [module docs](self)).
+/// Zero-config Newton parameters of the implicit solvers
+/// ([`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
+/// [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver),
+/// [`BDF2Solver`](super::bdf2::BDF2Solver)): [`stiff_jacobian_convergence`],
+/// [`JacobianStrategy::ModifiedFrozen`] and one iteration, the pre-DD-044
+/// single frozen-Jacobian correction. It is exact on affine problems (see
+/// [`newton::solve`]'s docs); a genuinely nonlinear model needs a larger
+/// budget, typically with [`JacobianStrategy::FullNewton`].
+impl Default for NewtonParams {
+    fn default() -> Self {
+        Self {
+            convergence: stiff_jacobian_convergence(),
+            jacobian_strategy: JacobianStrategy::default(),
+            max_iterations: 1,
+        }
+    }
+}
+
+/// Performs one step of the generalised theta method through the iterated
+/// Newton loop ([`newton::solve`]) with the dense linear system, under the
+/// caller's Newton parameters (DD-044, #111).
 ///
 /// `theta = 1.0` is Backward Euler; `theta = 0.5` is Crank-Nicolson.
+/// [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
+/// [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver) and
+/// the bootstrap step of [`BDF2Solver`](super::bdf2::BDF2Solver) call
+/// this, passing their own configuration and Jacobian dispatch (DT-069,
+/// #198).
 ///
 /// `state` is mutated in-place by boundary condition application — same
 /// contract as the explicit solvers (see
 /// [`crate::solver::methods::evaluate_derivative`]): callers should not
 /// assume `state` is left unchanged after this call.
-///
-/// Delegates to [`theta_method_step_newton`] with the pre-DD-044 defaults
-/// (`k_max = 1`, [`JacobianStrategy::ModifiedFrozen`],
-/// [`stiff_jacobian_convergence`]) baked in — kept at its original
-/// signature (DD-044, #110) for direct callers that don't need the
-/// configurable path, plus the Jacobian dispatch configuration of the
-/// calling solver (DT-069, #198).
-///
-/// Its only production caller left is the dense fallback of
-/// [`theta_method_step_adaptive`], hence the `sparse` gate; the tests of
-/// this module use it as well. That fallback does not honour the calling
-/// solver's Newton configuration, a known defect whose fix removes this
-/// wrapper.
-#[cfg(any(test, feature = "sparse"))]
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn theta_method_step(
-    domain: &Domain,
-    chain: &[&dyn ContextCalculator],
-    state: &mut ContextValue,
-    t: f64,
-    dt: f64,
-    theta: f64,
-    linear_solver: &dyn LinearSolver,
-    dispatch: &JacobianDispatch,
-) -> Result<ContextValue, OxiflowError> {
-    theta_method_step_newton(
-        domain,
-        chain,
-        state,
-        t,
-        dt,
-        theta,
-        linear_solver,
-        stiff_jacobian_convergence(),
-        JacobianStrategy::default(),
-        1,
-        dispatch,
-    )
-}
-
-/// Same contract as `theta_method_step`, routed through the generic
-/// iterated Newton loop ([`newton::solve`]) with caller-supplied
-/// convergence/Jacobian-strategy/iteration-budget configuration (DD-044,
-/// #111) — [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)
-/// and [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
-/// call this directly, passing their own configured fields; their
-/// defaults reproduce `theta_method_step`'s call above exactly.
-///
-/// Follows [`newton`]'s residual convention with $\alpha = 1$, $c = \theta
-/// \Delta t$, $u^{*} = u^n + \Delta t(1-\theta)f(u^n)$ — see that
-/// module's docs. `f(u^n)` is evaluated once, at time `t` (the known
-/// term); every subsequent candidate `f`/Jacobian evaluation inside the
-/// Newton loop is at time `t + dt` (the implicit/target time), matching
-/// `theta_method_step`'s original convention.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn theta_method_step_newton(
     domain: &Domain,
@@ -383,13 +337,58 @@ pub(crate) fn theta_method_step_newton(
     dt: f64,
     theta: f64,
     linear_solver: &dyn LinearSolver,
-    newton_convergence: NewtonConvergence,
-    jacobian_strategy: JacobianStrategy,
-    max_iterations: usize,
+    newton: &NewtonParams,
     dispatch: &JacobianDispatch,
 ) -> Result<ContextValue, OxiflowError> {
+    theta_method_newton(
+        domain,
+        chain,
+        state,
+        t,
+        dt,
+        theta,
+        newton,
+        |layout, t_target| {
+            newton::DenseNewtonSystem::new(
+                move |candidate: &DVector<f64>| {
+                    let candidate_state = layout.rebuild(candidate.clone())?;
+                    finite_difference_jacobian(
+                        domain,
+                        chain,
+                        &candidate_state,
+                        t_target,
+                        dt,
+                        dispatch,
+                    )
+                },
+                linear_solver,
+            )
+        },
+    )
+}
+
+/// The theta-method step common to every storage format: builds the
+/// residual and runs [`newton::solve`] with the [`NewtonSystem`] that
+/// `system` returns for the state layout and the target time `t + dt`.
+///
+/// Follows [`newton`]'s residual convention with $\alpha = 1$, $c = \theta
+/// \Delta t$, $u^{*} = u^n + \Delta t(1-\theta)f(u^n)$ — see that
+/// module's docs. `f(u^n)` is evaluated once, at time `t` (the known
+/// term); every subsequent candidate `f`/Jacobian evaluation inside the
+/// Newton loop is at time `t + dt` (the implicit/target time).
+#[allow(clippy::too_many_arguments)]
+fn theta_method_newton<S: NewtonSystem>(
+    domain: &Domain,
+    chain: &[&dyn ContextCalculator],
+    state: &mut ContextValue,
+    t: f64,
+    dt: f64,
+    theta: f64,
+    newton: &NewtonParams,
+    system: impl FnOnce(StateLayout, f64) -> S,
+) -> Result<ContextValue, OxiflowError> {
     // f(u^n, t) -- BCs applied in-place to `state` itself, consistent with
-    // the explicit solvers' contract (same as `theta_method_step`).
+    // the explicit solvers' contract.
     let f_n = evaluate_derivative(domain, chain, state, t, dt)?;
     // Newton works on the flat vector of unknowns (#192).
     let layout = StateLayout::of(state)?;
@@ -411,18 +410,8 @@ pub(crate) fn theta_method_step_newton(
             let f = evaluate_derivative(domain, chain, &mut candidate_state, t_target, dt)?;
             Ok(layout.flatten(&f)?.into_owned())
         },
-        &mut newton::DenseNewtonSystem::new(
-            move |candidate: &DVector<f64>| {
-                let candidate_state = layout.rebuild(candidate.clone())?;
-                finite_difference_jacobian(domain, chain, &candidate_state, t_target, dt, dispatch)
-            },
-            linear_solver,
-        ),
-        &newton::NewtonParams {
-            convergence: newton_convergence,
-            jacobian_strategy,
-            max_iterations,
-        },
+        &mut system(layout, t_target),
+        newton,
     )?;
 
     layout.rebuild(u_next)
@@ -523,13 +512,60 @@ pub(crate) fn banded_finite_difference_jacobian(
     Ok(SparseColMat::new(symbolic, values))
 }
 
-/// Same contract as [`theta_method_step`], with an additional sparse path:
-/// when `jacobian_bandwidth` is `Some(k)` **and** `n > sparse_threshold`,
-/// assembles `I - theta*dt*J` directly in sparse (banded) form via
-/// [`banded_finite_difference_jacobian`] and solves it with `sparse_solver`. Falls
-/// back to [`theta_method_step`] unchanged in every other case — `None`
-/// bandwidth, or a small enough system that the dense path is cheaper
-/// regardless of bandwidth.
+/// Banded [`NewtonSystem`] (DD-043): `jacobian` evaluates $J_f$ within the
+/// band of half-width `bandwidth`, in compressed columns (in production,
+/// [`banded_finite_difference_jacobian`]); $\alpha I - c J_f$ is folded in
+/// place into its values, and `sparse_solver` solves the system.
+#[cfg(feature = "sparse")]
+struct BandedNewtonSystem<'a, J> {
+    jacobian: J,
+    bandwidth: usize,
+    sparse_solver: &'a dyn SparseLinearSolver,
+    matrix: Option<SparseColMat<usize, f64>>,
+}
+
+#[cfg(feature = "sparse")]
+impl<J> NewtonSystem for BandedNewtonSystem<'_, J>
+where
+    J: FnMut(&DVector<f64>) -> Result<SparseColMat<usize, f64>, OxiflowError>,
+{
+    fn assemble(&mut self, u: &DVector<f64>, alpha: f64, coeff: f64) -> Result<(), OxiflowError> {
+        let mut matrix = (self.jacobian)(u)?;
+        // alpha*I - coeff*J, folded in place into the values of J. Column j
+        // starts at row max(0, j - bandwidth) and always holds its diagonal
+        // entry, at offset j - max(0, j - bandwidth).
+        for j in 0..matrix.ncols() {
+            let column = matrix.val_of_col_mut(j);
+            for value in column.iter_mut() {
+                *value *= -coeff;
+            }
+            column[j - j.saturating_sub(self.bandwidth)] += alpha;
+        }
+        self.matrix = Some(matrix);
+        Ok(())
+    }
+
+    fn solve(&self, rhs: &DVector<f64>) -> Result<DVector<f64>, OxiflowError> {
+        let matrix = self
+            .matrix
+            .as_ref()
+            .ok_or_else(|| OxiflowError::PreconditionFailed {
+                context: "BandedNewtonSystem::solve",
+                message: "no matrix assembled".into(),
+            })?;
+        self.sparse_solver.solve(matrix, rhs)
+    }
+}
+
+/// Same contract as [`theta_method_step_newton`], with a banded path: when
+/// `jacobian_bandwidth` is `Some(k)` **and** `n > sparse_threshold`, the
+/// Newton loop runs over a banded system, the Jacobian assembled by
+/// [`banded_finite_difference_jacobian`] and the corrections solved with
+/// `sparse_solver`. Every other case — `None` bandwidth, or a small enough
+/// system that the dense path is cheaper regardless of bandwidth — takes
+/// [`theta_method_step_newton`]. Both paths run the same iterated loop
+/// with the caller's Newton parameters; they differ only in the storage
+/// format of the linear system.
 ///
 /// `jacobian_bandwidth`/`sparse_threshold`/`sparse_solver`/`dispatch` are
 /// supplied by the caller's own HOW-side configuration (DD-043, amendment
@@ -548,41 +584,49 @@ pub(crate) fn theta_method_step_adaptive(
     sparse_solver: &dyn SparseLinearSolver,
     sparse_threshold: usize,
     jacobian_bandwidth: Option<usize>,
+    newton: &NewtonParams,
     dispatch: &JacobianDispatch,
 ) -> Result<ContextValue, OxiflowError> {
-    let layout = StateLayout::of(state)?;
-    let n = layout.len();
+    let n = StateLayout::of(state)?.len();
 
     match jacobian_bandwidth {
-        Some(k) if n > sparse_threshold => {
-            let f_n = evaluate_derivative(domain, chain, state, t, dt)?;
-            let u_n_field = layout.flatten(state)?.into_owned();
-            let f_n_field = layout.flatten(&f_n)?.into_owned();
-
-            // Jacobian frozen at the (now BC-corrected) u^n, evaluated at
-            // t + dt — same convention as theta_method_step.
-            let mut system_matrix =
-                banded_finite_difference_jacobian(domain, chain, state, t + dt, dt, k, dispatch)?;
-
-            // I - theta*dt*J, folded in place into the values of J. Column j
-            // starts at row max(0, j - k) and always holds its diagonal
-            // entry, at offset j - max(0, j - k).
-            let coeff = -theta * dt;
-            for j in 0..n {
-                let column = system_matrix.val_of_col_mut(j);
-                for value in column.iter_mut() {
-                    *value *= coeff;
-                }
-                column[j - j.saturating_sub(k)] += 1.0;
-            }
-
-            let rhs = f_n_field * dt;
-            let delta_u = sparse_solver.solve(&system_matrix, &rhs)?;
-
-            let u_next: DVector<f64> = u_n_field + delta_u;
-            layout.rebuild(u_next)
-        }
-        _ => theta_method_step(domain, chain, state, t, dt, theta, dense_solver, dispatch),
+        Some(bandwidth) if n > sparse_threshold => theta_method_newton(
+            domain,
+            chain,
+            state,
+            t,
+            dt,
+            theta,
+            newton,
+            |layout, t_target| BandedNewtonSystem {
+                jacobian: move |candidate: &DVector<f64>| {
+                    let candidate_state = layout.rebuild(candidate.clone())?;
+                    banded_finite_difference_jacobian(
+                        domain,
+                        chain,
+                        &candidate_state,
+                        t_target,
+                        dt,
+                        bandwidth,
+                        dispatch,
+                    )
+                },
+                bandwidth,
+                sparse_solver,
+                matrix: None,
+            },
+        ),
+        _ => theta_method_step_newton(
+            domain,
+            chain,
+            state,
+            t,
+            dt,
+            theta,
+            dense_solver,
+            newton,
+            dispatch,
+        ),
     }
 }
 
@@ -976,7 +1020,7 @@ mod tests {
         let chain = build_calculator_chain(&requirements, &[]).unwrap();
 
         let mut state = domain.model.initial_state(domain.mesh.as_ref());
-        let next = theta_method_step(
+        let next = theta_method_step_newton(
             domain,
             &chain,
             &mut state,
@@ -984,6 +1028,7 @@ mod tests {
             dt,
             1.0,
             &NalgebraDenseSolver,
+            &NewtonParams::default(),
             &JacobianDispatch::default(),
         )
         .unwrap();
@@ -1007,7 +1052,7 @@ mod tests {
         let chain = build_calculator_chain(&requirements, &[]).unwrap();
 
         let mut state = domain.model.initial_state(domain.mesh.as_ref());
-        let next = theta_method_step(
+        let next = theta_method_step_newton(
             domain,
             &chain,
             &mut state,
@@ -1015,6 +1060,7 @@ mod tests {
             dt,
             0.5,
             &NalgebraDenseSolver,
+            &NewtonParams::default(),
             &JacobianDispatch::default(),
         )
         .unwrap();
@@ -1038,7 +1084,7 @@ mod tests {
         let chain = build_calculator_chain(&requirements, &[]).unwrap();
 
         let mut state = domain.model.initial_state(domain.mesh.as_ref());
-        let next = theta_method_step(
+        let next = theta_method_step_newton(
             domain,
             &chain,
             &mut state,
@@ -1046,6 +1092,7 @@ mod tests {
             dt,
             1.0,
             &NalgebraDenseSolver,
+            &NewtonParams::default(),
             &JacobianDispatch::default(),
         )
         .unwrap();
@@ -1469,11 +1516,12 @@ mod sparse_tests {
             &PanicIfCalled,
             100,
             None, // no bandwidth declared -> dense path, unconditionally
+            &NewtonParams::default(),
             &JacobianDispatch::default(),
         )
         .unwrap();
 
-        let via_plain = theta_method_step(
+        let via_plain = theta_method_step_newton(
             domain,
             &chain,
             &mut state_b,
@@ -1481,6 +1529,7 @@ mod sparse_tests {
             0.05,
             1.0,
             &NalgebraDenseSolver,
+            &NewtonParams::default(),
             &JacobianDispatch::default(),
         )
         .unwrap();
@@ -1523,6 +1572,7 @@ mod sparse_tests {
             &PanicIfCalled,
             100,
             Some(1),
+            &NewtonParams::default(),
             &JacobianDispatch::default(),
         )
         .unwrap();
@@ -1565,11 +1615,12 @@ mod sparse_tests {
             &FaerSparseSolver,
             10, // sparse_threshold well below n=40
             Some(1),
+            &NewtonParams::default(),
             &JacobianDispatch::default(),
         )
         .unwrap();
 
-        let via_dense = theta_method_step(
+        let via_dense = theta_method_step_newton(
             domain_b,
             &chain_b,
             &mut state_b,
@@ -1577,6 +1628,7 @@ mod sparse_tests {
             dt,
             1.0,
             &NalgebraDenseSolver,
+            &NewtonParams::default(),
             &JacobianDispatch::default(),
         )
         .unwrap();
@@ -1590,6 +1642,120 @@ mod sparse_tests {
                 a[i],
                 b[i]
             );
+        }
+    }
+
+    // ── Iterated Newton on the banded path (#206) ────────────────────────────
+
+    use crate::model::CubicDecay;
+
+    /// One theta-method step of f(u) = -u^3 from u = 1 at `dt` = 0.5,
+    /// through `theta_method_step_adaptive` with a declared bandwidth of 1.
+    fn cubic_decay_step(
+        theta: f64,
+        sparse_solver: &dyn SparseLinearSolver,
+        sparse_threshold: usize,
+        newton: &NewtonParams,
+    ) -> Result<ContextValue, OxiflowError> {
+        let scenario = Scenario::single(Box::new(CubicDecay), make_mesh(4));
+        let domain = scenario.single_domain().unwrap();
+        let chain = build_calculator_chain(&scenario.context_requirements(), &[]).unwrap();
+        let mut state = domain.model.initial_state(domain.mesh.as_ref());
+        theta_method_step_adaptive(
+            domain,
+            &chain,
+            &mut state,
+            0.0,
+            0.5,
+            theta,
+            &NalgebraDenseSolver,
+            sparse_solver,
+            sparse_threshold,
+            Some(1),
+            newton,
+            &JacobianDispatch::default(),
+        )
+    }
+
+    /// Root of the theta-method step of f(u) = -u^3 from u = 1:
+    /// u + theta*dt*u^3 = 1 - (1 - theta)*dt, solved by scalar Newton.
+    fn cubic_decay_root(theta: f64, dt: f64) -> f64 {
+        let rhs = 1.0 - (1.0 - theta) * dt;
+        let mut u = 1.0_f64;
+        for _ in 0..100 {
+            let g = u + theta * dt * u.powi(3) - rhs;
+            let dg = 1.0 + 3.0 * theta * dt * u.powi(2);
+            u -= g / dg;
+        }
+        u
+    }
+
+    /// Converges far below the default tolerance, so that a step which
+    /// stops early, or never iterates, misses the root.
+    fn tight_full_newton() -> NewtonParams {
+        NewtonParams {
+            convergence: NewtonConvergence::ResidualOnly {
+                tol_abs: 1e-13,
+                tol_rel: 0.0,
+            },
+            jacobian_strategy: JacobianStrategy::FullNewton,
+            max_iterations: 10,
+        }
+    }
+
+    #[test]
+    fn banded_path_iterates_newton_to_the_root() {
+        for theta in [1.0, 0.5] {
+            let expected = cubic_decay_root(theta, 0.5);
+            let next = cubic_decay_step(theta, &FaerSparseSolver, 0, &tight_full_newton()).unwrap();
+            for v in next.as_scalar_field().unwrap().iter() {
+                assert!(
+                    (v - expected).abs() < 1e-12,
+                    "theta {theta}: got {v}, expected {expected}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn banded_path_reports_an_unconverged_newton_loop() {
+        // One frozen-Jacobian correction does not reach the default
+        // tolerance at dt = 0.5: the banded path must say so, not return
+        // the corrected state.
+        for theta in [1.0, 0.5] {
+            let err = cubic_decay_step(theta, &FaerSparseSolver, 0, &NewtonParams::default())
+                .unwrap_err();
+            assert!(
+                matches!(err, OxiflowError::NewtonNotConverged { iterations: 1, .. }),
+                "theta {theta}: got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn dense_fallback_uses_the_configured_newton_parameters() {
+        // A sparse solver is configured and a bandwidth declared, but the
+        // system (4 unknowns) does not exceed the threshold: the dense path
+        // runs, under the caller's parameters.
+        for theta in [1.0, 0.5] {
+            let short_budget = NewtonParams {
+                max_iterations: 2,
+                ..NewtonParams::default()
+            };
+            let err = cubic_decay_step(theta, &PanicIfCalled, 100, &short_budget).unwrap_err();
+            assert!(
+                matches!(err, OxiflowError::NewtonNotConverged { iterations: 2, .. }),
+                "theta {theta}: got {err:?}"
+            );
+
+            let expected = cubic_decay_root(theta, 0.5);
+            let next = cubic_decay_step(theta, &PanicIfCalled, 100, &tight_full_newton()).unwrap();
+            for v in next.as_scalar_field().unwrap().iter() {
+                assert!(
+                    (v - expected).abs() < 1e-12,
+                    "theta {theta}: got {v}, expected {expected}"
+                );
+            }
         }
     }
 }

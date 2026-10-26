@@ -442,7 +442,9 @@ impl PhysicalModel for ReactionDiffusion2 {
 /// Final state of 5 Backward Euler steps on [`ReactionDiffusion2`], 30 nodes
 /// (60 unknowns), with the sparse path forced when `bandwidth` is given.
 #[cfg(feature = "sparse")]
-fn reaction_diffusion_backward_euler(bandwidth: Option<usize>) -> DMatrix<f64> {
+fn reaction_diffusion_backward_euler(
+    bandwidth: Option<usize>,
+) -> Result<DMatrix<f64>, OxiflowError> {
     use oxiflow::solver::sparse::FaerSparseSolver;
 
     let n_nodes = 30;
@@ -460,26 +462,24 @@ fn reaction_diffusion_backward_euler(bandwidth: Option<usize>) -> DMatrix<f64> {
             .with_sparse_solver(Box::new(FaerSparseSolver))
             .with_sparse_threshold(0);
     }
-    let result = solver
-        .solve(
-            &scenario,
-            &fixed_step(0.05, 0.01, IntegratorKind::BackwardEuler),
-        )
-        .unwrap();
-    result
+    let result = solver.solve(
+        &scenario,
+        &fixed_step(0.05, 0.01, IntegratorKind::BackwardEuler),
+    )?;
+    Ok(result
         .states
         .last()
         .unwrap()
         .as_vector_field()
         .unwrap()
-        .clone()
+        .clone())
 }
 
 #[cfg(feature = "sparse")]
 #[test]
 fn banded_path_with_bandwidth_d_times_s_plus_one_minus_one_matches_dense_path() {
-    let dense = reaction_diffusion_backward_euler(None);
-    let banded = reaction_diffusion_backward_euler(Some(3));
+    let dense = reaction_diffusion_backward_euler(None).unwrap();
+    let banded = reaction_diffusion_backward_euler(Some(3)).unwrap();
     let gap = (&dense - &banded).amax();
     assert!(gap < 1e-10, "dense vs banded gap = {gap:e}");
 }
@@ -488,12 +488,16 @@ fn banded_path_with_bandwidth_d_times_s_plus_one_minus_one_matches_dense_path() 
 #[test]
 fn banded_path_with_the_scalar_stencil_width_misses_the_component_coupling() {
     // k = s = 1 is the ScalarField rule: on 2 interleaved components it
-    // drops entries of the Jacobian, and the result drifts from the dense
-    // path. This is why the bandwidth is counted in flat unknowns.
-    let dense = reaction_diffusion_backward_euler(None);
-    let too_narrow = reaction_diffusion_backward_euler(Some(1));
-    let gap = (&dense - &too_narrow).amax();
-    assert!(gap > 1e-6, "dense vs too-narrow gap = {gap:e}");
+    // drops entries of the Jacobian. The model is affine, so the single
+    // default correction is exact with the full Jacobian; with the
+    // truncated one it is not, and the Newton loop reports it instead of
+    // returning a state that drifts from the dense path. This is why the
+    // bandwidth is counted in flat unknowns.
+    let err = reaction_diffusion_backward_euler(Some(1)).unwrap_err();
+    assert!(
+        matches!(err, OxiflowError::NewtonNotConverged { iterations: 1, .. }),
+        "too-narrow band: got {err:?}"
+    );
 }
 
 // ── Divergence detection ──────────────────────────────────────────────────────

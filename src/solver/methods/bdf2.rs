@@ -19,9 +19,7 @@
 //! `super::evaluate_derivative`, and the shared [`super::newton`] loop
 //! (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — the genuinely shared pieces.
 //! `bdf2_step_newton` is called directly, both by [`BDF2Solver::step`]
-//! and by this module's own tests, which pass `stiff_jacobian_convergence()`/
-//! [`JacobianStrategy::default`]/`max_iterations = 1` explicitly where
-//! the pre-DD-044 behaviour is wanted.
+//! and by this module's own tests, with the solver's `NewtonParams`.
 //!
 //! ## Startup (acceptance criterion, #44)
 //!
@@ -70,10 +68,9 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 use crate::solver::methods::implicit::{
-    finite_difference_jacobian, stiff_jacobian_convergence, theta_method_step_newton,
-    JacobianDispatch,
+    finite_difference_jacobian, theta_method_step_newton, JacobianDispatch,
 };
-use crate::solver::methods::newton::{self, JacobianStrategy, NewtonConvergence};
+use crate::solver::methods::newton::{self, JacobianStrategy, NewtonConvergence, NewtonParams};
 use crate::solver::methods::state_layout::StateLayout;
 use crate::solver::methods::{evaluate_derivative, SteppableSolver};
 use crate::solver::scenario::{Domain, Scenario};
@@ -85,19 +82,16 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// scope at J4a.
 pub struct BDF2Solver {
     linear_solver: Box<dyn LinearSolver>,
-    /// Newton convergence criterion (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — default
-    /// [`stiff_jacobian_convergence`]
-    /// (deliberately looser than [`NewtonConvergence::default`] — see
-    /// that function's docs for why zero-config construction needs it).
-    /// Applies to the bootstrap step and to the BDF2 update alike, as do
-    /// the two fields below (see [module docs](self)).
-    newton_convergence: NewtonConvergence,
-    /// Jacobian refresh strategy (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — default
-    /// [`JacobianStrategy::default`] (`ModifiedFrozen`).
-    jacobian_strategy: JacobianStrategy,
-    /// Newton iteration budget (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)). Default `1`: exactly the
-    /// pre-DD-044 single frozen-Jacobian correction.
-    max_newton_iterations: usize,
+    /// Newton configuration (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
+    /// Jacobian refresh strategy and iteration budget, set by the
+    /// `with_newton_convergence`/`with_jacobian_strategy`/
+    /// `with_max_newton_iterations` builders. Default
+    /// [`NewtonParams::default`]: a single frozen-Jacobian correction under
+    /// [`stiff_jacobian_convergence`](super::implicit::stiff_jacobian_convergence),
+    /// exact on affine problems; raise the
+    /// budget (typically with [`JacobianStrategy::FullNewton`]) for a
+    /// nonlinear model.
+    newton: NewtonParams,
     /// Dispatch configuration of the finite-difference Jacobian assembly
     /// (DT-069, #198), for the startup step and the BDF2 update alike. Its
     /// threshold exists only with the `parallel` feature — see
@@ -109,9 +103,7 @@ impl Default for BDF2Solver {
     fn default() -> Self {
         Self {
             linear_solver: Box::new(NalgebraDenseSolver),
-            newton_convergence: stiff_jacobian_convergence(),
-            jacobian_strategy: JacobianStrategy::default(),
-            max_newton_iterations: 1,
+            newton: NewtonParams::default(),
             jacobian_dispatch: JacobianDispatch::default(),
         }
     }
@@ -133,20 +125,20 @@ impl BDF2Solver {
     /// Backward Euler bootstrap step and the BDF2 update alike (see
     /// [module docs](self)).
     pub fn with_newton_convergence(mut self, newton_convergence: NewtonConvergence) -> Self {
-        self.newton_convergence = newton_convergence;
+        self.newton.convergence = newton_convergence;
         self
     }
 
     /// Configures the Jacobian refresh strategy (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)).
     pub fn with_jacobian_strategy(mut self, jacobian_strategy: JacobianStrategy) -> Self {
-        self.jacobian_strategy = jacobian_strategy;
+        self.newton.jacobian_strategy = jacobian_strategy;
         self
     }
 
     /// Configures the Newton iteration budget (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — see
     /// [`BackwardEulerSolver::with_max_newton_iterations`](super::backward_euler::BackwardEulerSolver::with_max_newton_iterations).
     pub fn with_max_newton_iterations(mut self, max_newton_iterations: usize) -> Self {
-        self.max_newton_iterations = max_newton_iterations;
+        self.newton.max_iterations = max_newton_iterations;
         self
     }
 
@@ -231,9 +223,7 @@ impl SteppableSolver for BDF2Solver {
                 dt,
                 1.0,
                 self.linear_solver.as_ref(),
-                self.newton_convergence,
-                self.jacobian_strategy,
-                self.max_newton_iterations,
+                &self.newton,
                 &self.jacobian_dispatch,
             ),
             Some(u_prev) => bdf2_step_newton(
@@ -244,9 +234,7 @@ impl SteppableSolver for BDF2Solver {
                 t,
                 dt,
                 self.linear_solver.as_ref(),
-                self.newton_convergence,
-                self.jacobian_strategy,
-                self.max_newton_iterations,
+                &self.newton,
                 &self.jacobian_dispatch,
             ),
         }
@@ -257,10 +245,8 @@ impl SteppableSolver for BDF2Solver {
 /// through the generic iterated Newton loop ([`newton::solve`]) with
 /// caller-supplied convergence/Jacobian-strategy/iteration-budget
 /// configuration (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — [`BDF2Solver`] calls this directly,
-/// passing its own configured fields. Passing `stiff_jacobian_convergence()`,
-/// [`JacobianStrategy::default`], and `max_iterations = 1` reproduces the
-/// pre-DD-044 behaviour exactly; only this module's own tests call it
-/// that way.
+/// passing its own Newton parameters; `NewtonParams::default()` reproduces
+/// the pre-DD-044 single correction exactly on affine problems.
 ///
 /// Follows [`newton`]'s residual convention with $\alpha =
 /// 3/2$, $c = \Delta t$, $u^{*} = \frac{4u^n - u^{n-1}}{3}$ — derived from
@@ -277,9 +263,7 @@ pub(crate) fn bdf2_step_newton(
     t: f64,
     dt: f64,
     linear_solver: &dyn LinearSolver,
-    newton_convergence: NewtonConvergence,
-    jacobian_strategy: JacobianStrategy,
-    max_iterations: usize,
+    newton: &NewtonParams,
     dispatch: &JacobianDispatch,
 ) -> Result<ContextValue, OxiflowError> {
     // Applies calculators + BCs to `state` itself (same contract as
@@ -324,11 +308,7 @@ pub(crate) fn bdf2_step_newton(
             },
             linear_solver,
         ),
-        &newton::NewtonParams {
-            convergence: newton_convergence,
-            jacobian_strategy,
-            max_iterations,
-        },
+        newton,
     )?;
 
     layout.rebuild(u_next)
@@ -612,9 +592,7 @@ mod tests {
             0.0,
             0.1,
             &NalgebraDenseSolver,
-            stiff_jacobian_convergence(),
-            JacobianStrategy::default(),
-            1,
+            &NewtonParams::default(),
             &JacobianDispatch::default(),
         )
         .unwrap_err();

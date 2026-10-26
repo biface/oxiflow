@@ -33,10 +33,8 @@ use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 #[cfg(feature = "sparse")]
 use crate::solver::methods::implicit::theta_method_step_adaptive;
-use crate::solver::methods::implicit::{
-    stiff_jacobian_convergence, theta_method_step_newton, JacobianDispatch,
-};
-use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence};
+use crate::solver::methods::implicit::{theta_method_step_newton, JacobianDispatch};
+use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence, NewtonParams};
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
 #[cfg(feature = "sparse")]
@@ -66,30 +64,25 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// ```
 pub struct BackwardEulerSolver {
     linear_solver: Box<dyn LinearSolver>,
-    /// Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — default
-    /// [`stiff_jacobian_convergence`] (deliberately looser than
-    /// [`NewtonConvergence::default`] — see that function's docs for why
-    /// zero-config construction needs it).
-    newton_convergence: NewtonConvergence,
-    /// Jacobian refresh strategy (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — default
-    /// [`JacobianStrategy::default`] (`ModifiedFrozen`).
-    jacobian_strategy: JacobianStrategy,
-    /// Newton iteration budget (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)). Default `1`: exactly the
-    /// pre-DD-044 single frozen-Jacobian correction — see
-    /// [`super::implicit`]'s module docs for why this reproduces the
-    /// historical behaviour exactly, not approximately, on affine
-    /// problems. Raise this (and typically pair with
-    /// [`JacobianStrategy::FullNewton`]) for genuinely nonlinear models.
-    max_newton_iterations: usize,
+    /// Newton configuration (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
+    /// Jacobian refresh strategy and iteration budget, set by the
+    /// `with_newton_convergence`/`with_jacobian_strategy`/
+    /// `with_max_newton_iterations` builders. Default
+    /// [`NewtonParams::default`]: a single frozen-Jacobian correction under
+    /// [`stiff_jacobian_convergence`](super::implicit::stiff_jacobian_convergence),
+    /// exact on affine problems; raise the
+    /// budget (typically with [`JacobianStrategy::FullNewton`]) for a
+    /// nonlinear model.
+    newton: NewtonParams,
     /// Dispatch configuration of the finite-difference Jacobian assembly
     /// (DT-069, #198). Its threshold exists only with the `parallel`
     /// feature — see `with_parallel_threshold`.
     jacobian_dispatch: JacobianDispatch,
     /// Sparse backend (DD-043) — `None` by default: the dense path
     /// ([`theta_method_step_newton`]) is unconditionally used unless this is
-    /// explicitly configured via [`Self::with_sparse_solver`]. Not yet
-    /// Newton-aware when configured — see [`super::implicit`]'s module
-    /// docs for the known gap.
+    /// explicitly configured via [`Self::with_sparse_solver`]. The banded
+    /// path runs the same iterated Newton loop as the dense one, with
+    /// `newton` (see [`super::implicit`]'s module docs).
     #[cfg(feature = "sparse")]
     sparse_solver: Option<Box<dyn SparseLinearSolver>>,
     /// System size above which the sparse path is used, once a
@@ -109,9 +102,7 @@ impl Default for BackwardEulerSolver {
     fn default() -> Self {
         Self {
             linear_solver: Box::new(NalgebraDenseSolver),
-            newton_convergence: stiff_jacobian_convergence(),
-            jacobian_strategy: JacobianStrategy::default(),
-            max_newton_iterations: 1,
+            newton: NewtonParams::default(),
             jacobian_dispatch: JacobianDispatch::default(),
             #[cfg(feature = "sparse")]
             sparse_solver: None,
@@ -137,13 +128,13 @@ impl BackwardEulerSolver {
 
     /// Configures the Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_newton_convergence(mut self, newton_convergence: NewtonConvergence) -> Self {
-        self.newton_convergence = newton_convergence;
+        self.newton.convergence = newton_convergence;
         self
     }
 
     /// Configures the Jacobian refresh strategy (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_jacobian_strategy(mut self, jacobian_strategy: JacobianStrategy) -> Self {
-        self.jacobian_strategy = jacobian_strategy;
+        self.newton.jacobian_strategy = jacobian_strategy;
         self
     }
 
@@ -151,7 +142,7 @@ impl BackwardEulerSolver {
     /// field's own docs for why the default (`1`) reproduces the
     /// pre-DD-044 behaviour exactly on affine problems.
     pub fn with_max_newton_iterations(mut self, max_newton_iterations: usize) -> Self {
-        self.max_newton_iterations = max_newton_iterations;
+        self.newton.max_iterations = max_newton_iterations;
         self
     }
 
@@ -267,6 +258,7 @@ impl SteppableSolver for BackwardEulerSolver {
                 sparse_solver.as_ref(),
                 self.sparse_threshold,
                 self.jacobian_bandwidth,
+                &self.newton,
                 &self.jacobian_dispatch,
             ),
             None => theta_method_step_newton(
@@ -277,9 +269,7 @@ impl SteppableSolver for BackwardEulerSolver {
                 dt,
                 1.0,
                 self.linear_solver.as_ref(),
-                self.newton_convergence,
-                self.jacobian_strategy,
-                self.max_newton_iterations,
+                &self.newton,
                 &self.jacobian_dispatch,
             ),
         }
@@ -307,9 +297,7 @@ impl SteppableSolver for BackwardEulerSolver {
             dt,
             1.0,
             self.linear_solver.as_ref(),
-            self.newton_convergence,
-            self.jacobian_strategy,
-            self.max_newton_iterations,
+            &self.newton,
             &self.jacobian_dispatch,
         )
     }

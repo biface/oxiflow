@@ -33,10 +33,8 @@ use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 #[cfg(feature = "sparse")]
 use crate::solver::methods::implicit::theta_method_step_adaptive;
-use crate::solver::methods::implicit::{
-    stiff_jacobian_convergence, theta_method_step_newton, JacobianDispatch,
-};
-use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence};
+use crate::solver::methods::implicit::{theta_method_step_newton, JacobianDispatch};
+use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence, NewtonParams};
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
 #[cfg(feature = "sparse")]
@@ -46,18 +44,16 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// Crank-Nicolson solver — semi-implicit, 2nd order.
 pub struct CrankNicolsonSolver {
     linear_solver: Box<dyn LinearSolver>,
-    /// Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — default
-    /// [`stiff_jacobian_convergence`]
-    /// (deliberately looser than
-    /// [`NewtonConvergence::default`] — see
-    /// [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)'s
-    /// field docs for the full rationale, identical here).
-    newton_convergence: NewtonConvergence,
-    /// Jacobian refresh strategy (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
-    jacobian_strategy: JacobianStrategy,
-    /// Newton iteration budget (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)). Default `1` — the
-    /// pre-DD-044 single frozen-Jacobian correction.
-    max_newton_iterations: usize,
+    /// Newton configuration (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
+    /// Jacobian refresh strategy and iteration budget, set by the
+    /// `with_newton_convergence`/`with_jacobian_strategy`/
+    /// `with_max_newton_iterations` builders. Default
+    /// [`NewtonParams::default`]: a single frozen-Jacobian correction under
+    /// [`stiff_jacobian_convergence`](super::implicit::stiff_jacobian_convergence),
+    /// exact on affine problems; raise the
+    /// budget (typically with [`JacobianStrategy::FullNewton`]) for a
+    /// nonlinear model.
+    newton: NewtonParams,
     /// Dispatch configuration of the finite-difference Jacobian assembly
     /// (DT-069, #198). Its threshold exists only with the `parallel`
     /// feature — see `with_parallel_threshold`.
@@ -77,9 +73,7 @@ impl Default for CrankNicolsonSolver {
     fn default() -> Self {
         Self {
             linear_solver: Box::new(NalgebraDenseSolver),
-            newton_convergence: stiff_jacobian_convergence(),
-            jacobian_strategy: JacobianStrategy::default(),
-            max_newton_iterations: 1,
+            newton: NewtonParams::default(),
             jacobian_dispatch: JacobianDispatch::default(),
             #[cfg(feature = "sparse")]
             sparse_solver: None,
@@ -105,20 +99,20 @@ impl CrankNicolsonSolver {
 
     /// Configures the Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_newton_convergence(mut self, newton_convergence: NewtonConvergence) -> Self {
-        self.newton_convergence = newton_convergence;
+        self.newton.convergence = newton_convergence;
         self
     }
 
     /// Configures the Jacobian refresh strategy (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_jacobian_strategy(mut self, jacobian_strategy: JacobianStrategy) -> Self {
-        self.jacobian_strategy = jacobian_strategy;
+        self.newton.jacobian_strategy = jacobian_strategy;
         self
     }
 
     /// Configures the Newton iteration budget (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — see
     /// [`BackwardEulerSolver::with_max_newton_iterations`](super::backward_euler::BackwardEulerSolver::with_max_newton_iterations).
     pub fn with_max_newton_iterations(mut self, max_newton_iterations: usize) -> Self {
-        self.max_newton_iterations = max_newton_iterations;
+        self.newton.max_iterations = max_newton_iterations;
         self
     }
 
@@ -228,6 +222,7 @@ impl SteppableSolver for CrankNicolsonSolver {
                 sparse_solver.as_ref(),
                 self.sparse_threshold,
                 self.jacobian_bandwidth,
+                &self.newton,
                 &self.jacobian_dispatch,
             ),
             None => theta_method_step_newton(
@@ -238,9 +233,7 @@ impl SteppableSolver for CrankNicolsonSolver {
                 dt,
                 0.5,
                 self.linear_solver.as_ref(),
-                self.newton_convergence,
-                self.jacobian_strategy,
-                self.max_newton_iterations,
+                &self.newton,
                 &self.jacobian_dispatch,
             ),
         }
@@ -268,9 +261,7 @@ impl SteppableSolver for CrankNicolsonSolver {
             dt,
             0.5,
             self.linear_solver.as_ref(),
-            self.newton_convergence,
-            self.jacobian_strategy,
-            self.max_newton_iterations,
+            &self.newton,
             &self.jacobian_dispatch,
         )
     }

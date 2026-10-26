@@ -180,6 +180,18 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The banded path of `BackwardEulerSolver` and `CrankNicolsonSolver`
+  (`sparse` feature: sparse solver configured, bandwidth declared, system
+  above the sparse threshold) ran a single linearised correction without
+  any convergence check, so a nonlinear model silently got a first-order
+  result whatever Newton budget was configured. It now runs the same
+  iterated Newton loop as the dense path, with the solver's convergence
+  criterion, Jacobian strategy and iteration budget, and reports
+  `NewtonNotConverged` when the budget runs out. The dense fallback taken
+  below the sparse threshold also honours that configuration instead of a
+  fixed single correction. Both paths now treat the explicit and implicit
+  terms the same way, so a banded step matches a dense one up to rounding
+  (#206).
 - `BDF2Solver` runs its Backward Euler bootstrap step with its own Newton
   configuration (`with_newton_convergence`, `with_jacobian_strategy`,
   `with_max_newton_iterations`), as it does the BDF2 update. The bootstrap
