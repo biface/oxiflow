@@ -53,10 +53,9 @@
 //! `super::bdf2::bdf2_step_newton` (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — used respectively by
 //! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)/
 //! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver) and
-//! [`BDF2Solver`](super::bdf2::BDF2Solver). [`super::bdf2`]'s
-//! startup/bootstrap step is the one exception, unconditionally using
-//! `super::implicit::theta_method_step`'s non-configurable path — see
-//! that module's docs.
+//! [`BDF2Solver`](super::bdf2::BDF2Solver), whose Backward Euler
+//! bootstrap step goes through `theta_method_step_newton` with the same
+//! configuration as its BDF2 update.
 
 use nalgebra::{DMatrix, DVector};
 

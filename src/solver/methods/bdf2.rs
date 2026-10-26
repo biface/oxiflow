@@ -17,13 +17,9 @@
 //! formula has exactly one consumer. It still reuses
 //! `super::implicit::finite_difference_jacobian`,
 //! `super::evaluate_derivative`, and the shared [`super::newton`] loop
-//! (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — the genuinely shared pieces. Unlike
-//! `super::implicit::theta_method_step` (kept as a separate,
-//! non-configurable wrapper for BE/CN because *production* code — this
-//! module's own bootstrap step, below — calls it directly), BDF2 has no
-//! such production caller for the unconfigured form: `bdf2_step_newton`
-//! is called directly, both by [`BDF2Solver::step`] and by this module's
-//! own tests, passing `stiff_jacobian_convergence()`/
+//! (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — the genuinely shared pieces.
+//! `bdf2_step_newton` is called directly, both by [`BDF2Solver::step`]
+//! and by this module's own tests, which pass `stiff_jacobian_convergence()`/
 //! [`JacobianStrategy::default`]/`max_iterations = 1` explicitly where
 //! the pre-DD-044 behaviour is wanted.
 //!
@@ -31,9 +27,16 @@
 //!
 //! BDF2 needs `u^{n-1}`, which doesn't exist at the very first step. When
 //! `history` is empty, [`BDF2Solver::step`] falls back to a single
-//! Backward Euler step (θ=1, via `super::implicit::theta_method_step`)
+//! Backward Euler step (θ=1, via `super::implicit::theta_method_step_newton`)
 //! to produce `u^1` from `u^0` — the standard bootstrap for 2-step methods.
 //! From the second step onward, the real BDF2 update runs.
+//!
+//! The bootstrap step runs the same iterated Newton loop as the BDF2
+//! update, with the solver's own convergence criterion, Jacobian
+//! strategy and iteration budget: a nonlinear model gets the budget it
+//! was configured with from the first step on. With the default
+//! configuration, the bootstrap step is the single frozen-Jacobian
+//! correction it has always been.
 //!
 //! ## Scope at J4a — fixed `dt` only
 //!
@@ -67,7 +70,8 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
 use crate::solver::methods::implicit::{
-    finite_difference_jacobian, stiff_jacobian_convergence, theta_method_step, JacobianDispatch,
+    finite_difference_jacobian, stiff_jacobian_convergence, theta_method_step_newton,
+    JacobianDispatch,
 };
 use crate::solver::methods::newton::{self, JacobianStrategy, NewtonConvergence};
 use crate::solver::methods::state_layout::StateLayout;
@@ -85,10 +89,8 @@ pub struct BDF2Solver {
     /// [`stiff_jacobian_convergence`]
     /// (deliberately looser than [`NewtonConvergence::default`] — see
     /// that function's docs for why zero-config construction needs it).
-    /// Only affects the real BDF2 update ([`bdf2_step_newton`]) — the
-    /// startup/bootstrap step always uses
-    /// [`theta_method_step`]
-    /// unconditionally, per [module docs](self).
+    /// Applies to the bootstrap step and to the BDF2 update alike, as do
+    /// the two fields below (see [module docs](self)).
     newton_convergence: NewtonConvergence,
     /// Jacobian refresh strategy (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — default
     /// [`JacobianStrategy::default`] (`ModifiedFrozen`).
@@ -127,8 +129,8 @@ impl BDF2Solver {
         self
     }
 
-    /// Configures the Newton convergence criterion (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — only
-    /// affects the real BDF2 update, not the startup/bootstrap step (see
+    /// Configures the Newton convergence criterion (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)), for the
+    /// Backward Euler bootstrap step and the BDF2 update alike (see
     /// [module docs](self)).
     pub fn with_newton_convergence(mut self, newton_convergence: NewtonConvergence) -> Self {
         self.newton_convergence = newton_convergence;
@@ -219,8 +221,9 @@ impl SteppableSolver for BDF2Solver {
     ) -> Result<ContextValue, OxiflowError> {
         match history.first() {
             // Startup (#44 acceptance criterion): no u^{n-1} yet -- bootstrap
-            // with one Backward Euler step to produce u^1 from u^0.
-            None => theta_method_step(
+            // with one Backward Euler step to produce u^1 from u^0, under
+            // the solver's own Newton configuration.
+            None => theta_method_step_newton(
                 domain,
                 chain,
                 state,
@@ -228,6 +231,9 @@ impl SteppableSolver for BDF2Solver {
                 dt,
                 1.0,
                 self.linear_solver.as_ref(),
+                self.newton_convergence,
+                self.jacobian_strategy,
+                self.max_newton_iterations,
                 &self.jacobian_dispatch,
             ),
             Some(u_prev) => bdf2_step_newton(
@@ -253,12 +259,8 @@ impl SteppableSolver for BDF2Solver {
 /// configuration (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — [`BDF2Solver`] calls this directly,
 /// passing its own configured fields. Passing `stiff_jacobian_convergence()`,
 /// [`JacobianStrategy::default`], and `max_iterations = 1` reproduces the
-/// pre-DD-044 behaviour exactly, matching
-/// [`theta_method_step`]'s own
-/// delegate pattern for BE/CN — kept as a plain function call here rather
-/// than a separate wrapper, since (unlike `theta_method_step`) nothing in
-/// production calls the unconfigured form; only this module's own tests
-/// do.
+/// pre-DD-044 behaviour exactly; only this module's own tests call it
+/// that way.
 ///
 /// Follows [`newton`]'s residual convention with $\alpha =
 /// 3/2$, $c = \Delta t$, $u^{*} = \frac{4u^n - u^{n-1}}{3}$ — derived from
@@ -715,18 +717,25 @@ mod tests {
         }
     }
 
+    /// Backward Euler root of `u + dt*u^3 = u_prev`, solved by scalar
+    /// Newton independently of the crate's loop.
+    fn backward_euler_cubic_decay(u_prev: f64, dt: f64) -> f64 {
+        let mut u = u_prev;
+        for _ in 0..100 {
+            let g = u + dt * u.powi(3) - u_prev;
+            let dg = 1.0 + 3.0 * dt * u.powi(2);
+            u -= g / dg;
+        }
+        u
+    }
+
     #[test]
     fn full_newton_resolves_nonaffine_correction_beyond_frozen_jacobian() {
-        // f(u) = -u^3 -- genuinely nonlinear. `dt` is deliberately small
-        // (unlike BE/CN's own version of this test): BDF2's startup
-        // step is *always* a single, unconfigurable Backward-Euler-style
-        // correction (module docs) -- for a large `dt` that bootstrap
-        // itself would fail to converge under any configuration,
-        // masking the real BDF2 step this test wants to exercise. At
-        // this `dt`, both the bootstrap and the real BDF2 step's default
-        // single correction still converge, but only approximately;
-        // FullNewton on the real BDF2 step reaches the true discrete
-        // solution (J7 exit criterion, #112).
+        // f(u) = -u^3 -- genuinely nonlinear. `dt` is small enough for the
+        // default single correction to pass its tolerance at both steps,
+        // only approximately; FullNewton reaches the true discrete solution
+        // at both steps, the bootstrap step included (J7 exit criterion,
+        // #112).
         let dt = 0.01;
         let config = make_config(2.0 * dt, dt); // exactly two steps
 
@@ -741,23 +750,22 @@ mod tests {
             .solve(&scenario_full, &config)
             .unwrap();
 
-        // u^1 (the bootstrap step) is unaffected by solver configuration
-        // (module docs) -- both runs must agree on it exactly.
-        let u1_default = default_result.states[1].as_scalar_field().unwrap()[0];
+        // u^1 comes from the Backward Euler bootstrap step, run with the
+        // solver's configuration.
+        let u0 = 1.0_f64;
+        let u1_reference = backward_euler_cubic_decay(u0, dt);
         let u1_full = full_result.states[1].as_scalar_field().unwrap()[0];
         assert!(
-            (u1_default - u1_full).abs() < 1e-15,
-            "the bootstrap step must be identical regardless of solver configuration"
+            (u1_full - u1_reference).abs() < 1e-12,
+            "FullNewton should converge the bootstrap step: got {u1_full}, expected {u1_reference}"
         );
 
         // Independently solved BDF2 equation for the real second step:
         // (3/2)*u2 - 2*u1 + (1/2)*u0 = dt*(-u2^3), i.e.
-        // 1.5*u2 + dt*u2^3 = 2*u1 - 0.5*u0, using the *actual* u1 above
-        // (not re-derived) so this reference isn't sensitive to the
-        // bootstrap's own approximation.
-        let u0 = 1.0_f64;
-        let rhs = 2.0 * u1_default - 0.5 * u0;
-        let mut u2_scalar = u1_default;
+        // 1.5*u2 + dt*u2^3 = 2*u1 - 0.5*u0, using the *actual* u1 of the
+        // FullNewton run, so this reference checks the second step alone.
+        let rhs = 2.0 * u1_full - 0.5 * u0;
+        let mut u2_scalar = u1_full;
         for _ in 0..100 {
             let g = 1.5 * u2_scalar + dt * u2_scalar.powi(3) - rhs;
             let dg = 1.5 + 3.0 * dt * u2_scalar.powi(2);
@@ -775,6 +783,48 @@ mod tests {
             (default_value - full_value).abs() > 1e-7,
             "default single correction should measurably differ from the converged solution: \
              default={default_value}, full={full_value}"
+        );
+    }
+
+    #[test]
+    fn bootstrap_step_uses_the_configured_newton_parameters() {
+        // At dt = 0.5, the Backward Euler bootstrap step of f(u) = -u^3
+        // needs eight frozen-Jacobian corrections to pass the default
+        // tolerance: every budget below that must fail and report the
+        // configured budget, not a fixed single iteration.
+        let dt = 0.5;
+        let config = make_config(dt, dt); // the bootstrap step alone
+
+        for budget in [1, 2] {
+            let scenario = Scenario::single(Box::new(CubicDecay), make_mesh(2));
+            let err = BDF2Solver::new()
+                .with_max_newton_iterations(budget)
+                .solve(&scenario, &config)
+                .unwrap_err();
+            assert!(
+                matches!(err, OxiflowError::NewtonNotConverged { iterations, .. } if iterations == budget),
+                "budget {budget}: expected NewtonNotConverged with {budget} iterations, got {err:?}"
+            );
+        }
+
+        // A tolerance far below the default one: the bootstrap step only
+        // reaches the reference if it honours the configured criterion
+        // and strategy as well as the budget.
+        let scenario = Scenario::single(Box::new(CubicDecay), make_mesh(2));
+        let result = BDF2Solver::new()
+            .with_newton_convergence(NewtonConvergence::ResidualOnly {
+                tol_abs: 1e-13,
+                tol_rel: 0.0,
+            })
+            .with_jacobian_strategy(JacobianStrategy::FullNewton)
+            .with_max_newton_iterations(10)
+            .solve(&scenario, &config)
+            .unwrap();
+        let u1 = result.states[1].as_scalar_field().unwrap()[0];
+        let u1_reference = backward_euler_cubic_decay(1.0, dt);
+        assert!(
+            (u1 - u1_reference).abs() < 1e-12,
+            "bootstrap step: got {u1}, expected {u1_reference}"
         );
     }
 }

@@ -282,7 +282,7 @@ pub(crate) fn finite_difference_jacobian(
     Ok(jacobian)
 }
 
-/// Convergence criterion guaranteeing [`theta_method_step`]'s
+/// Convergence criterion guaranteeing `theta_method_step`'s
 /// single-correction contract succeeds on the stiffest affine problems
 /// this crate currently tests (`λ = 1e4`-scale exponential decay).
 ///
@@ -327,6 +327,13 @@ pub(crate) fn stiff_jacobian_convergence() -> NewtonConvergence {
 /// signature (DD-044, #110) for direct callers that don't need the
 /// configurable path, plus the Jacobian dispatch configuration of the
 /// calling solver (DT-069, #198).
+///
+/// Its only production caller left is the dense fallback of
+/// [`theta_method_step_adaptive`], hence the `sparse` gate; the tests of
+/// this module use it as well. That fallback does not honour the calling
+/// solver's Newton configuration, a known defect whose fix removes this
+/// wrapper.
+#[cfg(any(test, feature = "sparse"))]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn theta_method_step(
     domain: &Domain,
@@ -353,20 +360,20 @@ pub(crate) fn theta_method_step(
     )
 }
 
-/// Same contract as [`theta_method_step`], routed through the generic
+/// Same contract as `theta_method_step`, routed through the generic
 /// iterated Newton loop ([`newton::solve`]) with caller-supplied
 /// convergence/Jacobian-strategy/iteration-budget configuration (DD-044,
 /// #111) — [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)
 /// and [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
 /// call this directly, passing their own configured fields; their
-/// defaults reproduce [`theta_method_step`]'s call above exactly.
+/// defaults reproduce `theta_method_step`'s call above exactly.
 ///
 /// Follows [`newton`]'s residual convention with $\alpha = 1$, $c = \theta
 /// \Delta t$, $u^{*} = u^n + \Delta t(1-\theta)f(u^n)$ — see that
 /// module's docs. `f(u^n)` is evaluated once, at time `t` (the known
 /// term); every subsequent candidate `f`/Jacobian evaluation inside the
 /// Newton loop is at time `t + dt` (the implicit/target time), matching
-/// [`theta_method_step`]'s original convention.
+/// `theta_method_step`'s original convention.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn theta_method_step_newton(
     domain: &Domain,
