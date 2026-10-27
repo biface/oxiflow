@@ -91,6 +91,22 @@ impl LaharPhysics {
     pub(crate) fn wave_speed(&self, h: f64, u: f64) -> f64 {
         u.abs() + (G * h).sqrt()
     }
+
+    /// Physical flux `(m*u, p*u + rho_bar*g*h^2/2, s*u)` of the
+    /// `(m, p, s)` system, from the conservative state and its primitives
+    /// (see [`LaharPhysics::primitives`]).
+    pub(crate) fn physical_flux(
+        &self,
+        m: f64,
+        p: f64,
+        s: f64,
+        h: f64,
+        u: f64,
+        psi: f64,
+    ) -> [f64; 3] {
+        let rho_bar = self.rho_bar(psi);
+        [m * u, p * u + 0.5 * rho_bar * G * h * h, s * u]
+    }
 }
 
 // ── Grouped parameters (clippy::too_many_arguments, see the example's module doc)

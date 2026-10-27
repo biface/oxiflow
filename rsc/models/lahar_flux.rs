@@ -2,6 +2,11 @@
 //! `FluxDivergenceOperator` of the `(m, p, s)` system (Rusanov flux,
 //! MinMod-limited MUSCL reconstruction).
 //!
+//! `ShallowLayerFlux::divergence` takes one treatment per domain edge
+//! (`EdgeTreatment`): the truncation posture of `apply`, a reflective wall,
+//! or a face left to a coupling operator. `ShallowLayerFluxWithEdges` wraps
+//! the operator with chosen treatments, for the coupled-grid example.
+//!
 //! Single definition shared by `examples/lahar_multifield.rs`,
 //! `examples/lahar_multifield_plot.rs`, `tests/lahar_multifield_analytical.rs`
 //! and `benches/lahar_multifield.rs`, each of which includes this file as a
@@ -11,7 +16,7 @@
 //! Requires `rsc/models/lahar_physics.rs` as a sibling module named
 //! `lahar_physics`.
 
-use super::lahar_physics::{LaharPhysics, COL_M, COL_P, COL_S, G};
+use super::lahar_physics::{LaharPhysics, COL_M, COL_P, COL_S};
 use nalgebra::DMatrix;
 use oxiflow::{
     context::{
@@ -59,8 +64,7 @@ pub(crate) fn default_flux_parallel_threshold() -> usize {
 
 impl ShallowLayerFlux {
     fn physical_flux(&self, m: f64, p: f64, s: f64, h: f64, u: f64, psi: f64) -> [f64; 3] {
-        let rho_bar = self.physics.rho_bar(psi);
-        [m * u, p * u + 0.5 * rho_bar * G * h * h, s * u]
+        self.physics.physical_flux(m, p, s, h, u, psi)
     }
 
     /// `r = (b-a)/(c-b)`, epsilon-guarded -- reproduces
@@ -115,14 +119,17 @@ impl RequiresContext for ShallowLayerFlux {
     }
 }
 
-impl FluxDivergenceOperator for ShallowLayerFlux {
-    type MeshType = UniformGrid1D;
-
-    fn apply(
+impl ShallowLayerFlux {
+    /// Flux divergence of the `(m, p, s)` system, with one treatment per
+    /// domain edge (see [`EdgeTreatment`]). [`FluxDivergenceOperator::apply`]
+    /// is this method with [`EdgeTreatment::NeighbourDivergence`] on both
+    /// edges; [`ShallowLayerFluxWithEdges`] selects the treatments.
+    pub(crate) fn divergence(
         &self,
         field: &ContextValue,
-        mesh: &Self::MeshType,
+        mesh: &UniformGrid1D,
         ctx: &ComputeContext,
+        edges: Edges,
     ) -> Result<ContextValue, OxiflowError> {
         let state = field.as_vector_field()?;
         let n = state.nrows();
@@ -224,19 +231,133 @@ impl FluxDivergenceOperator for ShallowLayerFlux {
                 div[(i, k)] = val;
             }
         }
-        // Truncation posture (operators::fv/limiters' own documented
-        // choice, reproduced here): boundary cells reuse the nearest
-        // interior cell's divergence rather than inventing an exterior
-        // value.
-        for k in 0..3 {
-            div[(0, k)] = div[(1, k)];
-            div[(n - 1, k)] = div[(n - 2, k)];
+        // Edge cells, one treatment per side. `None`: truncation posture
+        // (operators::fv/limiters' own documented choice, reproduced
+        // here), the edge cell reuses the nearest interior cell's
+        // divergence rather than inventing an exterior value. `Some`: the
+        // edge cell is updated by its inner face and the given outer face.
+        // Edge cells are reconstructed at first order, so their edge
+        // values are the cell values.
+        let mirror = |u: [f64; 3]| [u[0], -u[1], u[2]];
+        let left_outer = match edges.left {
+            EdgeTreatment::NeighbourDivergence => None,
+            EdgeTreatment::Wall => Some(self.rusanov_face(mirror(left_edge[0]), left_edge[0])?),
+            EdgeTreatment::Exchanged => Some([0.0; 3]),
+        };
+        match left_outer {
+            None => {
+                for k in 0..3 {
+                    div[(0, k)] = div[(1, k)];
+                }
+            }
+            Some(outer) => {
+                let inner = self.rusanov_face(right_edge[0], left_edge[1])?;
+                for k in 0..3 {
+                    div[(0, k)] = (inner[k] - outer[k]) / dx;
+                }
+            }
+        }
+        let right_outer = match edges.right {
+            EdgeTreatment::NeighbourDivergence => None,
+            EdgeTreatment::Wall => {
+                Some(self.rusanov_face(right_edge[n - 1], mirror(right_edge[n - 1]))?)
+            }
+            EdgeTreatment::Exchanged => Some([0.0; 3]),
+        };
+        match right_outer {
+            None => {
+                for k in 0..3 {
+                    div[(n - 1, k)] = div[(n - 2, k)];
+                }
+            }
+            Some(outer) => {
+                let inner = self.rusanov_face(right_edge[n - 2], left_edge[n - 1])?;
+                for k in 0..3 {
+                    div[(n - 1, k)] = (outer[k] - inner[k]) / dx;
+                }
+            }
         }
 
         Ok(ContextValue::VectorField(div))
     }
+}
+
+impl FluxDivergenceOperator for ShallowLayerFlux {
+    type MeshType = UniformGrid1D;
+
+    fn apply(
+        &self,
+        field: &ContextValue,
+        mesh: &Self::MeshType,
+        ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let edges = Edges {
+            left: EdgeTreatment::NeighbourDivergence,
+            right: EdgeTreatment::NeighbourDivergence,
+        };
+        self.divergence(field, mesh, ctx, edges)
+    }
 
     fn stencil_radius(&self) -> usize {
         1
+    }
+}
+
+// ── Edge treatments ───────────────────────────────────────────────────────────
+
+/// How [`ShallowLayerFlux::divergence`] updates a domain-edge cell.
+// Only the coupled-grid example selects treatments other than
+// `NeighbourDivergence`; the other consumers of this file use `apply`.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EdgeTreatment {
+    /// The edge cell reuses its interior neighbour's divergence (truncation
+    /// posture of [`FluxDivergenceOperator::apply`]).
+    NeighbourDivergence,
+    /// Reflective wall: the outer face is the Rusanov flux between the edge
+    /// cell and its mirror image (momentum reversed). No mass or solids
+    /// cross it; a layer at rest stays at rest.
+    Wall,
+    /// The outer face carries no flux of its own: a coupling operator
+    /// supplies the whole exchange across it.
+    Exchanged,
+}
+
+/// One [`EdgeTreatment`] per domain edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Edges {
+    pub(crate) left: EdgeTreatment,
+    pub(crate) right: EdgeTreatment,
+}
+
+/// [`ShallowLayerFlux`] with chosen edge treatments, as a
+/// `FluxDivergenceOperator`.
+// Used by the coupled-grid example only (see `EdgeTreatment`).
+#[allow(dead_code)]
+pub(crate) struct ShallowLayerFluxWithEdges {
+    pub(crate) flux: ShallowLayerFlux,
+    pub(crate) edges: Edges,
+}
+
+impl RequiresContext for ShallowLayerFluxWithEdges {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        self.flux.required_variables()
+    }
+}
+
+impl FluxDivergenceOperator for ShallowLayerFluxWithEdges {
+    type MeshType = UniformGrid1D;
+
+    fn apply(
+        &self,
+        field: &ContextValue,
+        mesh: &Self::MeshType,
+        ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        self.flux.divergence(field, mesh, ctx, self.edges)
+    }
+
+    fn stencil_radius(&self) -> usize {
+        self.flux.stencil_radius()
     }
 }
