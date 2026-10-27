@@ -239,11 +239,19 @@ impl PhysicalModel for LangmuirMulti {
 /// injection of 0.001 mol/L over `[0, 0.4]` s, shared by every consumer so
 /// that the example, the test and the benchmark run the same column.
 pub(crate) fn make_model(dz: f64) -> LangmuirMulti {
-    let injection = TemporalInjection::Rectangle {
-        start: 0.0,
-        end: 0.4,
-        concentration: 0.001,
-    };
+    ascorbic_erythorbic(
+        dz,
+        TemporalInjection::Rectangle {
+            start: 0.0,
+            end: 0.4,
+            concentration: 0.001,
+        },
+    )
+}
+
+/// The `ascorbic_erythorbic` column and isotherm, with both species fed
+/// through the same inlet profile `injection`.
+pub(crate) fn ascorbic_erythorbic(dz: f64, injection: TemporalInjection) -> LangmuirMulti {
     LangmuirMulti {
         species: vec![
             SpeciesParams {
