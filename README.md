@@ -130,7 +130,7 @@ See the [oxiflow wiki](https://github.com/biface/oxiflow/wiki) for introductory 
 
 | Domain             | Example                                               | Target framework |
 |--------------------|-------------------------------------------------------|------------------|
-| Chromatography     | Multi-solute gradient elution                         | `oxiflow-chrom`  |
+| Chromatography     | Binary frontal analysis with competitive adsorption   | `oxiflow-chrom`  |
 | Heat transfer      | 1D transient conduction in a bar (uniform and graded) | `oxiflow-thermo` |
 | Reaction–diffusion | Gray–Scott Turing patterns                            | engine direct    |
 | Fluid mechanics    | 1D viscous boundary layer at a wall (Burgers)         | engine direct    |

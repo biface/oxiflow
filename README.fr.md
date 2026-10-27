@@ -133,7 +133,7 @@ Consultez le [wiki oxiflow](https://github.com/biface/oxiflow/wiki) pour les not
 
 | Domaine                | Exemple                                                        | Framework cible  |
 |------------------------|----------------------------------------------------------------|------------------|
-| Chromatographie        | Élution gradient multi-solutés                                 | `oxiflow-chrom`  |
+| Chromatographie        | Analyse frontale binaire en adsorption compétitive             | `oxiflow-chrom`  |
 | Transfert thermique    | Conduction transitoire 1D dans une barre (homogène et graduée) | `oxiflow-thermo` |
 | Réaction–diffusion     | Motifs de Turing (Gray–Scott)                                  | moteur direct    |
 | Mécanique des fluides  | Couche limite visqueuse 1D contre une paroi (Burgers)          | moteur direct    |

@@ -3,9 +3,9 @@
 //! `ascorbic_erythorbic` reference parameters.
 //!
 //! Single definition shared by `examples/langmuir_multi.rs`,
-//! `examples/langmuir_multi_plot.rs`, `tests/langmuir_multi_reference.rs`
-//! and `benches/langmuir_multi.rs`, each of which includes this file as a
-//! module with `#[path]`. The model equations, the inlet treatment and the
+//! `examples/langmuir_multi_plot.rs`, `examples/competitive_frontal_analysis.rs`,
+//! `tests/langmuir_multi_reference.rs` and `benches/langmuir_multi.rs`, each
+//! of which includes this file as a module with `#[path]`. The model equations, the inlet treatment and the
 //! validation levels are documented in `examples/langmuir_multi.rs`.
 //! Scenario constants (point count, column length, time span) stay in each
 //! consumer.
@@ -238,6 +238,9 @@ impl PhysicalModel for LangmuirMulti {
 /// The `ascorbic_erythorbic` reference case: two species, rectangular
 /// injection of 0.001 mol/L over `[0, 0.4]` s, shared by every consumer so
 /// that the example, the test and the benchmark run the same column.
+// Not used by `competitive_frontal_analysis`, which feeds the same column
+// through `ascorbic_erythorbic`: unused in that one target.
+#[allow(dead_code)]
 pub(crate) fn make_model(dz: f64) -> LangmuirMulti {
     ascorbic_erythorbic(
         dz,

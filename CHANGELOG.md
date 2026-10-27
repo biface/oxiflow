@@ -117,6 +117,14 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   unchanged, checks the steady profile u = A tanh(A (1 − x) / (2ν)) and the
   99 % thickness (2ν / A) atanh(0.99), exits with an error beyond its
   tolerances and runs in CI with the reference examples (#177).
+- `examples/competitive_frontal_analysis`, the chromatography reference
+  example: a clean column fed with 0.1 mol/L of two solutes competing for
+  the same sites (competitive Langmuir isotherm, ideal model), on 401 nodes
+  with RK4. It reuses the shared `langmuir_multi` model unchanged, checks the
+  outlet times of the two shocks, the roll-up plateau of the less retained
+  solute and the mass balance against the equilibrium theory (Nicoud,
+  *Chromatographic Processes*, 2015), exits with an error beyond its
+  tolerances and runs in CI with the reference examples (#174).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
   builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and
