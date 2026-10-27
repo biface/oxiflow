@@ -186,6 +186,12 @@ impl PhysicalModel for LaharSource {
                 g_prime,
                 self.erosion.grain_d,
             );
+            // Explicit-Euler deposition overshoot guard: in a thin layer,
+            // `D*dt` can exceed the solids actually present and drive `s`
+            // and `h` negative within a single step. A step can deposit at
+            // most the solids present, never more -- the same posture as
+            // the friction guard below. `D` is zero for pure water, so the
+            // guard never acts there.
             let deposition = if h[i] > H_MIN {
                 deposition_rate(
                     psi[i],
@@ -194,6 +200,7 @@ impl PhysicalModel for LaharSource {
                     self.erosion.grain_d,
                     r_star,
                 )
+                .min(s[(i, COL_S)].max(0.0) / dt)
             } else {
                 0.0
             };
@@ -225,7 +232,7 @@ impl PhysicalModel for LaharSource {
             let injection = self.injection.density(self.x_coords[i]);
 
             [
-                -rho_b * db_dt + self.physics.rho_f * injection,
+                -rho_b * db_dt + self.physics.rho_bar(self.injection.psi) * injection,
                 -rho_bar * G * h[i] * db_dx[i] + friction_dp - u_b * rho_b * db_dt,
                 -(deposition - erosion) + self.injection.psi * injection,
                 db_dt,

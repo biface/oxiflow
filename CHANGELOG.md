@@ -218,6 +218,14 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The lahar source term shared by the lahar examples, test and benchmark
+  (`rsc/models/lahar_source.rs`) injected the mass of water, `rho_f * Q`,
+  whatever the solids fraction `psi` of the inflow, so injected material
+  lost a share `(rho_s − rho_f) / rho_f * psi` of its volume; it now injects
+  the bulk mass `rho_bar(psi) * Q`. Deposition is also capped so that one
+  step deposits at most the solids present: in a thin layer, an explicit
+  step could take more and drive the depth negative. Pure-water runs, the
+  only ones so far, are unchanged bit for bit (#BUGNUM).
 - The banded path of `BackwardEulerSolver` and `CrankNicolsonSolver`
   (`sparse` feature: sparse solver configured, bandwidth declared, system
   above the sparse threshold) ran a single linearised correction without
