@@ -110,6 +110,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   truncated with an explicit bound on the neglected terms, exits with an
   error beyond its tolerances and runs in CI with the reference examples
   (#178).
+- `examples/burgers_boundary_layer`, the fluid-mechanics reference example:
+  a viscous Burgers shock, in dimensionless form, runs into a wall held at
+  zero velocity and relaxes to a steady boundary layer, for Re = 50, 100 and
+  200 on 401 nodes with RK4. It reuses the shared `viscous_burgers` model
+  unchanged, checks the steady profile u = A tanh(A (1 − x) / (2ν)) and the
+  99 % thickness (2ν / A) atanh(0.99), exits with an error beyond its
+  tolerances and runs in CI with the reference examples (#177).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
   builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and

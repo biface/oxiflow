@@ -2,9 +2,9 @@
 //! traveling-shock solution.
 //!
 //! Single definition shared by `examples/viscous_burgers.rs`,
-//! `examples/viscous_burgers_plot.rs`, `tests/viscous_burgers_analytical.rs`
-//! and `benches/viscous_burgers.rs`, each of which includes this file as a
-//! module with `#[path]`. The physics, the Cole-Hopf exact solution and its
+//! `examples/viscous_burgers_plot.rs`, `examples/burgers_boundary_layer.rs`,
+//! `tests/viscous_burgers_analytical.rs` and `benches/viscous_burgers.rs`,
+//! each of which includes this file as a module with `#[path]`. The physics, the Cole-Hopf exact solution and its
 //! finite-domain caveat are documented in `examples/viscous_burgers.rs`.
 //! Scenario constants (mesh size, domain, end time) stay in each consumer.
 

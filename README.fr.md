@@ -136,7 +136,7 @@ Consultez le [wiki oxiflow](https://github.com/biface/oxiflow/wiki) pour les not
 | Chromatographie        | Élution gradient multi-solutés                                 | `oxiflow-chrom`  |
 | Transfert thermique    | Conduction transitoire 1D dans une barre (homogène et graduée) | `oxiflow-thermo` |
 | Réaction–diffusion     | Motifs de Turing (Gray–Scott)                                  | moteur direct    |
-| Mécanique des fluides  | Couche limite de Burgers                                       | moteur direct    |
+| Mécanique des fluides  | Couche limite visqueuse 1D contre une paroi (Burgers)          | moteur direct    |
 | Géomécanique           | Consolidation 1D d'une couche d'argile (Terzaghi)              | moteur direct    |
 | Électromagnétisme      | Diffusion magnétique 1D dans un conducteur (proto)             | `oxiflow-em`     |
 | Géophysique de surface | Interaction lahar–lac                                          | `oxiflow-geo`    |

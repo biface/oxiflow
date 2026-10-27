@@ -133,7 +133,7 @@ See the [oxiflow wiki](https://github.com/biface/oxiflow/wiki) for introductory 
 | Chromatography     | Multi-solute gradient elution                         | `oxiflow-chrom`  |
 | Heat transfer      | 1D transient conduction in a bar (uniform and graded) | `oxiflow-thermo` |
 | Reaction–diffusion | Gray–Scott Turing patterns                            | engine direct    |
-| Fluid mechanics    | Burgers boundary layer                                | engine direct    |
+| Fluid mechanics    | 1D viscous boundary layer at a wall (Burgers)         | engine direct    |
 | Geomechanics       | 1D consolidation of a clay layer (Terzaghi)           | engine direct    |
 | Electromagnetism   | 1D magnetic diffusion into a conductor (proto)        | `oxiflow-em`     |
 | Surface geophysics | Lahar–lake wave generation                            | `oxiflow-geo`    |
