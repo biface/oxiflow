@@ -273,7 +273,7 @@ jobs:
     needs: test
     if: github.event_name == 'pull_request'
     env:
-      REFERENCE_EXAMPLES: "heat_transfer_1d magnetic_diffusion_1d consolidation_1d burgers_boundary_layer competitive_frontal_analysis gray_scott_1d"
+      REFERENCE_EXAMPLES: "heat_transfer_1d magnetic_diffusion_1d consolidation_1d burgers_boundary_layer competitive_frontal_analysis gray_scott_1d lahar_lake_wave"
     steps:
       - name: No reference example yet
         if: env.REFERENCE_EXAMPLES == ''

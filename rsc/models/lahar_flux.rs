@@ -8,9 +8,9 @@
 //! the operator with chosen treatments, for the coupled-grid example.
 //!
 //! Single definition shared by `examples/lahar_multifield.rs`,
-//! `examples/lahar_multifield_plot.rs`, `tests/lahar_multifield_analytical.rs`
-//! and `benches/lahar_multifield.rs`, each of which includes this file as a
-//! module with `#[path]`. The model (DD-032, Woodhouse, Hogg & Phillips) is
+//! `examples/lahar_multifield_plot.rs`, `examples/lahar_lake_wave.rs`,
+//! `tests/lahar_multifield_analytical.rs` and `benches/lahar_multifield.rs`,
+//! each of which includes this file as a module with `#[path]`. The model (DD-032, Woodhouse, Hogg & Phillips) is
 //! documented in `examples/lahar_multifield.rs`.
 //!
 //! Requires `rsc/models/lahar_physics.rs` as a sibling module named

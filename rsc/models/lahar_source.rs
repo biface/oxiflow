@@ -3,9 +3,9 @@
 //! Sec. 4.1 validation configuration (`ValidationRegime`, `build_source`).
 //!
 //! Single definition shared by `examples/lahar_multifield.rs`,
-//! `examples/lahar_multifield_plot.rs`, `tests/lahar_multifield_analytical.rs`
-//! and `benches/lahar_multifield.rs`, each of which includes this file as a
-//! module with `#[path]`. The model (DD-032, Woodhouse, Hogg & Phillips) is
+//! `examples/lahar_multifield_plot.rs`, `examples/lahar_lake_wave.rs`,
+//! `tests/lahar_multifield_analytical.rs` and `benches/lahar_multifield.rs`,
+//! each of which includes this file as a module with `#[path]`. The model (DD-032, Woodhouse, Hogg & Phillips) is
 //! documented in `examples/lahar_multifield.rs`.
 //!
 //! Requires `rsc/models/lahar_physics.rs` as a sibling module named
@@ -333,6 +333,9 @@ pub(crate) enum ValidationRegime {
 /// (`tan_d1=tan_d2=tan_d3=0.1`, collapsing `mu_branch` to that constant
 /// regardless of `h`) -- the paper's second comparison curve (Fig. 4,
 /// constant Coulomb `mu=0.1`).
+// The coupled-grid example builds its own configuration and does not call
+// this function.
+#[allow(dead_code)]
 pub(crate) fn build_source(
     mesh: &UniformGrid1D,
     regime: ValidationRegime,

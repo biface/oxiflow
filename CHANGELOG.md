@@ -134,6 +134,19 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   split until the ring fills, checked by the pulse count at three times and
   by the mirror symmetry of the state. The example exits with an error
   beyond its tolerances and runs in CI with the reference examples (#176).
+- `examples/lahar_lake_wave`, the surface-geophysics reference example: a
+  lahar (the DD-032 multi-field model, 20 m²/s with a solids fraction of
+  0.2) runs down a 4 km channel and pours over a lip into a lake 15 m deep.
+  Channel and lake are two domains on their own grids, advanced by
+  `MultiDomainOrchestrator` and coupled by two `CouplingOperator`s that
+  carry the outflow across the lip. The shared shallow-layer flux
+  (`rsc/models/lahar_flux.rs`) takes one treatment per edge (truncation,
+  wall, or a face left to a coupling), its default unchanged. The example
+  checks that the lake stays bitwise at rest until the lahar reaches it,
+  that mass and solids cross the lip without loss to rounding, and that the
+  bore raised in the lake obeys the Rankine–Hugoniot conditions; it exits
+  with an error beyond its tolerances and runs in CI with the reference
+  examples (#180).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
   builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and
