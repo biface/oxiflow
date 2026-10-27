@@ -48,18 +48,42 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust
 /// use oxiflow::solver::methods::euler::ForwardEulerSolver;
-/// use oxiflow::solver::{Scenario, SolverConfiguration, TimeConfiguration, StepControl, IntegratorKind};
+/// use oxiflow::solver::{IntegratorKind, Scenario, Solver, SolverConfiguration,
+///                       StepControl, TimeConfiguration};
 /// use oxiflow::mesh::UniformGrid1D;
-///
+/// # use nalgebra::DVector;
+/// # use oxiflow::context::{ComputeContext, ContextValue, ContextVariable, OxiflowError};
+/// # use oxiflow::mesh::Mesh;
+/// # use oxiflow::model::{PhysicalModel, RequiresContext};
+/// # struct Decay;
+/// # impl RequiresContext for Decay {
+/// #     fn required_variables(&self) -> Vec<ContextVariable> { vec![] }
+/// # }
+/// # impl PhysicalModel for Decay {
+/// #     fn compute_physics(
+/// #         &self,
+/// #         state: &ContextValue,
+/// #         _ctx: &ComputeContext,
+/// #     ) -> Result<ContextValue, OxiflowError> {
+/// #         Ok(ContextValue::ScalarField(-state.as_scalar_field()?.clone()))
+/// #     }
+/// #     fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+/// #         ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+/// #     }
+/// #     fn name(&self) -> &str { "decay" }
+/// # }
+/// # let my_model = Decay;
+/// let mesh = UniformGrid1D::new(50, 0.0, 1.0)?;
 /// let scenario = Scenario::single(Box::new(my_model), Box::new(mesh));
 /// let config = SolverConfiguration::new(
-///     TimeConfiguration::new(100.0, StepControl::Fixed { dt: 0.1 }),
+///     TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }),
 ///     IntegratorKind::Euler,
 /// );
 /// let solver = ForwardEulerSolver;
-/// let result = solver.solve(&scenario, &config).unwrap();
+/// let result = solver.solve(&scenario, &config)?;
+/// # Ok::<(), OxiflowError>(())
 /// ```
 pub struct ForwardEulerSolver;
 
@@ -85,8 +109,9 @@ impl SteppableSolver for ForwardEulerSolver {
     ) -> Result<ContextValue, OxiflowError> {
         // history_depth() defaults to 0 -- Euler is a one-step method,
         // `_history` is always empty here and intentionally unused.
-        // Contractual order (calculators -> BCs -> compute_physics) is
-        // enforced once, here, for both Euler and RK4 — see
+        // Contractual order (boundary calculators -> BCs -> other
+        // calculators -> compute_physics -> held nodes, DD-070) is enforced
+        // once, for every integrator — see
         // `solver::methods::evaluate_derivative`. `state` is corrected
         // in-place by boundary conditions before the derivative is taken.
         let du_dt = evaluate_derivative(domain, chain, state, t, dt)?;
@@ -121,79 +146,15 @@ mod tests {
     use crate::context::compute::ComputeContext;
     use crate::context::error::OxiflowError;
     use crate::context::value::ContextValue;
-    use crate::context::variable::ContextVariable;
     use crate::mesh::{Mesh, UniformGrid1D};
     use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::model::{ExponentialDecay, ZeroDerivative};
     use crate::solver::config::{
         IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration,
     };
     use nalgebra::DVector;
 
     // ── Fixtures ──────────────────────────────────────────────────────────────
-
-    /// Pure exponential decay: du/dt = -lambda * u
-    /// Analytical solution: u(t) = u0 * exp(-lambda * t)
-    #[derive(Debug)]
-    struct ExponentialDecay {
-        lambda: f64,
-    }
-
-    impl RequiresContext for ExponentialDecay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ExponentialDecay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.lambda * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "exponential_decay"
-        }
-    }
-
-    /// Constant zero derivative — field stays unchanged.
-    #[derive(Debug)]
-    struct ZeroDerivative;
-
-    impl RequiresContext for ZeroDerivative {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ZeroDerivative {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(DVector::from_element(
-                u.len(),
-                0.0,
-            )))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 2.5))
-        }
-
-        fn name(&self) -> &str {
-            "zero_derivative"
-        }
-    }
 
     fn make_config(t_end: f64, dt: f64) -> SolverConfiguration {
         SolverConfiguration::new(
@@ -210,7 +171,7 @@ mod tests {
 
     #[test]
     fn zero_derivative_field_stays_constant() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(5));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(5));
         let config = make_config(1.0, 0.1);
         let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
         // All saved states should be 2.5 everywhere
@@ -244,7 +205,7 @@ mod tests {
 
     #[test]
     fn result_times_match_expected_steps() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(3));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(3));
         let config = make_config(0.5, 0.1);
         let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
 
@@ -256,7 +217,7 @@ mod tests {
 
     #[test]
     fn n_steps_is_correct() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = make_config(1.0, 0.25);
         let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
         assert_eq!(result.n_steps, 4);
@@ -264,7 +225,7 @@ mod tests {
 
     #[test]
     fn save_every_reduces_stored_states() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = SolverConfiguration::new(
             TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }).saving_every(5),
             IntegratorKind::Euler,
@@ -329,7 +290,7 @@ mod tests {
         // the current one with margin.
         let dt = 0.1;
         let t_end = 10_000.0; // n_steps = 100_000
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = make_config(t_end, dt);
         let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
 
@@ -412,45 +373,18 @@ mod tests {
 
     #[test]
     fn boundary_condition_is_applied_each_step() {
-        use crate::boundary::{BoundaryCondition, BoundaryType};
-        use crate::context::compute::ComputeContext;
-        use crate::mesh::Mesh as MeshTrait;
+        use crate::boundary::PinnedNodes;
         use crate::solver::scenario::Domain;
-
-        /// Pins node 0 to a fixed value on every application — a minimal
-        /// Dirichlet-style fixture, not a physically meaningful BC.
-        #[derive(Debug)]
-        struct PinFirstNode {
-            value: f64,
-        }
-
-        impl RequiresContext for PinFirstNode {
-            fn required_variables(&self) -> Vec<ContextVariable> {
-                vec![]
-            }
-        }
-
-        impl BoundaryCondition for PinFirstNode {
-            fn boundary_type(&self) -> BoundaryType {
-                BoundaryType::Dirichlet
-            }
-
-            fn apply(
-                &self,
-                state: &mut DVector<f64>,
-                _ctx: &ComputeContext,
-                _mesh: &dyn MeshTrait,
-            ) -> Result<(), OxiflowError> {
-                state[0] = self.value;
-                Ok(())
-            }
-        }
 
         // ZeroDerivative leaves the field unchanged everywhere — any
         // deviation from its initial value of 2.5 at node 0 can only come
         // from the boundary condition.
-        let domain = Domain::new("pinned", Box::new(ZeroDerivative), make_mesh(3))
-            .with_boundary_conditions(vec![Box::new(PinFirstNode { value: -7.0 })]);
+        let domain = Domain::new(
+            "pinned",
+            Box::new(ZeroDerivative { initial: 2.5 }),
+            make_mesh(3),
+        )
+        .with_boundary_conditions(vec![Box::new(PinnedNodes::new(&[0], |_| -7.0))]);
         let scenario = Scenario::multi(vec![domain]).unwrap();
         let config = make_config(0.3, 0.1);
         let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
@@ -470,14 +404,15 @@ mod tests {
 
     #[test]
     fn negative_dt_returns_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = make_config(1.0, -0.1);
         assert!(ForwardEulerSolver.solve(&scenario, &config).is_err());
     }
 
     #[test]
     fn t_end_before_t_start_returns_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2)).with_t_start(5.0);
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2))
+            .with_t_start(5.0);
         let config = make_config(1.0, 0.1);
         assert!(ForwardEulerSolver.solve(&scenario, &config).is_err());
     }

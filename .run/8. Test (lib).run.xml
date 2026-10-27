@@ -1,9 +1,11 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="4. Format" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="buildProfileId" value="dev" />
-    <option name="command" value="fmt" />
+  <configuration default="false" name="8. Test (lib)" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Tests (Quick)">
+    <option name="buildProfileId" value="test" />
+    <option name="command" value="test --all-features --lib" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
-    <envs />
+    <envs>
+      <env name="RUSTDOCFLAGS" value="-D warnings" />
+    </envs>
     <option name="emulateTerminal" value="true" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="true" />
@@ -14,7 +16,7 @@
     <option name="isRedirectInput" value="false" />
     <option name="redirectInputPath" value="" />
     <method v="2">
-      <option name="RunConfigurationTask" enabled="true" run_configuration_name="3. Build" run_configuration_type="CargoCommandRunConfiguration" />
+      <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
     </method>
   </configuration>
 </component>

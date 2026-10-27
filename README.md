@@ -128,14 +128,15 @@ The engine is domain-agnostic. Any problem of the canonical form
 `∂u/∂t + ∇·F(u, ∇u) = S(u, x, t)` is a candidate.
 See the [oxiflow wiki](https://github.com/biface/oxiflow/wiki) for introductory notes on each domain.
 
-| Domain             | Example                       | Target framework |
-|--------------------|-------------------------------|------------------|
-| Chromatography     | Multi-solute gradient elution | `oxiflow-chrom`  |
-| Heat transfer      | 1D transient bar cooling      | `oxiflow-thermo` |
-| Reaction–diffusion | Gray–Scott Turing patterns    | engine direct    |
-| Fluid mechanics    | Burgers boundary layer        | engine direct    |
-| Geomechanics       | Terzaghi consolidation        | engine direct    |
-| Surface geophysics | Lahar–lake wave generation    | `oxiflow-geo`    |
+| Domain             | Example                                               | Target framework |
+|--------------------|-------------------------------------------------------|------------------|
+| Chromatography     | Binary frontal analysis with competitive adsorption   | `oxiflow-chrom`  |
+| Heat transfer      | 1D transient conduction in a bar (uniform and graded) | `oxiflow-thermo` |
+| Reaction–diffusion | Gray–Scott in 1D: Turing instability, pulse splitting | engine direct    |
+| Fluid mechanics    | 1D viscous boundary layer at a wall (Burgers)         | engine direct    |
+| Geomechanics       | 1D consolidation of a clay layer (Terzaghi)           | engine direct    |
+| Electromagnetism   | 1D magnetic diffusion into a conductor (proto)        | `oxiflow-em`     |
+| Surface geophysics | Lahar–lake wave generation                            | `oxiflow-geo`    |
 
 ---
 

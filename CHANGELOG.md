@@ -7,6 +7,317 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- `SimulationResult::write_vtk` exports a `VectorField` final state (n nodes
+  × d components) as well as a `ScalarField`: one scalar `Float64` point-data
+  array per component, named `field_0` … `field_{d-1}`, the first one being
+  the active scalars. Each component gets its own colour map in ParaView,
+  values stay bit-for-bit (NaN and infinities included), and the mesh is
+  still 1D. `ScalarField` output is byte-for-byte unchanged (#193).
+- With the `parallel` feature, `BackwardEulerSolver`, `CrankNicolsonSolver`
+  and `BDF2Solver` assemble their finite-difference Jacobians through Rayon:
+  one task per column on the dense path, one per colour on the banded path.
+  Each solver has its own dispatch threshold, in unknowns (nodes ×
+  components), configured with `with_parallel_threshold` or
+  `set_parallel_threshold` and read with `parallel_threshold`. The default,
+  256, is indicative: measure the crossover on your workload. Sequential and
+  parallel assembly give bit-for-bit identical Jacobians, and results are
+  unchanged (#199).
+- `benches/oxiflow_parallel`: an `implicit_jacobian_dispatch` diagnostic for
+  `diffusion_1d` (`ScalarField`) and `langmuir_multi` (`VectorField`). It
+  times one Backward Euler step with the Jacobian assembly forced sequential
+  or parallel, on the dense path and, with the `sparse` feature, on the
+  banded path, so that the solvers' dispatch threshold can be measured
+  locally (#199).
+- `ContextCalculator::compute_shared`, a provided method returning
+  `Arc<ContextValue>`. The solver now calls it at every derivative
+  evaluation. By default it wraps `compute` in an `Arc`, so existing
+  calculators are unaffected. A calculator that keeps its value between
+  evaluations overrides it to return a clone of the `Arc` it keeps, and every
+  evaluation then gets the same allocation instead of a copy. An override
+  must return the same value as `compute` (#196).
+- `CoefficientField` (`context::calculators`), a coefficient c(x) or c(x, t)
+  evaluated on every mesh node from `Mesh::coordinates()`, in any dimension,
+  and published as a `ScalarField` under the new variant
+  `ContextVariable::Coefficient { name }` (DD-066). `CoefficientField::of_x`
+  evaluates c(x) once at construction; `CoefficientField::of_x_t` evaluates
+  c(x, t) at the context's time and reuses the field for further evaluations
+  at the same time. Both hand the solver the field they keep, through
+  `compute_shared`, instead of a copy. A non-finite value is reported as
+  `ExternalData`, naming the first node, its coordinates and the time. With
+  the `parallel` feature, nodes are evaluated through Rayon above a
+  threshold set with `with_parallel_threshold` or `set_parallel_threshold`;
+  the default, 10 000 nodes, is indicative. The function must be pure
+  (#182).
+- `BoundaryCondition::constrained_nodes`, a provided method returning the
+  nodes `apply` sets (empty by default). The solver sets the derivative to
+  zero at these nodes, so the integrators and the Newton iterations leave
+  them to the condition; their rows of the implicit system become identity
+  rows. `DanckwertsOutlet` declares its last node (DD-070, #201).
+- Boundary regions in `mesh` (DA-071, #204): `BoundaryRegion` (one variant
+  today, `Face { axis, side }`), `FaceSide` and `BoundaryNode`, with two
+  provided methods on `Mesh`. `boundary_nodes` lists the nodes of a region;
+  `boundary_neighbours` pairs each with its first neighbour along the inward
+  normal and their distance. Their default covers the two faces of a 1D mesh
+  whose nodes are ordered along the axis; any other region is refused with
+  `PreconditionFailed`.
+- `boundary::Dirichlet`, a Dirichlet condition holding every node of a
+  boundary region at a prescribed value, constant (`Dirichlet::constant`) or
+  a function of time (`Dirichlet::of_t`, evaluated at the context's time).
+  It declares the nodes of its region as constrained nodes, so every saved
+  state holds the value of its own time, for every integrator. A region the
+  mesh does not define is refused with `PreconditionFailed`, a non-finite
+  value with `ExternalData`, naming the region and the time. The condition
+  is `Clone` (a clone shares the function) and is not serialisable (#202).
+- `benches/oxiflow_parallel`: a `boundary_condition_overhead` measurement
+  for `diffusion_1d`. It times full solves without boundary conditions, with
+  the two Danckwerts conditions and with two `Dirichlet` conditions, under
+  RK4 and Backward Euler on two mesh sizes each, so that the cost of the
+  conditions can be measured locally. It does not need the `parallel`
+  feature (#202).
+- `examples/heat_transfer_1d`, the heat-transfer reference example: a steel
+  bar in physical units, with both ends held by `Dirichlet` conditions and
+  the conduction term written as λT″ + λ′T′ from the Laplacian, the centred
+  gradient and two `CoefficientField`s. It cools a homogeneous bar and
+  checks Crank–Nicolson and BDF2 against the Fourier-series solution, then
+  heats a bar whose conductivity doubles along its length and checks
+  Backward Euler against the exact steady profile. It exits with an error
+  beyond its tolerances and runs in CI as the first reference example
+  (#175).
+- `benches/oxiflow_parallel`: a `coefficient_dispatch` diagnostic for
+  `CoefficientField`, with the `parallel` feature. It times the evaluation
+  of a c(x, t) field forced sequential or parallel, at a new time on every
+  call, for the graded conductivity of the heat-transfer example and for a
+  costlier two-layer profile, so that the field's dispatch threshold can be
+  measured locally (#175).
+- `examples/magnetic_diffusion_1d`, the electromagnetism reference example
+  (prototype of the diffusive regime): a field step of 0.1 T at the surface
+  of a copper plate and of an aluminium plate, in physical units, with both
+  faces held by `Dirichlet` conditions and BDF2 at the solver's default
+  Newton budget. It checks the field against the half-space `erfc` solution
+  and the half-field penetration depth against its sqrt(ηt) scaling, in both
+  metals and at three times, exits with an error beyond its tolerances and
+  runs in CI with the reference examples (#179).
+- `examples/consolidation_1d`, the geomechanics reference example: Terzaghi
+  consolidation of a clay layer under a 100 kPa load, in physical units,
+  with both faces drained by `Dirichlet` conditions and BDF2 at the solver's
+  default Newton budget. By symmetry the run also stands for a layer half as
+  thick on an impermeable base. It checks the excess pore-pressure profiles
+  and the average degree of consolidation U(Tv) against Terzaghi's series,
+  truncated with an explicit bound on the neglected terms, exits with an
+  error beyond its tolerances and runs in CI with the reference examples
+  (#178).
+- `examples/burgers_boundary_layer`, the fluid-mechanics reference example:
+  a viscous Burgers shock, in dimensionless form, runs into a wall held at
+  zero velocity and relaxes to a steady boundary layer, for Re = 50, 100 and
+  200 on 401 nodes with RK4. It reuses the shared `viscous_burgers` model
+  unchanged, checks the steady profile u = A tanh(A (1 − x) / (2ν)) and the
+  99 % thickness (2ν / A) atanh(0.99), exits with an error beyond its
+  tolerances and runs in CI with the reference examples (#177).
+- `examples/competitive_frontal_analysis`, the chromatography reference
+  example: a clean column fed with 0.1 mol/L of two solutes competing for
+  the same sites (competitive Langmuir isotherm, ideal model), on 401 nodes
+  with RK4. It reuses the shared `langmuir_multi` model unchanged, checks the
+  outlet times of the two shocks, the roll-up plateau of the less retained
+  solute and the mass balance against the equilibrium theory (Nicoud,
+  *Chromatographic Processes*, 2015), exits with an error beyond its
+  tolerances and runs in CI with the reference examples (#174).
+- `examples/gray_scott_1d`, the reaction–diffusion reference example: the
+  Gray–Scott model in dimensionless form on a periodic 1D ring, closed by
+  the model itself across its two end nodes. Single modes laid on a
+  Turing-unstable homogeneous state grow or decay at the rates of the
+  linearised discrete equations (four modes, relative error checked to
+  1e-7); a local perturbation of the trivial state grows into pulses that
+  split until the ring fills, checked by the pulse count at three times and
+  by the mirror symmetry of the state. The example exits with an error
+  beyond its tolerances and runs in CI with the reference examples (#176).
+- `examples/lahar_lake_wave`, the surface-geophysics reference example: a
+  lahar (the DD-032 multi-field model, 20 m²/s with a solids fraction of
+  0.2) runs down a 4 km channel and pours over a lip into a lake 15 m deep.
+  Channel and lake are two domains on their own grids, advanced by
+  `MultiDomainOrchestrator` and coupled by two `CouplingOperator`s that
+  carry the outflow across the lip. The shared shallow-layer flux
+  (`rsc/models/lahar_flux.rs`) takes one treatment per edge (truncation,
+  wall, or a face left to a coupling), its default unchanged. The example
+  checks that the lake stays bitwise at rest until the lahar reaches it,
+  that mass and solids cross the lip without loss to rounding, and that the
+  bore raised in the lake obeys the Rankine–Hugoniot conditions; it exits
+  with an error beyond its tolerances and runs in CI with the reference
+  examples (#180).
+- `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
+  `CrankNicolsonSolver` (`sparse` feature), configured by the same
+  builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and
+  `with_jacobian_bandwidth`, counted in flat unknowns (`d·(s + 1) − 1` for
+  `d` interleaved components). The Backward Euler bootstrap step and the
+  BDF2 update both take it, through the iterated Newton loop and with the
+  solver's Newton parameters. Without these builders the solver stays on
+  the dense path, and its results are unchanged bit for bit (#133).
+
+### Changed
+
+- Boundary conditions are applied before the calculators that read the
+  state: at each derivative evaluation, the calculators providing the
+  variables the conditions require run first, then the conditions, then the
+  other calculators and `compute_physics`. A gradient or Laplacian no longer
+  sees a boundary value that drifted since the last evaluation; with
+  boundary conditions, results change accordingly (DD-070, #201).
+- The solver drivers (fixed-step loop, DoPri45, operator splitting,
+  `MultiDomainOrchestrator`) apply the boundary conditions to the initial
+  state and to the state at the end of each step, before checking and saving
+  it: every saved state satisfies them, including a value that depends on
+  time. `SteppableSolver::step` itself does not (DD-070, #201).
+- `DanckwertsInlet` sets the inlet node from its neighbour,
+  `u0 = (u_feed + κ u1) / (1 + κ)` with `κ = D / (v (x1 − x0))`, the
+  one-sided discretisation of the Robin condition solved for `u0`. It now
+  requires the feed variable only, no longer the spatial gradient, declares
+  node 0, and refuses a mesh with fewer than two nodes or whose node 1 is not
+  downstream of node 0. Its values change accordingly (DD-070, #201).
+- `DanckwertsInlet` and `DanckwertsOutlet` act on a boundary region of the
+  mesh, resolved through `Mesh::boundary_neighbours`, instead of node indices:
+  every node of the region is set from its interior neighbour. `new` keeps its
+  signature and its region (the lower face of axis 0 for the inlet, the upper
+  one for the outlet), so results on 1D meshes are unchanged bit for bit; the
+  new `on` method chooses another face, e.g. for a flow towards decreasing
+  `x`. Both conditions gain a public `region` field. The 1D-only check moves
+  to the mesh, which now also refuses a boundary pair not ordered along the
+  axis. The outlet, formerly a unit value, serialises as a map holding its
+  region (DA-071, #204).
+- `ComputeContext` stores its values behind `Arc`. `insert` and the typed
+  accessors keep their signatures and still return references, so models
+  read the context as before (#196).
+- The finite-difference Jacobians of the implicit methods (dense and
+  banded) allocate one work state per Jacobian and perturb it in place,
+  instead of a new copy per column or colour plus, for a `VectorField`
+  state, two transposing copies (one to build the perturbed state, one to
+  read the derivative). The Jacobians are bit-for-bit unchanged (#197).
+- The banded finite-difference Jacobian (`sparse` feature) is assembled
+  directly in compressed-column form: the band structure is built from the
+  system size and the bandwidth, and each column is written once in its
+  final place. The θ-method folds `I − θΔt·J` into it in place. The
+  intermediate list of entries, its conversion to faer triplets and the
+  sort done by `SparseColMat::try_new_from_triplets` are gone. Matrices and
+  steps are bit-for-bit unchanged (#199).
+- `Cargo.toml` sets `autobenches = false`: `oxiflow_parallel` is the only
+  bench target, as intended. Cargo no longer also builds each module of
+  `benches/` as an empty standalone target (#199).
+- **Breaking:** `IntegratorSpec::BDF2` gains `sparse_threshold` (default
+  100) and `jacobian_bandwidth` (default `None`), as `BackwardEuler` and
+  `CrankNicolson` have: a declared bandwidth builds the solver with
+  `FaerSparseSolver`. Code that builds the variant with a struct literal
+  must add the two fields; deserialised specifications are unaffected,
+  both fields having defaults (#133).
+- **Breaking:** `UniformGrid1D::new` returns `Result<Self, OxiflowError>`
+  (`OxiflowError::PreconditionFailed`, context `"UniformGrid1D"`) instead of
+  `Result<Self, String>`. `?` now works directly in functions returning
+  `OxiflowError`; the `.map_err(OxiflowError::InvalidDomain)` workaround is
+  gone from `examples/lahar_multifield.rs` and its test.
+- Each reference model of the examples, tests and benchmarks (diffusion,
+  viscous Burgers, multi-compound Langmuir, multi-field lahar, lahar–lake)
+  is defined once under `rsc/models/` and included by every target that
+  uses it, instead of up to four copies. Example outputs and test
+  tolerances are unchanged. The `langmuir_multi_plot` example gets back the
+  parallel branch its copy had lost. The dispatch diagnostics of the
+  Langmuir and lahar benchmarks now time the models' own `compute_physics`
+  and `apply` with the threshold forced, instead of partial copies of their
+  loops; their default thresholds stay as measured at v0.9.0. The crate
+  itself and its public API are unchanged (#194).
+- Documentation: `ContextValue::VectorField` holds `d` values per node,
+  either vector components or `d` unknowns unrelated to the mesh dimension;
+  the default dispatch threshold of the finite-difference operators
+  (49 999) is documented as indicative (#140, #194).
+
+### Fixed
+
+- The lahar source term shared by the lahar examples, test and benchmark
+  (`rsc/models/lahar_source.rs`) injected the mass of water, `rho_f * Q`,
+  whatever the solids fraction `psi` of the inflow, so injected material
+  lost a share `(rho_s − rho_f) / rho_f * psi` of its volume; it now injects
+  the bulk mass `rho_bar(psi) * Q`. Deposition is also capped so that one
+  step deposits at most the solids present: in a thin layer, an explicit
+  step could take more and drive the depth negative. Pure-water runs, the
+  only ones so far, are unchanged bit for bit (#BUGNUM).
+- The banded path of `BackwardEulerSolver` and `CrankNicolsonSolver`
+  (`sparse` feature: sparse solver configured, bandwidth declared, system
+  above the sparse threshold) ran a single linearised correction without
+  any convergence check, so a nonlinear model silently got a first-order
+  result whatever Newton budget was configured. It now runs the same
+  iterated Newton loop as the dense path, with the solver's convergence
+  criterion, Jacobian strategy and iteration budget, and reports
+  `NewtonNotConverged` when the budget runs out. The dense fallback taken
+  below the sparse threshold also honours that configuration instead of a
+  fixed single correction. Both paths now treat the explicit and implicit
+  terms the same way, so a banded step matches a dense one up to rounding
+  (#206).
+- `BDF2Solver` runs its Backward Euler bootstrap step with its own Newton
+  configuration (`with_newton_convergence`, `with_jacobian_strategy`,
+  `with_max_newton_iterations`), as it does the BDF2 update. The bootstrap
+  step used a fixed single frozen-Jacobian correction, so a nonlinear model
+  could fail at the first step with `NewtonNotConverged { iterations: 1 }`
+  whatever budget was configured. Results with the default configuration
+  are unchanged (#NNN).
+- `DanckwertsInlet` diverged as soon as `κ = D / (v Δx) > 1`, i.e.
+  `(n − 1) / Pe > 1` on a uniform grid with `Pe = vL/D`: it set `u0` from
+  the gradient at node 0, computed from the previous `u0`, which iterated
+  `u0` with a factor `−κ` from one evaluation to the next. The inlet value
+  no longer depends on its previous value (#201).
+- The documentation of `boundary` stated that the conditions of a domain
+  are applied in ascending `priority()` order. The solver applies them in
+  the order they are declared, as it always has; the documentation now says
+  so, and `priority()` is documented as reserved for boundary conditions
+  (#202).
+- `UniformGrid1D::new` rejects non-finite bounds: a NaN bound used to pass
+  the `x_end > x_start` check and yield a grid of NaN nodes.
+- `FDGradientCalculator` and `FDLaplacianCalculator` return
+  `OxiflowError::PreconditionFailed` from `compute()` on a mesh their
+  stencils cannot handle, instead of a silently wrong field: a mesh that is
+  not 1D, a 1D mesh whose node spacing is not uniform or differs from
+  `characteristic_length()` (relative tolerance `1e-6`), and, for the
+  gradient, a `dimension` beyond the mesh dimension. The check runs once, at
+  construction; `new()` keeps its signature and results on `UniformGrid1D`
+  are unchanged (#186).
+- `DanckwertsInlet::apply` and `DanckwertsOutlet::apply` return
+  `OxiflowError::PreconditionFailed` on a mesh that is not 1D: both locate
+  the boundary by node index (`0` and `n − 1`), which only an ordered 1D grid
+  makes meaningful (#187).
+- Divergence detection covers every numeric state variant. A NaN or an
+  infinity in a `VectorField` state used to go unnoticed: the run ended with
+  `Ok` and non-finite states, and `Solver::on_divergence` was never called.
+  It now raises `OxiflowError::SolverDivergence` with a snapshot, as for a
+  `ScalarField` (#192).
+- `OperatorSplittingSolver::solve` hands a `SimulationSnapshot` to
+  `Solver::on_divergence` before returning `SolverDivergence`, like every
+  other solver. The snapshot is built by one shared helper in all solver
+  loops (#134).
+- Time integrators advance `VectorField` states (n nodes × d components)
+  as they do `ScalarField` states, instead of failing with `TypeMismatch`:
+  `RK4Solver`, `DoPri45Solver` (error norm over every component),
+  `BackwardEulerSolver` and `CrankNicolsonSolver`, dense and banded paths,
+  `BDF2Solver`, and `OperatorSplittingSolver` through its sub-solvers.
+  The implicit solvers order the unknowns of a `VectorField` by node, so
+  `with_jacobian_bandwidth` takes `d·(s + 1) − 1` for `d` components and a
+  stencil of half-width `s`, and `with_sparse_threshold` counts unknowns
+  (nodes × components). `ScalarField` results are bit-identical. Boundary
+  conditions applied through `BoundaryCondition::apply` still take a single
+  field: a `VectorField` state with conditions attached is refused with
+  `TypeMismatch`, as documented; its boundaries go through `ghost_value()`
+  (#192).
+
+### Security
+
+- The `vtk` feature no longer depends on `vtkio`. `SimulationResult::write_vtk`
+  now writes the `.vtu` file itself, with an unchanged signature and the same
+  inline `binary` (base64) data arrays as before, so NaN and infinities in a
+  diverged state are still exported bit for bit. This removes
+  RUSTSEC-2026-0041 (`lz4_flex 0.7.5`), RUSTSEC-2026-0194 and
+  RUSTSEC-2026-0195 (`quick-xml 0.22.0`) from the dependency tree, along with
+  the future-incompatibility warning `nom 3.2.1` raised on builds with `vtk`
+  (#191).
+
+---
+
 ## [0.9.0] - 2026-09-16
 
 ### Added

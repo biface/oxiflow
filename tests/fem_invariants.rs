@@ -1,9 +1,9 @@
 //! # Integration test: FEM invariants INV-1 and INV-3 (#172)
 //!
 //! Regression gate for the parts of the FEM invariants that hold today, written
-//! from outside the crate on purpose: every `Mesh` here is implemented in this
-//! file, the way a downstream crate (or the J11 unstructured meshes) would do
-//! it, without access to the engine's internals.
+//! from outside the crate on purpose: every `Mesh` here is implemented outside
+//! it (`tests/common/meshes.rs`), the way a downstream crate (or the J11
+//! unstructured meshes) would do it, without access to the engine's internals.
 //!
 //! - **INV-1 (abstract `Mesh`)** — the solver core (`Scenario`, the context
 //!   pipeline, `ForwardEulerSolver`) runs unchanged on a non-uniform 1D mesh
@@ -14,12 +14,15 @@
 //!   inter-domain logic: it refuses a multi-domain scenario instead of running
 //!   it.
 //!
-//! What this file does *not* guard yet: components that accept any `Mesh` but
-//! are only correct on a uniform 1D grid. Those are findings of the #172 audit,
-//! each tracked by its own issue; their guard tests land with their fix.
+//! Components that accept any `Mesh` but are only correct on a uniform 1D grid
+//! (findings of the #172 audit) are guarded in the tests of the component
+//! itself: `tests/fd_calculators.rs` and `tests/danckwerts.rs`.
+
+mod common;
 
 use std::sync::Arc;
 
+use common::meshes::{ScatteredMesh2D, StretchedGrid1D};
 use nalgebra::DVector;
 use oxiflow::{
     context::{
@@ -35,90 +38,6 @@ use oxiflow::{
         Solver, SolverConfiguration,
     },
 };
-
-// ── Meshes implemented outside the crate ──────────────────────────────────────
-
-/// Non-uniform 1D mesh on `[0, 1]` with geometric spacing: each cell is
-/// `ratio` times wider than the previous one.
-#[derive(Debug)]
-struct StretchedGrid1D {
-    nodes: Vec<[f64; 1]>,
-    h_min: f64,
-}
-
-impl StretchedGrid1D {
-    fn new(n_points: usize, ratio: f64) -> Self {
-        assert!(n_points >= 2 && ratio > 1.0);
-        let n_cells = (n_points - 1) as i32;
-        // First cell width so that the geometric series of widths sums to 1.
-        let h0 = (ratio - 1.0) / (ratio.powi(n_cells) - 1.0);
-        let mut x = 0.0;
-        let mut nodes = Vec::with_capacity(n_points);
-        nodes.push([0.0]);
-        for k in 0..n_cells {
-            x += h0 * ratio.powi(k);
-            nodes.push([x]);
-        }
-        // Pin the last node to the exact right end (removes rounding drift).
-        nodes[n_points - 1] = [1.0];
-        Self { nodes, h_min: h0 }
-    }
-}
-
-impl Mesh for StretchedGrid1D {
-    fn n_dof(&self) -> usize {
-        self.nodes.len()
-    }
-    fn coordinates(&self, i: usize) -> &[f64] {
-        &self.nodes[i]
-    }
-    fn spatial_dimension(&self) -> usize {
-        1
-    }
-    fn characteristic_length(&self) -> f64 {
-        self.h_min
-    }
-}
-
-/// 2D node cloud on a jittered `side × side` lattice of the unit square — no
-/// connectivity, which is all a pointwise model needs.
-#[derive(Debug)]
-struct ScatteredMesh2D {
-    nodes: Vec<[f64; 2]>,
-    h: f64,
-}
-
-impl ScatteredMesh2D {
-    fn new(side: usize) -> Self {
-        assert!(side >= 2);
-        let h = 1.0 / (side - 1) as f64;
-        let mut nodes = Vec::with_capacity(side * side);
-        for j in 0..side {
-            for i in 0..side {
-                // Deterministic jitter, a quarter of the spacing at most.
-                let jx = 0.25 * h * ((i * 7 + j * 3) % 5) as f64 / 4.0;
-                let jy = 0.25 * h * ((i * 2 + j * 5) % 5) as f64 / 4.0;
-                nodes.push([i as f64 * h + jx, j as f64 * h + jy]);
-            }
-        }
-        Self { nodes, h }
-    }
-}
-
-impl Mesh for ScatteredMesh2D {
-    fn n_dof(&self) -> usize {
-        self.nodes.len()
-    }
-    fn coordinates(&self, i: usize) -> &[f64] {
-        &self.nodes[i]
-    }
-    fn spatial_dimension(&self) -> usize {
-        2
-    }
-    fn characteristic_length(&self) -> f64 {
-        self.h
-    }
-}
 
 // ── Pointwise model ───────────────────────────────────────────────────────────
 

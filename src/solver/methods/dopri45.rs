@@ -28,6 +28,15 @@
 //! supplies the error norm input (the RK4/5 difference) and the rejection
 //! retry loop. See [`super::step_control`] for the controller itself.
 //!
+//! ## State variants
+//!
+//! Stage states and the error estimate are built with the crate's linear
+//! combination of states, and the error norm reads every value of the
+//! state, so a `VectorField` (n nodes × d components) is advanced like a
+//! `ScalarField`: all components weigh the same in the RMS norm (#192).
+//! For a `ScalarField`, results are bit-identical to the former `DVector`
+//! arithmetic.
+//!
 //! ## Scope — `Solver` only, not `SteppableSolver` (see discussion)
 //!
 //! Unlike BDF2 (DD-034), this solver does **not** implement
@@ -56,15 +65,15 @@
 
 use std::collections::HashMap;
 
-use nalgebra::DVector;
-
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
 use crate::solver::methods::step_control::StepSizeController;
-use crate::solver::methods::{check_finite, evaluate_derivative};
+use crate::solver::methods::{
+    check_finite, divergence_snapshot, enforce_boundary_conditions, evaluate_derivative,
+};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -174,6 +183,7 @@ impl Solver for DoPri45Solver {
         let chain = build_calculator_chain(&requirements, &config.calculators)?;
 
         let mut u = domain.model.initial_state(domain.mesh.as_ref());
+        enforce_boundary_conditions(domain, &chain, &mut u, t_start, dt_init)?;
         let mut t = t_start;
         let mut dt = dt_init;
 
@@ -202,32 +212,28 @@ impl Solver for DoPri45Solver {
 
             loop {
                 let mut attempt_state = u.clone();
-                let (y5_field, error_field) =
-                    dopri45_stages(domain, &chain, &mut attempt_state, t, local_dt)?;
+                let (y5, error) = dopri45_stages(domain, &chain, &mut attempt_state, t, local_dt)?;
 
-                let error_norm = controller.error_norm(&error_field, &y5_field);
+                let error_norm = controller.state_error_norm(&error, &y5)?;
 
                 if controller.accept(error_norm) {
-                    u = ContextValue::ScalarField(y5_field);
+                    u = y5;
                     t += local_dt;
+                    // Saved states satisfy the boundary conditions (DD-070).
+                    enforce_boundary_conditions(domain, &chain, &mut u, t, local_dt)?;
                     accepted_steps += 1;
                     accepted_since_save += 1;
 
                     if let Err(e) = check_finite(&u, t) {
-                        self.on_divergence(&crate::solver::snapshot::SimulationSnapshot {
-                            time_config: config.time.clone(),
-                            integrator: config.integrator.clone(),
-                            state: u.clone(),
+                        self.on_divergence(&divergence_snapshot(
+                            config,
+                            &u,
                             t,
-                            n_steps: accepted_steps,
-                            error: Some(e.to_string()),
-                            partial: Some(SimulationResult {
-                                states: states.clone(),
-                                times: times.clone(),
-                                n_steps: accepted_steps,
-                                metadata: HashMap::new(),
-                            }),
-                        });
+                            accepted_steps,
+                            e.to_string(),
+                            &states,
+                            &times,
+                        ));
                         return Err(e);
                     }
 
@@ -253,20 +259,15 @@ impl Solver for DoPri45Solver {
                          satisfy rtol/atol even at dt_min={}",
                         controller.dt_min()
                     );
-                    self.on_divergence(&crate::solver::snapshot::SimulationSnapshot {
-                        time_config: config.time.clone(),
-                        integrator: config.integrator.clone(),
-                        state: u.clone(),
+                    self.on_divergence(&divergence_snapshot(
+                        config,
+                        &u,
                         t,
-                        n_steps: accepted_steps,
-                        error: Some(reason.clone()),
-                        partial: Some(SimulationResult {
-                            states: states.clone(),
-                            times: times.clone(),
-                            n_steps: accepted_steps,
-                            metadata: HashMap::new(),
-                        }),
-                    });
+                        accepted_steps,
+                        reason.clone(),
+                        &states,
+                        &times,
+                    ));
                     return Err(OxiflowError::SolverDivergence { time: t, reason });
                 }
 
@@ -288,90 +289,82 @@ impl Solver for DoPri45Solver {
 }
 
 /// Computes the 7 Dormand-Prince stages and returns `(y_5th_order,
-/// error_estimate)`.
+/// error_estimate)`, both of the same variant as `state` (`ScalarField` or
+/// `VectorField`, #192).
 ///
 /// `state` (`u^n`) is mutated in-place by boundary condition application
 /// at stage 1, same contract as every other solver in this crate (see
-/// [`evaluate_derivative`]).
+/// [`evaluate_derivative`]). Every stage state is `u + dt Σ aᵢⱼ kⱼ` and the
+/// error is `dt Σ eᵢ kᵢ`, accumulated term by term in the order below: for
+/// a `ScalarField`, results are bit-identical to the former `DVector`
+/// expressions.
 fn dopri45_stages(
     domain: &Domain,
     chain: &[&dyn ContextCalculator],
     state: &mut ContextValue,
     t: f64,
     dt: f64,
-) -> Result<(DVector<f64>, DVector<f64>), OxiflowError> {
+) -> Result<(ContextValue, ContextValue), OxiflowError> {
     // Stage 1.
-    let k1_val = evaluate_derivative(domain, chain, state, t, dt)?;
-    let u_field = state.as_scalar_field()?.clone();
-    let k1 = k1_val.as_scalar_field()?.clone();
+    let k1 = evaluate_derivative(domain, chain, state, t, dt)?;
+    let u = &*state;
 
     // Stage 2.
-    let y2 = u_field.clone() + k1.clone() * (dt * A21);
-    let mut s2 = ContextValue::ScalarField(y2);
-    let k2_val = evaluate_derivative(domain, chain, &mut s2, t + C2 * dt, dt)?;
-    let k2 = k2_val.as_scalar_field()?.clone();
+    let mut s2 = u.linear_combination(&[(dt * A21, &k1)])?;
+    let k2 = evaluate_derivative(domain, chain, &mut s2, t + C2 * dt, dt)?;
 
     // Stage 3.
-    let y3 = u_field.clone() + k1.clone() * (dt * A31) + k2.clone() * (dt * A32);
-    let mut s3 = ContextValue::ScalarField(y3);
-    let k3_val = evaluate_derivative(domain, chain, &mut s3, t + C3 * dt, dt)?;
-    let k3 = k3_val.as_scalar_field()?.clone();
+    let mut s3 = u.linear_combination(&[(dt * A31, &k1), (dt * A32, &k2)])?;
+    let k3 = evaluate_derivative(domain, chain, &mut s3, t + C3 * dt, dt)?;
 
     // Stage 4.
-    let y4 = u_field.clone()
-        + k1.clone() * (dt * A41)
-        + k2.clone() * (dt * A42)
-        + k3.clone() * (dt * A43);
-    let mut s4 = ContextValue::ScalarField(y4);
-    let k4_val = evaluate_derivative(domain, chain, &mut s4, t + C4 * dt, dt)?;
-    let k4 = k4_val.as_scalar_field()?.clone();
+    let mut s4 = u.linear_combination(&[(dt * A41, &k1), (dt * A42, &k2), (dt * A43, &k3)])?;
+    let k4 = evaluate_derivative(domain, chain, &mut s4, t + C4 * dt, dt)?;
 
     // Stage 5.
-    let y5s = u_field.clone()
-        + k1.clone() * (dt * A51)
-        + k2.clone() * (dt * A52)
-        + k3.clone() * (dt * A53)
-        + k4.clone() * (dt * A54);
-    let mut s5 = ContextValue::ScalarField(y5s);
-    let k5_val = evaluate_derivative(domain, chain, &mut s5, t + C5 * dt, dt)?;
-    let k5 = k5_val.as_scalar_field()?.clone();
+    let mut s5 = u.linear_combination(&[
+        (dt * A51, &k1),
+        (dt * A52, &k2),
+        (dt * A53, &k3),
+        (dt * A54, &k4),
+    ])?;
+    let k5 = evaluate_derivative(domain, chain, &mut s5, t + C5 * dt, dt)?;
 
     // Stage 6.
-    let y6 = u_field.clone()
-        + k1.clone() * (dt * A61)
-        + k2.clone() * (dt * A62)
-        + k3.clone() * (dt * A63)
-        + k4.clone() * (dt * A64)
-        + k5.clone() * (dt * A65);
-    let mut s6 = ContextValue::ScalarField(y6);
-    let k6_val = evaluate_derivative(domain, chain, &mut s6, t + C6 * dt, dt)?;
-    let k6 = k6_val.as_scalar_field()?.clone();
+    let mut s6 = u.linear_combination(&[
+        (dt * A61, &k1),
+        (dt * A62, &k2),
+        (dt * A63, &k3),
+        (dt * A64, &k4),
+        (dt * A65, &k5),
+    ])?;
+    let k6 = evaluate_derivative(domain, chain, &mut s6, t + C6 * dt, dt)?;
 
     // Stage 7 -- A72 is 0.0, the k2 term is omitted entirely. The state
     // this stage is evaluated at, `y7`, *is* the 5th-order solution
     // (FSAL: b_i == a7i for i=1..6, b7 == 0 -- see module docs).
-    let y7 = u_field.clone()
-        + k1.clone() * (dt * A71)
-        + k3.clone() * (dt * A73)
-        + k4.clone() * (dt * A74)
-        + k5.clone() * (dt * A75)
-        + k6.clone() * (dt * A76);
-    let mut s7 = ContextValue::ScalarField(y7.clone());
-    let k7_val = evaluate_derivative(domain, chain, &mut s7, t + C7 * dt, dt)?;
-    let k7 = k7_val.as_scalar_field()?.clone();
-
-    let y_5th = y7;
+    let y7 = u.linear_combination(&[
+        (dt * A71, &k1),
+        (dt * A73, &k3),
+        (dt * A74, &k4),
+        (dt * A75, &k5),
+        (dt * A76, &k6),
+    ])?;
+    let mut s7 = y7.clone();
+    let k7 = evaluate_derivative(domain, chain, &mut s7, t + C7 * dt, dt)?;
 
     // Error estimate: dt * sum((b_i - b*_i) * k_i).
-    let error: DVector<f64> = k1 * (dt * E1)
-        + k2 * (dt * E2)
-        + k3 * (dt * E3)
-        + k4 * (dt * E4)
-        + k5 * (dt * E5)
-        + k6 * (dt * E6)
-        + k7 * (dt * E7);
+    let error = ContextValue::weighted_sum(&[
+        (dt * E1, &k1),
+        (dt * E2, &k2),
+        (dt * E3, &k3),
+        (dt * E4, &k4),
+        (dt * E5, &k5),
+        (dt * E6, &k6),
+        (dt * E7, &k7),
+    ])?;
 
-    Ok((y_5th, error))
+    Ok((y7, error))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -383,66 +376,10 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::mesh::{Mesh, UniformGrid1D};
     use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::model::{ExponentialDecay, ZeroDerivative};
     use crate::solver::config::{IntegratorKind, SolverConfiguration, TimeConfiguration};
     use crate::solver::scenario::Scenario;
-
-    #[derive(Debug)]
-    struct ExponentialDecay {
-        lambda: f64,
-    }
-
-    impl RequiresContext for ExponentialDecay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ExponentialDecay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.lambda * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "exponential_decay"
-        }
-    }
-
-    #[derive(Debug)]
-    struct ZeroDerivative;
-
-    impl RequiresContext for ZeroDerivative {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ZeroDerivative {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(DVector::zeros(u.len())))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 2.5))
-        }
-
-        fn name(&self) -> &str {
-            "zero_derivative"
-        }
-    }
+    use nalgebra::DVector;
 
     fn make_mesh(n: usize) -> Box<dyn Mesh> {
         Box::new(UniformGrid1D::new(n, 0.0, 1.0).unwrap())
@@ -502,7 +439,7 @@ mod tests {
 
     #[test]
     fn zero_derivative_field_stays_constant() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(5));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(5));
         let config = make_config(1.0, 0.1, 1e-6, 1e-9);
         let result = DoPri45Solver.solve(&scenario, &config).unwrap();
         for state in &result.states {
@@ -592,7 +529,7 @@ mod tests {
 
     #[test]
     fn fixed_step_control_returns_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = SolverConfiguration::new(
             TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }),
             IntegratorKind::DoPri45,
@@ -602,7 +539,7 @@ mod tests {
 
     #[test]
     fn invalid_dt_bounds_return_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = SolverConfiguration::new(
             TimeConfiguration::new(
                 1.0,
@@ -621,7 +558,8 @@ mod tests {
 
     #[test]
     fn t_end_before_t_start_returns_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2)).with_t_start(5.0);
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2))
+            .with_t_start(5.0);
         let config = make_config(1.0, 0.1, 1e-6, 1e-9);
         assert!(DoPri45Solver.solve(&scenario, &config).is_err());
     }

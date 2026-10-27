@@ -61,6 +61,24 @@ impl LinearSolver for NalgebraDenseSolver {
     }
 }
 
+// ── Test linear solver ────────────────────────────────────────────────────────
+
+/// Delegates to [`NalgebraDenseSolver`] and counts its calls, for the
+/// tests of the implicit solvers.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct CountingLinearSolver {
+    pub(crate) calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[cfg(test)]
+impl LinearSolver for CountingLinearSolver {
+    fn solve(&self, a: &DMatrix<f64>, b: &DVector<f64>) -> Result<DVector<f64>, OxiflowError> {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        NalgebraDenseSolver.solve(a, b)
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

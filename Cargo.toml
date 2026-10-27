@@ -1,8 +1,17 @@
 [package]
 name        = "oxiflow"
-version     = "0.9.0"
+version     = "0.10.0-rc.1"
 edition     = "2021"
 rust-version = "1.84"
+# Résolveur sensible au MSRV — DT-067 (#183) : à la résolution, Cargo préfère
+# la version la plus récente compatible avec `rust-version`. Préférence, pas
+# contrainte : une dépendance transitive peut encore exiger davantage, d'où les
+# épinglages du `Cargo.lock` versionné, contrôlés par le job MSRV (#168).
+resolver    = "3"
+# Une seule cible de benchmark, `oxiflow_parallel` (voir `[[bench]]`), qui
+# regroupe les modules de `benches/` par `mod`. Sans cette ligne, Cargo
+# compilerait aussi chaque module comme une cible autonome et vide (#199).
+autobenches = false
 
 description = "Generic PDE solving engine for transport, reaction and diffusion phenomena (∂u/∂t + ∇·F = S)"
 license     = "Apache-2.0"
@@ -47,10 +56,6 @@ serde = { version = "1", features = ["derive"], optional = true }
 # maintenu (Institut météorologique norvégien), même auteur original en
 # co-mainteneur.
 hdf5  = { package = "hdf5-metno", version = "0.10", optional = true }
-# feature `vtk`      — export XML (.vtu) de SimulationResult::write_vtk()
-# (DD-027, issue #78). Pure Rust, aucune dépendance système (contrairement à
-# `hdf5`) — voir DD-027 : choisi comme pivot d'interop pour ParaView/VisIt.
-vtkio = { version = "0.6", optional = true }
 # feature `sparse`   — solveur linéaire creux pour les intégrateurs implicites
 # sur grandes grilles. DD-013 (issue #13, décision faer pour le volet creux) ;
 # DD-043 (issue #50, v0.6.0) : trait frère de LinearSolver, pas une extension
@@ -114,7 +119,13 @@ serde    = ["dep:serde", "nalgebra/serde-serialize", "dep:serde_json", "dep:binc
 # (issue #75). Dépendance migrée vers `hdf5-metno` (chore #79) — voir le
 # commentaire sur la dépendance ci-dessus.
 hdf5     = ["dep:hdf5"]
-vtk      = ["dep:vtkio"]
+
+# Export XML VTK (`.vtu`) de `SimulationResult::write_vtk()` — DT-027 (issue
+# #75, décision ; issue #78, implémentation). Écriture interne, sans dépendance
+# (#191) : `vtkio 0.6.3` tirait trois avis RUSTSEC (`lz4_flex`, `quick-xml`)
+# qu'aucune version publiée ne corrige. La feature reste, vide, pour garder
+# l'API et les checks CI `vtk` ; la généralisation 2D/3D vient à v0.11.0.
+vtk      = []
 
 # Solveur linéaire creux (faer) — DD-013 (issue #13) / DD-043 (issue #50,
 # v0.6.0). Trait frère de LinearSolver (solver::sparse), pas une extension.
@@ -148,6 +159,12 @@ criterion = { version = "0.8", features = ["html_reports"] }
 # used; Circle/PathElement/RGBColor/the 8 basic named colors are core,
 # not feature-gated.
 plotters = { version = "0.3", default-features = false, features = ["svg_backend", "line_series"] }
+# quick-xml — relecture des `.vtu` dans le test d'aller-retour de `write_vtk`
+# (#191) : le fichier est vérifié par un vrai parseur XML, pas par des
+# comparaisons de texte. `0.41` : première version corrigée des avis
+# RUSTSEC-2026-0194/-0195 ; `0.42` déclare `rust-version = "1.86"`, au-dessus
+# de la MSRV — le caret `^0.41` l'exclut.
+quick-xml = "0.41"
 
 [[bench]]
 name    = "oxiflow_parallel"

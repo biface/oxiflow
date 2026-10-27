@@ -6,9 +6,9 @@
 //! Crank, *The Mathematics of Diffusion*, 1975), same convention used in
 //! `examples/diffusion_1d.rs`'s own module doc.
 //!
-//! Model code duplicated from `examples/diffusion_1d.rs` (same
-//! convention already established for `tests/`/`benches/` -- see that
-//! file's own module doc for the physics).
+//! The model comes from `rsc/models/diffusion_1d.rs`, shared with
+//! `examples/diffusion_1d.rs` (see that file's module doc for the
+//! physics).
 //!
 //! Analytical solution rendered as sparse circle markers rather than a
 //! dashed line: `plotters` has no simple, reliable dashed-line style on
@@ -20,14 +20,9 @@
 
 use std::sync::Arc;
 
-use nalgebra::DVector;
 use oxiflow::{
-    context::{
-        calculators::FDLaplacianCalculator, compute::ComputeContext, error::OxiflowError,
-        value::ContextValue, variable::ContextVariable,
-    },
+    context::calculators::FDLaplacianCalculator,
     mesh::{Mesh, UniformGrid1D},
-    model::traits::{PhysicalModel, RequiresContext},
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::ForwardEulerSolver,
@@ -37,59 +32,10 @@ use oxiflow::{
 };
 use plotters::prelude::*;
 
-fn laplacian_variable() -> ContextVariable {
-    ContextVariable::External {
-        name: "laplacian".into(),
-    }
-}
+#[path = "../rsc/models/diffusion_1d.rs"]
+mod diffusion_1d_model;
 
-struct Diffusion1D {
-    alpha: f64,
-    amplitude: f64,
-    center: f64,
-    sigma0: f64,
-}
-
-impl Diffusion1D {
-    fn exact(&self, x: f64, t: f64) -> f64 {
-        let sigma_t = (self.sigma0.powi(2) + 2.0 * self.alpha * t).sqrt();
-        let envelope = self.amplitude * self.sigma0 / sigma_t;
-        let exponent = -(x - self.center).powi(2) / (2.0 * sigma_t.powi(2));
-        envelope * exponent.exp()
-    }
-}
-
-impl RequiresContext for Diffusion1D {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![laplacian_variable()]
-    }
-}
-
-impl PhysicalModel for Diffusion1D {
-    fn compute_physics(
-        &self,
-        _state: &ContextValue,
-        ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        let lap = ctx.external(laplacian_variable())?.as_scalar_field()?;
-        Ok(ContextValue::ScalarField(lap.map(|v| self.alpha * v)))
-    }
-
-    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        let u0 = DVector::from_iterator(
-            mesh.n_dof(),
-            (0..mesh.n_dof()).map(|i| {
-                let x = mesh.coordinates(i)[0];
-                self.exact(x, 0.0)
-            }),
-        );
-        ContextValue::ScalarField(u0)
-    }
-
-    fn name(&self) -> &str {
-        "diffusion_1d"
-    }
-}
+use diffusion_1d_model::{laplacian_variable, Diffusion1D};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     const N_NODES: usize = 401;

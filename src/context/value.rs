@@ -44,7 +44,7 @@ use crate::context::error::OxiflowError;
 /// | Variant | Content | Example |
 /// |---------|---------|---------|
 /// | `ScalarField` | `DVector` — one scalar per node | porosity(x), T(x) |
-/// | `VectorField` | `DMatrix` — n_nodes × dim | velocity field u(x,y) |
+/// | `VectorField` | `DMatrix` — n_nodes × d | velocity field u(x,y), d species per node |
 ///
 /// # Reserved (v0.14.0 (J14), DD-057 — requires INV-2 / DiscreteOperator)
 ///
@@ -107,11 +107,14 @@ pub enum ContextValue {
     /// Length equals the number of degrees of freedom (`Mesh::n_dof()`).
     ScalarField(DVector<f64>),
 
-    /// One vector per mesh node, stored as `n_nodes × spatial_dim` matrix.
+    /// `d` values per mesh node, stored as an `n_nodes × d` matrix.
     ///
-    /// Row `i` holds the vector at node `i`. Dimensions (`n_nodes`,
-    /// `spatial_dim`) are available via `DMatrix::nrows()`/`ncols()`
-    /// (DD-026 INV-GPU-2).
+    /// Row `i` holds the values at node `i`. The `d` columns are either
+    /// the components of a vector quantity (`d` is then the spatial
+    /// dimension, as for a velocity field) or `d` unknowns carried by each
+    /// node, unrelated to the mesh dimension: two species on a 1D mesh give
+    /// `d = 2` (#192). Dimensions (`n_nodes`, `d`) are available via
+    /// `DMatrix::nrows()`/`ncols()` (DD-026 INV-GPU-2).
     ///
     /// Memory layout: `DMatrix<f64>` is **column-major** (nalgebra default,
     /// Fortran order) — DD-026 INV-GPU-4. WGSL (the `wgpu` shader language)
@@ -276,8 +279,8 @@ impl ContextValue {
     /// full-length copy to every calculator call, on top of the stencil
     /// computation itself. Measured directly: at n=1,000,000, cloning a
     /// buffer this size costs ~650µs, comparable to the ~950µs the
-    /// Laplacian stencil itself measures at that size in `BENCHMARKS.md` --
-    /// close to doubling every number already recorded there). Only the
+    /// Laplacian stencil itself took at that size in the v0.9.0
+    /// measurements (#53) -- close to doubling each of them). Only the
     /// `VectorField` column-extraction case actually copies, since
     /// `compute_from_dx` and friends take `&DVector<f64>` specifically,
     /// not a generic matrix view, and a matrix column isn't stored the
@@ -332,27 +335,11 @@ impl ContextValue {
     /// Computes `self + dt * other`, handling `ScalarField` and
     /// `VectorField` uniformly.
     ///
-    /// This is the arithmetic combination every explicit time-stepping
-    /// integrator needs (`ForwardEulerSolver`'s own `u + dt*du/dt`, and —
-    /// not yet wired in, see the consequence note below — RK4's weighted
-    /// stage combinations, BDF2's history-weighted update, etc.).
-    /// Generalizes the same way [`Self::scalar_component`] did for
-    /// calculator input extraction, but for the solver's own state-update
-    /// arithmetic rather than input extraction.
-    ///
-    /// # Consequence not yet addressed
-    ///
-    /// Every integrator in `solver::methods` (`euler`, `backward_euler`,
-    /// `crank_nicolson`, `bdf2`, `rk4`, `dopri45`, `imex`,
-    /// `implicit`/`newton`) currently hardcodes `ScalarField`-only
-    /// arithmetic in its own stepping core, discovered when #138's
-    /// `VectorField` state hit `ForwardEulerSolver`'s `euler_step` and
-    /// failed with a `TypeMismatch`. Only `euler.rs`'s `euler_step` has
-    /// been switched to this method so far -- #138 only exercises
-    /// `ForwardEulerSolver`. The other seven sites are a separate,
-    /// larger piece of work (each integrator's own combination pattern,
-    /// not just a single `u + dt*du`), tracked separately rather than
-    /// attempted here.
+    /// The `u + dt·du/dt` update of `ForwardEulerSolver`. Generalizes the
+    /// same way [`Self::scalar_component`] did for calculator input
+    /// extraction, but for the solver's own state-update arithmetic. It is
+    /// the one-term case of the crate's internal linear combination of
+    /// states, which the multi-stage integrators use (#192).
     ///
     /// # Errors
     ///
@@ -361,31 +348,117 @@ impl ContextValue {
     /// - `OxiflowError::InvalidDomain` if their shapes don't match (length
     ///   for `ScalarField`, `(rows, cols)` for `VectorField`).
     pub fn add_scaled(&self, dt: f64, other: &ContextValue) -> Result<ContextValue, OxiflowError> {
-        match (self, other) {
-            (Self::ScalarField(u), Self::ScalarField(du)) => {
-                if u.len() != du.len() {
-                    return Err(OxiflowError::InvalidDomain(format!(
-                        "state length {} != derivative length {}",
-                        u.len(),
-                        du.len()
-                    )));
-                }
-                Ok(Self::ScalarField(u + du * dt))
-            }
-            (Self::VectorField(u), Self::VectorField(du)) => {
-                if u.shape() != du.shape() {
-                    return Err(OxiflowError::InvalidDomain(format!(
-                        "state shape {:?} != derivative shape {:?}",
-                        u.shape(),
-                        du.shape()
-                    )));
-                }
-                Ok(Self::VectorField(u + du * dt))
-            }
-            (a, b) => Err(OxiflowError::TypeMismatch {
-                expected: a.variant_name(),
-                actual: b.variant_name(),
+        self.linear_combination(&[(dt, other)])
+    }
+
+    /// Computes `self + Σ cᵢ · termᵢ` for `ScalarField` and `VectorField`
+    /// states — the state algebra of every time integrator (Runge–Kutta
+    /// stages, θ-method and BDF2 predictors), kept in one place instead of
+    /// repeated per method (#192).
+    ///
+    /// Terms are accumulated in order, each as `acc ← acc + cᵢ·termᵢ`, so
+    /// `u.linear_combination(&[(dt, du)])` is bit-identical to `u + du * dt`.
+    /// An empty `terms` returns a copy of `self`.
+    ///
+    /// Crate-internal for now: it may become public once the state algebra
+    /// is settled by the finite-element work (#150).
+    ///
+    /// # Errors
+    ///
+    /// - `OxiflowError::TypeMismatch` if a term is not the same variant as
+    ///   `self`, or `self` is neither `ScalarField` nor `VectorField`.
+    /// - `OxiflowError::InvalidDomain` if a term's shape differs from
+    ///   `self` (length for `ScalarField`, `(rows, cols)` for `VectorField`).
+    pub(crate) fn linear_combination(
+        &self,
+        terms: &[(f64, &ContextValue)],
+    ) -> Result<ContextValue, OxiflowError> {
+        match self {
+            Self::ScalarField(_) | Self::VectorField(_) => self.clone().accumulate(terms, 0),
+            other => Err(OxiflowError::TypeMismatch {
+                expected: "ScalarField or VectorField",
+                actual: other.variant_name(),
             }),
+        }
+    }
+
+    /// Computes `Σ cᵢ · termᵢ` for `ScalarField` and `VectorField` terms,
+    /// without a base state: the error estimate of an embedded Runge–Kutta
+    /// pair is the typical use (#192).
+    ///
+    /// The first term is scaled, then the others are accumulated in order
+    /// as in [`Self::linear_combination`], so the result is bit-identical
+    /// to `k₁ * c₁ + k₂ * c₂ + …` written with `DVector` arithmetic.
+    ///
+    /// # Errors
+    ///
+    /// - `OxiflowError::PreconditionFailed` if `terms` is empty.
+    /// - `OxiflowError::TypeMismatch` / `InvalidDomain` as for
+    ///   [`Self::linear_combination`], against the first term.
+    pub(crate) fn weighted_sum(
+        terms: &[(f64, &ContextValue)],
+    ) -> Result<ContextValue, OxiflowError> {
+        let Some((&(coefficient, first), rest)) = terms.split_first() else {
+            return Err(OxiflowError::PreconditionFailed {
+                context: "ContextValue::weighted_sum",
+                message: "at least one term is required".to_string(),
+            });
+        };
+        let scaled = match first {
+            Self::ScalarField(v) => Self::ScalarField(v * coefficient),
+            Self::VectorField(m) => Self::VectorField(m * coefficient),
+            other => {
+                return Err(OxiflowError::TypeMismatch {
+                    expected: "ScalarField or VectorField",
+                    actual: other.variant_name(),
+                })
+            }
+        };
+        scaled.accumulate(rest, 1)
+    }
+
+    /// Adds `Σ cᵢ · termᵢ` to `self` in place, in order. `first_index` is
+    /// the position of `terms[0]` in the caller's list, for error messages.
+    fn accumulate(
+        mut self,
+        terms: &[(f64, &ContextValue)],
+        first_index: usize,
+    ) -> Result<ContextValue, OxiflowError> {
+        for (offset, &(coefficient, term)) in terms.iter().enumerate() {
+            let index = first_index + offset;
+            match (&mut self, term) {
+                (Self::ScalarField(acc), Self::ScalarField(v)) => {
+                    if v.len() != acc.len() {
+                        return Err(OxiflowError::InvalidDomain(format!(
+                            "state length {} != length {} of term {index}",
+                            acc.len(),
+                            v.len()
+                        )));
+                    }
+                    acc.zip_apply(v, |a, b| *a += coefficient * b);
+                }
+                (Self::VectorField(acc), Self::VectorField(v)) => {
+                    if v.shape() != acc.shape() {
+                        return Err(OxiflowError::InvalidDomain(format!(
+                            "state shape {:?} != shape {:?} of term {index}",
+                            acc.shape(),
+                            v.shape()
+                        )));
+                    }
+                    acc.zip_apply(v, |a, b| *a += coefficient * b);
+                }
+                (state, term) => return Err(Self::term_mismatch(state, term)),
+            }
+        }
+        Ok(self)
+    }
+
+    /// `TypeMismatch` for a linear-combination term whose variant differs
+    /// from the state's.
+    fn term_mismatch(state: &ContextValue, term: &ContextValue) -> OxiflowError {
+        OxiflowError::TypeMismatch {
+            expected: state.variant_name(),
+            actual: term.variant_name(),
         }
     }
 
@@ -686,5 +759,118 @@ mod tests {
         for v in all_variants() {
             assert!(!format!("{:?}", v).is_empty());
         }
+    }
+
+    // ── linear_combination (#192) ────────────────────────────────────────────
+
+    fn field(values: &[f64]) -> ContextValue {
+        ContextValue::ScalarField(DVector::from_column_slice(values))
+    }
+
+    fn field_by_rows(rows: usize, values_by_row: &[f64]) -> ContextValue {
+        let cols = values_by_row.len() / rows;
+        ContextValue::VectorField(DMatrix::from_row_slice(rows, cols, values_by_row))
+    }
+
+    #[test]
+    fn linear_combination_of_scalar_fields() {
+        let u = field(&[1.0, 2.0, 3.0]);
+        let a = field(&[1.0, 0.0, -1.0]);
+        let b = field(&[0.5, 0.5, 0.5]);
+        let result = u.linear_combination(&[(2.0, &a), (-4.0, &b)]).unwrap();
+        assert_eq!(result, field(&[1.0, 0.0, -1.0]));
+    }
+
+    #[test]
+    fn linear_combination_of_vector_fields() {
+        let u = field_by_rows(2, &[1.0, 10.0, 2.0, 20.0]);
+        let a = field_by_rows(2, &[1.0, 1.0, 1.0, 1.0]);
+        let result = u.linear_combination(&[(0.5, &a), (0.5, &a)]).unwrap();
+        assert_eq!(result, field_by_rows(2, &[2.0, 11.0, 3.0, 21.0]));
+    }
+
+    #[test]
+    fn linear_combination_without_terms_copies_the_state() {
+        let u = field_by_rows(2, &[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(u.linear_combination(&[]).unwrap(), u);
+    }
+
+    #[test]
+    fn add_scaled_is_bit_identical_to_direct_arithmetic() {
+        // Values chosen so that rounding actually happens.
+        let u = DVector::from_vec(vec![0.1, 1.0 / 3.0, 7.0e-17, 1.0e16]);
+        let du = DVector::from_vec(vec![0.7, -2.0 / 3.0, 1.0e-16, 3.3]);
+        let dt = 0.013;
+        let direct = &u + &du * dt;
+        let combined = ContextValue::ScalarField(u)
+            .add_scaled(dt, &ContextValue::ScalarField(du))
+            .unwrap();
+        assert_eq!(combined.as_scalar_field().unwrap(), &direct);
+    }
+
+    #[test]
+    fn linear_combination_rejects_length_mismatch() {
+        let result = field(&[1.0, 2.0]).linear_combination(&[(1.0, &field(&[1.0]))]);
+        assert!(matches!(result, Err(OxiflowError::InvalidDomain(_))));
+    }
+
+    #[test]
+    fn linear_combination_rejects_shape_mismatch() {
+        let u = field_by_rows(2, &[1.0, 2.0, 3.0, 4.0]);
+        let transposed = field_by_rows(1, &[1.0, 2.0, 3.0, 4.0]);
+        let result = u.linear_combination(&[(1.0, &transposed)]);
+        assert!(matches!(result, Err(OxiflowError::InvalidDomain(_))));
+    }
+
+    #[test]
+    fn linear_combination_rejects_mixed_variants() {
+        let u = field_by_rows(2, &[1.0, 2.0, 3.0, 4.0]);
+        let result = u.linear_combination(&[(1.0, &field(&[1.0, 2.0]))]);
+        assert!(matches!(
+            result,
+            Err(OxiflowError::TypeMismatch {
+                expected: "VectorField",
+                actual: "ScalarField"
+            })
+        ));
+    }
+
+    #[test]
+    fn linear_combination_rejects_non_field_state() {
+        let result = ContextValue::Scalar(1.0).linear_combination(&[]);
+        assert!(matches!(result, Err(OxiflowError::TypeMismatch { .. })));
+    }
+
+    #[test]
+    fn weighted_sum_is_bit_identical_to_direct_arithmetic() {
+        let k1 = DVector::from_vec(vec![0.1, 1.0 / 3.0, -2.5e-9]);
+        let k2 = DVector::from_vec(vec![0.7, -2.0 / 3.0, 1.0e16]);
+        let k3 = DVector::from_vec(vec![-0.3, 0.2, 3.3]);
+        let (c1, c2, c3) = (0.013 * 71.0 / 57600.0, -0.013 * 71.0 / 16695.0, 0.017);
+        let direct = &k1 * c1 + &k2 * c2 + &k3 * c3;
+        let field = |v: &DVector<f64>| ContextValue::ScalarField(v.clone());
+        let sum =
+            ContextValue::weighted_sum(&[(c1, &field(&k1)), (c2, &field(&k2)), (c3, &field(&k3))])
+                .unwrap();
+        assert_eq!(sum.as_scalar_field().unwrap(), &direct);
+    }
+
+    #[test]
+    fn weighted_sum_of_vector_fields() {
+        let a = field_by_rows(2, &[1.0, 2.0, 3.0, 4.0]);
+        let b = field_by_rows(2, &[1.0, 1.0, 1.0, 1.0]);
+        let sum = ContextValue::weighted_sum(&[(2.0, &a), (-1.0, &b)]).unwrap();
+        assert_eq!(sum, field_by_rows(2, &[1.0, 3.0, 5.0, 7.0]));
+    }
+
+    #[test]
+    fn weighted_sum_rejects_empty_terms_and_mixed_variants() {
+        assert!(matches!(
+            ContextValue::weighted_sum(&[]),
+            Err(OxiflowError::PreconditionFailed { .. })
+        ));
+        let a = field_by_rows(2, &[1.0, 2.0, 3.0, 4.0]);
+        let result = ContextValue::weighted_sum(&[(1.0, &a), (1.0, &field(&[1.0, 2.0]))]);
+        assert!(matches!(result, Err(OxiflowError::TypeMismatch { .. })));
     }
 }

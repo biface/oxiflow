@@ -4,7 +4,7 @@
 //!
 //! **`#[cfg(feature = "sparse")]` only** — this module does not exist in a
 //! build without the `sparse` feature, and links no `faer` code in that
-//! case (zero overhead for the cas simple, same posture as `parallel`/
+//! case (zero overhead for the simple case, same posture as `parallel`/
 //! `serde`/`hdf5`).
 //!
 //! ## Why a sibling trait, not an extension of `LinearSolver`
@@ -27,20 +27,14 @@
 //!
 //! ## Verification status
 //!
-//! **Written without a working Rust toolchain for the `sparse` feature** —
-//! this environment's `rustc`/`cargo` cannot resolve `faer`'s own
-//! dependency graph (`edition2024` requirement upstream, unavailable
-//! here). The exact `faer` 0.24 API surface used below (method names,
-//! error types, `Triplet` construction) is transcribed from the
-//! architecture notes carried over from the interrupted session
-//! (`prompt_next_session.md`) and general `faer` familiarity, **not
-//! confirmed against a real compile**. Before relying on this module:
-//! `cargo doc --open -p faer --features sparse` (or the docs.rs page for
-//! `faer` 0.24) to check `SparseColMat::try_new_from_triplets`, `Triplet`,
-//! `sp_lu()`'s error type in particular — this file treats that error as
-//! `impl Debug` via `{e:?}` deliberately, never matched on a specific
-//! variant, so a signature mismatch there is the most likely first
-//! compile error.
+//! Built and tested against `faer` 0.24 (the version locked in
+//! `Cargo.lock`) by every run of the test suite with the `sparse` feature:
+//! [`FaerSparseSolver`] here, and the banded Jacobian and banded Newton
+//! path of the implicit solvers (`super::methods::implicit`), whose banded
+//! results are checked against the dense path. The error of `sp_lu()` is
+//! reported through its `Debug` form (`{e:?}`) and never matched on a
+//! variant, so that a change in `faer`'s error type does not break the
+//! build.
 
 use faer::prelude::Solve;
 use nalgebra::DVector;
@@ -68,9 +62,9 @@ pub trait SparseLinearSolver: Send + Sync {
 /// Default sparse backend — LU factorization via `faer`.
 ///
 /// Tested standalone against systems built directly in sparse form (e.g. a
-/// tridiagonal system assembled as triplets) — not through
-/// `solver::methods::implicit`'s finite-difference jacobian, which stays
-/// dense (DD-043: banded assembly is a separate, later addition).
+/// tridiagonal system assembled as triplets), and through the banded Newton
+/// path of the implicit solvers, whose finite-difference Jacobian is
+/// assembled in compressed columns (DD-043, DT-069).
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FaerSparseSolver;
 
@@ -93,8 +87,7 @@ impl SparseLinearSolver for FaerSparseSolver {
         }
 
         // faer's own column vector type — b converted in, x converted back
-        // out to nalgebra::DVector at the end. See module docs: this
-        // conversion is unverified against a real faer 0.24 build.
+        // out to nalgebra::DVector at the end.
         let b_faer = faer::Col::from_fn(n, |i| b[i]);
 
         let lu = a.sp_lu().map_err(|e| OxiflowError::PreconditionFailed {
@@ -110,10 +103,28 @@ impl SparseLinearSolver for FaerSparseSolver {
     }
 }
 
+/// Delegates to [`FaerSparseSolver`] and counts its calls, for the tests
+/// of the implicit solvers' banded path — the sparse counterpart of
+/// `CountingLinearSolver`.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct CountingSparseSolver {
+    pub(crate) calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[cfg(test)]
+impl SparseLinearSolver for CountingSparseSolver {
+    fn solve(
+        &self,
+        a: &faer::sparse::SparseColMat<usize, f64>,
+        b: &DVector<f64>,
+    ) -> Result<DVector<f64>, OxiflowError> {
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        FaerSparseSolver.solve(a, b)
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
-//
-// Unverified by compilation (see module docs) — a first draft to check
-// against a real `faer` 0.24 build before trusting these pass.
 
 #[cfg(test)]
 mod tests {

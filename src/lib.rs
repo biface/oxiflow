@@ -104,36 +104,53 @@
 //!
 //! ## Getting started (J1)
 //!
-//! ```rust,ignore
+//! ```rust
+//! use nalgebra::DVector;
 //! use oxiflow::{
-//!     context::ContextVariable,
+//!     context::{ComputeContext, ContextValue, ContextVariable, OxiflowError},
 //!     mesh::{Mesh, UniformGrid1D},
 //!     model::{PhysicalModel, RequiresContext},
-//!     solver::{Scenario, SolverConfiguration, TimeConfiguration,
-//!              StepControl, IntegratorKind},
+//!     solver::{methods::ForwardEulerSolver, IntegratorKind, Scenario, Solver,
+//!              SolverConfiguration, StepControl, TimeConfiguration},
 //! };
 //!
-//! // 1. Declare the physical model
+//! // 1. Declare the physical model: du/dt = -u
 //! struct MyModel;
 //! impl RequiresContext for MyModel {
 //!     fn required_variables(&self) -> Vec<ContextVariable> {
 //!         vec![ContextVariable::Time]
 //!     }
 //! }
-//! impl PhysicalModel for MyModel { /* … */ }
+//! impl PhysicalModel for MyModel {
+//!     fn compute_physics(
+//!         &self,
+//!         state: &ContextValue,
+//!         _ctx: &ComputeContext,
+//!     ) -> Result<ContextValue, OxiflowError> {
+//!         Ok(ContextValue::ScalarField(-state.as_scalar_field()?.clone()))
+//!     }
+//!     fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+//!         ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+//!     }
+//!     fn name(&self) -> &str {
+//!         "my_model"
+//!     }
+//! }
 //!
 //! // 2. Declare the problem (WHAT)
-//! let mesh = UniformGrid1D::new(100, 0.0, 1.0).unwrap();
+//! let mesh = UniformGrid1D::new(100, 0.0, 1.0)?;
 //! let scenario = Scenario::single(Box::new(MyModel), Box::new(mesh));
 //!
 //! // 3. Configure solving (HOW)
 //! let config = SolverConfiguration::new(
-//!     TimeConfiguration::new(600.0, StepControl::Fixed { dt: 0.1 }),
+//!     TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }),
 //!     IntegratorKind::Euler,
 //! );
 //!
-//! // 4. Solve (J4 — integrator implementations land at v0.4.0)
-//! // let result = EulerSolver.solve(&scenario, &config)?;
+//! // 4. Solve
+//! let result = ForwardEulerSolver.solve(&scenario, &config)?;
+//! assert_eq!(result.states.len(), result.times.len());
+//! # Ok::<(), OxiflowError>(())
 //! ```
 
 pub mod boundary;

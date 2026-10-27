@@ -31,32 +31,34 @@
 //!
 //! `u^{*}` folds in every term that doesn't depend on the unknown `u` —
 //! callers compute it once, outside the loop, from already-known past
-//! states. `residual` and `linear_correction` are the two building
-//! blocks operating on this shape; `solve` is the generic loop wiring
-//! them together with a [`NewtonConvergence`] criterion and a
+//! states. `residual` evaluates this shape, a `NewtonSystem` holds and
+//! solves its linearisation $\alpha I - c J_f$, and `solve` is the generic
+//! loop wiring them together with a [`NewtonConvergence`] criterion and a
 //! [`JacobianStrategy`].
 //!
 //! ## Dense/sparse agnosticism
 //!
 //! This module knows nothing about `Domain`, `ContextCalculator`, or
-//! `faer` — `solve` is parameterised over caller-supplied closures for
-//! evaluating $f(u)$ and its Jacobian, and over `&dyn LinearSolver` for
-//! the correction step. The existing sparse/banded dispatch
-//! (DD-043, `theta_method_step_adaptive`) is therefore untouched by this
-//! module: composing the two is [`super::implicit`]'s concern (chantier
-//! 2), not this one's.
+//! `faer` — `solve` is parameterised over a caller-supplied closure for
+//! evaluating $f(u)$ and over a `NewtonSystem`, which assembles
+//! $A = \alpha I - c J_f$ at an iterate and solves $A \delta u = -g(u)$
+//! in its own storage format. The convergence test, the iteration budget
+//! and the Jacobian refresh strategy belong to the loop, whatever the
+//! format. `DenseNewtonSystem` is the dense implementation.
 //!
 //! ## Wiring status
 //!
-//! `solve` is called from
-//! `super::implicit::theta_method_step_newton` (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) and
-//! `super::bdf2::bdf2_step_newton` (DD-044, [#112](https://github.com/biface/oxiflow/issues/112)) — used respectively by
-//! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)/
+//! `solve` is called from a single place, the implicit step of
+//! [`super::implicit`] (DD-044,
+//! [#111](https://github.com/biface/oxiflow/issues/111),
+//! [#112](https://github.com/biface/oxiflow/issues/112)), which expresses
+//! each integrator's equation in the residual convention above
+//! (`ImplicitFormula`) and supplies the dense or the banded
+//! `NewtonSystem`. It serves
+//! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
 //! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver) and
-//! [`BDF2Solver`](super::bdf2::BDF2Solver). [`super::bdf2`]'s
-//! startup/bootstrap step is the one exception, unconditionally using
-//! `super::implicit::theta_method_step`'s non-configurable path — see
-//! that module's docs.
+//! [`BDF2Solver`](super::bdf2::BDF2Solver), whose Backward Euler
+//! bootstrap step runs with the same configuration as its BDF2 update.
 
 use nalgebra::{DMatrix, DVector};
 
@@ -173,29 +175,74 @@ pub(crate) fn residual(
     delta * alpha - f_u.clone() * coeff
 }
 
-/// Solves the linearised correction $[\alpha I - c J_f] \delta u = -g(u)$
-/// for $\delta u$, given an already-assembled Jacobian $J_f =
-/// \partial f/\partial u$.
+/// The linear system of one Newton solve, $A = \alpha I - c J_f$, in a
+/// given storage format.
 ///
-/// Resolution only — `jacobian` is supplied by the caller (typically
-/// [`finite_difference_jacobian`](super::implicit::finite_difference_jacobian),
-/// unchanged) rather than computed here, so this function stays
-/// dense/sparse-agnostic in principle; only the dense path
-/// (`&dyn LinearSolver`) is wired at this increment (#110/#111) —
-/// banded/sparse composition remains a known gap, see
-/// [`super::implicit`]'s module docs.
-pub(crate) fn linear_correction(
-    jacobian: &DMatrix<f64>,
-    alpha: f64,
-    coeff: f64,
-    residual: &DVector<f64>,
-    linear_solver: &dyn LinearSolver,
-) -> Result<DVector<f64>, OxiflowError> {
-    let n = jacobian.nrows();
-    let identity = DMatrix::<f64>::identity(n, n);
-    let system_matrix = identity * alpha - jacobian.clone() * coeff;
-    let rhs: DVector<f64> = -residual.clone();
-    linear_solver.solve(&system_matrix, &rhs)
+/// [`solve`] calls [`assemble`](Self::assemble) at the initial iterate
+/// and whenever its [`JacobianStrategy`] refreshes the Jacobian, and
+/// [`solve`](Self::solve) once per iteration with the last assembled
+/// matrix. `alpha` and `coeff` are those of the residual (see the
+/// [residual convention](self#residual-convention)); they do not change
+/// during one Newton solve, so the matrix is assembled once per refresh
+/// rather than once per iteration.
+pub(crate) trait NewtonSystem {
+    /// Evaluates $J_f$ at `u` and assembles $A = \alpha I - c J_f$,
+    /// replacing the previously assembled matrix.
+    fn assemble(&mut self, u: &DVector<f64>, alpha: f64, coeff: f64) -> Result<(), OxiflowError>;
+
+    /// Solves $A x = $ `rhs` with the last assembled $A$.
+    ///
+    /// # Errors
+    ///
+    /// `OxiflowError::PreconditionFailed` if no matrix has been assembled
+    /// yet; any error of the linear solver.
+    fn solve(&self, rhs: &DVector<f64>) -> Result<DVector<f64>, OxiflowError>;
+}
+
+/// Dense [`NewtonSystem`]: `jacobian` evaluates $J_f$ as a `DMatrix`
+/// (in production, [`finite_difference_jacobian`](super::implicit::finite_difference_jacobian)),
+/// and `linear_solver` solves the assembled system.
+pub(crate) struct DenseNewtonSystem<'a, J> {
+    jacobian: J,
+    linear_solver: &'a dyn LinearSolver,
+    matrix: Option<DMatrix<f64>>,
+}
+
+impl<'a, J> DenseNewtonSystem<'a, J>
+where
+    J: FnMut(&DVector<f64>) -> Result<DMatrix<f64>, OxiflowError>,
+{
+    /// A system with no matrix assembled yet.
+    pub(crate) fn new(jacobian: J, linear_solver: &'a dyn LinearSolver) -> Self {
+        Self {
+            jacobian,
+            linear_solver,
+            matrix: None,
+        }
+    }
+}
+
+impl<J> NewtonSystem for DenseNewtonSystem<'_, J>
+where
+    J: FnMut(&DVector<f64>) -> Result<DMatrix<f64>, OxiflowError>,
+{
+    fn assemble(&mut self, u: &DVector<f64>, alpha: f64, coeff: f64) -> Result<(), OxiflowError> {
+        let jacobian = (self.jacobian)(u)?;
+        let n = jacobian.nrows();
+        self.matrix = Some(DMatrix::<f64>::identity(n, n) * alpha - jacobian * coeff);
+        Ok(())
+    }
+
+    fn solve(&self, rhs: &DVector<f64>) -> Result<DVector<f64>, OxiflowError> {
+        let matrix = self
+            .matrix
+            .as_ref()
+            .ok_or_else(|| OxiflowError::PreconditionFailed {
+                context: "DenseNewtonSystem::solve",
+                message: "no matrix assembled".into(),
+            })?;
+        self.linear_solver.solve(matrix, rhs)
+    }
 }
 
 // ── Generic loop ──────────────────────────────────────────────────────────────
@@ -217,11 +264,10 @@ pub(crate) struct NewtonParams {
 /// `f_eval` evaluates $f(u)$ for a candidate iterate (in production,
 /// this wraps [`evaluate_derivative`](super::evaluate_derivative) —
 /// including its boundary-condition re-application, see
-/// [`super::implicit`]'s known-limitation note); `jac_eval` evaluates
-/// $\partial f/\partial u$ at a candidate iterate (wraps
-/// [`finite_difference_jacobian`](super::implicit::finite_difference_jacobian)
-/// or its banded equivalent). Both are called at most `max_iterations + 1`
-/// times each.
+/// [`super::implicit`]'s known-limitation note); `system` assembles and
+/// solves the linearised system at a candidate iterate (see
+/// [`NewtonSystem`]). `f_eval` and `system.assemble` are each called at
+/// most `max_iterations + 1` times.
 ///
 /// Convergence is checked **after** applying each correction, uniformly
 /// regardless of `max_iterations` — there is no special case for
@@ -251,29 +297,27 @@ pub(crate) struct NewtonParams {
 ///
 /// Returns [`OxiflowError::NewtonNotConverged`] if `max_iterations` is
 /// exhausted without satisfying `params.convergence`. Propagates any
-/// error from `f_eval`, `jac_eval`, or the linear solve unchanged.
-#[allow(clippy::too_many_arguments)]
+/// error from `f_eval` or from `system` unchanged.
 pub(crate) fn solve(
     u0: DVector<f64>,
     u_star: &DVector<f64>,
     alpha: f64,
     coeff: f64,
     mut f_eval: impl FnMut(&DVector<f64>) -> Result<DVector<f64>, OxiflowError>,
-    mut jac_eval: impl FnMut(&DVector<f64>) -> Result<DMatrix<f64>, OxiflowError>,
-    linear_solver: &dyn LinearSolver,
+    system: &mut impl NewtonSystem,
     params: &NewtonParams,
 ) -> Result<DVector<f64>, OxiflowError> {
     let (tol_abs, tol_rel) = params.convergence.tolerances();
 
     let mut u = u0;
-    let mut jacobian = jac_eval(&u)?;
+    system.assemble(&u, alpha, coeff)?;
     let mut f_u = f_eval(&u)?;
     let mut prev_residual_norm: Option<f64> = None;
     let mut last_residual_norm = f64::INFINITY;
 
     for _ in 0..params.max_iterations {
         let res = residual(&u, u_star, alpha, coeff, &f_u);
-        let correction = linear_correction(&jacobian, alpha, coeff, &res, linear_solver)?;
+        let correction = system.solve(&-res)?;
         let correction_norm = correction.norm();
         u += correction;
 
@@ -297,14 +341,14 @@ pub(crate) fn solve(
         match params.jacobian_strategy {
             JacobianStrategy::ModifiedFrozen => {}
             JacobianStrategy::FullNewton => {
-                jacobian = jac_eval(&u)?;
+                system.assemble(&u, alpha, coeff)?;
             }
             JacobianStrategy::ModifiedWithStagnationCheck { stagnation_ratio } => {
                 let stagnating = prev_residual_norm
                     .map(|prev| prev > 0.0 && res_new_norm / prev > stagnation_ratio)
                     .unwrap_or(false);
                 if stagnating {
-                    jacobian = jac_eval(&u)?;
+                    system.assemble(&u, alpha, coeff)?;
                 }
             }
         }
@@ -330,9 +374,9 @@ mod tests {
     // Domain/Scenario, unlike `implicit.rs`/`bdf2.rs`'s tests.
 
     /// Boxed rather than `impl FnMut` (clippy::type_complexity on the
-    /// pair below) — `solve()` takes `impl FnMut`, which `Box<dyn FnMut>`
-    /// satisfies automatically, so boxing here costs nothing but an
-    /// allocation in test setup.
+    /// pair below) — `solve()` and `DenseNewtonSystem` take `impl FnMut`,
+    /// which `Box<dyn FnMut>` satisfies automatically, so boxing here
+    /// costs nothing but an allocation in test setup.
     type StateFn = Box<dyn FnMut(&DVector<f64>) -> Result<DVector<f64>, OxiflowError>>;
     type JacobianFn = Box<dyn FnMut(&DVector<f64>) -> Result<DMatrix<f64>, OxiflowError>>;
 
@@ -367,13 +411,23 @@ mod tests {
     }
 
     #[test]
-    fn linear_correction_solves_the_linearised_system() {
+    fn dense_system_solves_the_linearised_system() {
         // alpha*I - coeff*J with J = -2*I, alpha=1, coeff=0.1 -> 1.2*I.
-        let jacobian = DMatrix::<f64>::identity(2, 2) * -2.0;
-        let res = DVector::from_vec(vec![1.2, 2.4]);
-        let delta = linear_correction(&jacobian, 1.0, 0.1, &res, &NalgebraDenseSolver).unwrap();
+        let jacobian = |u: &DVector<f64>| Ok(DMatrix::<f64>::identity(u.len(), u.len()) * -2.0);
+        let mut system = DenseNewtonSystem::new(jacobian, &NalgebraDenseSolver);
+        system.assemble(&DVector::zeros(2), 1.0, 0.1).unwrap();
+        let rhs = DVector::from_vec(vec![-1.2, -2.4]);
+        let delta = system.solve(&rhs).unwrap();
         assert!((delta[0] - (-1.0)).abs() < 1e-9);
         assert!((delta[1] - (-2.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn dense_system_refuses_to_solve_before_assembly() {
+        let jacobian = |u: &DVector<f64>| Ok(DMatrix::<f64>::identity(u.len(), u.len()));
+        let system = DenseNewtonSystem::new(jacobian, &NalgebraDenseSolver);
+        let err = system.solve(&DVector::zeros(2)).unwrap_err();
+        assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
     }
 
     #[test]
@@ -390,7 +444,16 @@ mod tests {
             max_iterations: 1,
         };
 
-        let u_next = solve(u0, &u_star, 1.0, 0.1, f, jac, &NalgebraDenseSolver, &params).unwrap();
+        let u_next = solve(
+            u0,
+            &u_star,
+            1.0,
+            0.1,
+            f,
+            &mut DenseNewtonSystem::new(jac, &NalgebraDenseSolver),
+            &params,
+        )
+        .unwrap();
 
         let expected = 1.0 / (1.0 + lambda * 0.1);
         for v in u_next.iter() {
@@ -409,7 +472,16 @@ mod tests {
             max_iterations: 20,
         };
 
-        let u_next = solve(u0, &u_star, 1.0, 0.1, f, jac, &NalgebraDenseSolver, &params).unwrap();
+        let u_next = solve(
+            u0,
+            &u_star,
+            1.0,
+            0.1,
+            f,
+            &mut DenseNewtonSystem::new(jac, &NalgebraDenseSolver),
+            &params,
+        )
+        .unwrap();
 
         // Cross-check against an independently solved scalar equation:
         // u + 0.1*u^3 = 1.0 (Backward-Euler-style implicit cubic decay).
@@ -442,7 +514,16 @@ mod tests {
             max_iterations: 1,
         };
 
-        let err = solve(u0, &u_star, 1.0, 0.1, f, jac, &NalgebraDenseSolver, &params).unwrap_err();
+        let err = solve(
+            u0,
+            &u_star,
+            1.0,
+            0.1,
+            f,
+            &mut DenseNewtonSystem::new(jac, &NalgebraDenseSolver),
+            &params,
+        )
+        .unwrap_err();
         assert!(matches!(
             err,
             OxiflowError::NewtonNotConverged { iterations: 1, .. }
@@ -463,7 +544,16 @@ mod tests {
             max_iterations: 1,
         };
 
-        let err = solve(u0, &u_star, 1.0, 0.1, f, jac, &NalgebraDenseSolver, &params).unwrap_err();
+        let err = solve(
+            u0,
+            &u_star,
+            1.0,
+            0.1,
+            f,
+            &mut DenseNewtonSystem::new(jac, &NalgebraDenseSolver),
+            &params,
+        )
+        .unwrap_err();
         assert!(matches!(
             err,
             OxiflowError::NewtonNotConverged { iterations: 1, .. }
@@ -502,8 +592,7 @@ mod tests {
             1.0,
             1.0,
             f,
-            jac,
-            &NalgebraDenseSolver,
+            &mut DenseNewtonSystem::new(jac, &NalgebraDenseSolver),
             &params_or,
         );
         let out_residual_only = solve(
@@ -512,8 +601,7 @@ mod tests {
             1.0,
             1.0,
             f,
-            jac,
-            &NalgebraDenseSolver,
+            &mut DenseNewtonSystem::new(jac, &NalgebraDenseSolver),
             &params_residual_only,
         );
 

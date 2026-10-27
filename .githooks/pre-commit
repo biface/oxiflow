@@ -1,0 +1,58 @@
+#!/bin/sh
+# =============================================================================
+# pre-commit — internal-document guard and formatting (#185)
+# =============================================================================
+# Enabled once per clone with `git config core.hooksPath .githooks`. Bypass
+# with `git commit --no-verify`; CI remains the authority.
+#
+# 1. Refuses staged paths matching an `oxiflow.privatePath` pattern. Patterns
+#    are local to each clone, one per entry:
+#        git config --add oxiflow.privatePath 'PATTERN'
+#    Each is an sh `case` pattern matched against the whole path, relative to
+#    the repository root. Unlike pathname expansion, `*` also matches `/`:
+#    '*PROJECT_STATUS*' catches the file at any depth. Deletions are allowed,
+#    so that a file committed by mistake can still be removed. With no
+#    pattern configured, the guard does nothing.
+# 2. `cargo fmt --check`. It reads the working tree, not the index.
+#
+# POSIX sh only.
+# =============================================================================
+
+set -eu
+
+fail() {
+    echo "pre-commit: $*" >&2
+    exit 1
+}
+
+patterns=$(git config --get-all oxiflow.privatePath || true)
+
+# Succeeds when $1 matches one of the patterns.
+is_private() {
+    printf '%s\n' "$patterns" | {
+        while IFS= read -r pattern; do
+            [ -n "$pattern" ] || continue
+            # shellcheck disable=SC2254  # unquoted on purpose: a pattern
+            case $1 in $pattern) exit 0 ;; esac
+        done
+        exit 1
+    }
+}
+
+if [ -n "$patterns" ]; then
+    staged=$(git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR)
+    blocked=
+    while IFS= read -r path; do
+        [ -n "$path" ] || continue
+        if is_private "$path"; then
+            blocked="$blocked
+    $path"
+        fi
+    done <<LIST
+$staged
+LIST
+    [ -z "$blocked" ] || fail "staged paths matching oxiflow.privatePath:$blocked
+unstage them with: git restore --staged <path>"
+fi
+
+cargo fmt --check || fail "formatting differs; run cargo fmt and stage the result"

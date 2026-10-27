@@ -17,8 +17,9 @@
 //! ## Two triggers, one type (DD-029)
 //!
 //! - **Automatic** — [`Solver::on_divergence`](super::Solver::on_divergence)
-//!   is called with a snapshot right before a [`OxiflowError::SolverDivergence`]
-//!   is returned. Default implementation is a no-op; override to persist.
+//!   is called with a snapshot right before a
+//!   [`SolverDivergence`](crate::context::OxiflowError::SolverDivergence)
+//!   error is returned. Default implementation is a no-op; override to persist.
 //! - **Explicit** — normal pause/resume checkpointing. There is no
 //!   `Solver::checkpoint()` method: every field of `SimulationSnapshot` is
 //!   already public, and the live physical state (`ContextValue`, `t`,
@@ -91,7 +92,7 @@ pub struct SimulationSnapshot {
 
 // ── File format ──────────────────────────────────────────────────────────────
 
-/// On-disk format for [`write_snapshot`] / [`read_snapshot`].
+/// On-disk format for `write_snapshot` / `read_snapshot` (`serde` feature).
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SnapshotFormat {

@@ -1,12 +1,13 @@
 //! Criterion benchmarks for the 1D diffusion model (#136, feeds #53).
+//! The model comes from `rsc/models/diffusion_1d.rs`, shared with the
+//! example and the analytical test.
 //!
-//! Two distinct measurements, not one:
+//! Distinct measurements, not one:
 //!
 //! - [`full_run`] — the fixed-size performance target from #53's original
 //!   acceptance table ("1D diffusion, 1000 points, 10 000 steps, < 100
 //!   ms"). Criterion itself does not assert against that target -- compare
-//!   the reported mean against it by hand (or from `BENCHMARKS.md`) once
-//!   results are in.
+//!   the reported mean against it by hand once results are in.
 //! - [`laplacian_dispatch`] — parameterized across problem size via
 //!   `BenchmarkId`, sequential vs. parallel forced through the public
 //!   `with_parallel_threshold` API (`usize::MAX` / `1`) on
@@ -17,88 +18,43 @@
 //!   shipped defaults (statistical rigor: warm-up, repeated samples,
 //!   outlier detection -- a single `Instant::now()` pair does not have
 //!   that).
+//! - [`implicit_jacobian_dispatch`] — dispatch of the implicit solvers'
+//!   finite-difference Jacobian assembly (#199), sequential vs. parallel,
+//!   through one Backward Euler step: dense path, and banded path with the
+//!   `sparse` feature.
+//! - [`boundary_condition_overhead`] — what boundary conditions cost a
+//!   solve (#202): the same model without conditions, with the two
+//!   Danckwerts conditions and with two `Dirichlet` conditions, under RK4
+//!   and Backward Euler. Independent of the `parallel` feature.
 
 use std::hint::black_box;
 use std::sync::Arc;
 
-#[cfg(feature = "parallel")]
 use criterion::BenchmarkId;
 use criterion::Criterion;
+#[cfg(feature = "parallel")]
 use nalgebra::DVector;
 #[cfg(feature = "parallel")]
-use oxiflow::context::ContextCalculator;
+use oxiflow::context::{compute::ComputeContext, value::ContextValue, ContextCalculator};
 use oxiflow::{
+    boundary::{BoundaryCondition, DanckwertsInlet, DanckwertsOutlet, Dirichlet},
     context::{
-        calculators::FDLaplacianCalculator, compute::ComputeContext, error::OxiflowError,
-        value::ContextValue, variable::ContextVariable,
+        calculators::{ExternalTabulated, FDLaplacianCalculator, Interpolation},
+        variable::ContextVariable,
     },
-    mesh::{Mesh, UniformGrid1D},
-    model::traits::{PhysicalModel, RequiresContext},
+    mesh::{BoundaryRegion, FaceSide, Mesh, UniformGrid1D},
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
-        methods::ForwardEulerSolver,
-        scenario::Scenario,
+        methods::{BackwardEulerSolver, ForwardEulerSolver, RK4Solver},
+        scenario::{Domain, Scenario},
         Solver, SolverConfiguration,
     },
 };
 
-fn laplacian_variable() -> ContextVariable {
-    ContextVariable::External {
-        name: "laplacian".into(),
-    }
-}
+#[path = "../rsc/models/diffusion_1d.rs"]
+mod diffusion_1d_model;
 
-/// Same model as `examples/diffusion_1d.rs`/`tests/diffusion_1d_analytical.rs`
-/// -- duplicated here rather than shared, same convention as
-/// `tests/lahar_lake_proto.rs` vs. its example (the model is not part of
-/// the public library API, so there is no single place to import it from).
-struct Diffusion1D {
-    alpha: f64,
-    amplitude: f64,
-    center: f64,
-    sigma0: f64,
-}
-
-impl Diffusion1D {
-    fn exact(&self, x: f64, t: f64) -> f64 {
-        let sigma_t = (self.sigma0.powi(2) + 2.0 * self.alpha * t).sqrt();
-        let envelope = self.amplitude * self.sigma0 / sigma_t;
-        let exponent = -(x - self.center).powi(2) / (2.0 * sigma_t.powi(2));
-        envelope * exponent.exp()
-    }
-}
-
-impl RequiresContext for Diffusion1D {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![laplacian_variable()]
-    }
-}
-
-impl PhysicalModel for Diffusion1D {
-    fn compute_physics(
-        &self,
-        _state: &ContextValue,
-        ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        let lap = ctx.external(laplacian_variable())?.as_scalar_field()?;
-        Ok(ContextValue::ScalarField(lap.map(|v| self.alpha * v)))
-    }
-
-    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        let u0 = DVector::from_iterator(
-            mesh.n_dof(),
-            (0..mesh.n_dof()).map(|i| {
-                let x = mesh.coordinates(i)[0];
-                self.exact(x, 0.0)
-            }),
-        );
-        ContextValue::ScalarField(u0)
-    }
-
-    fn name(&self) -> &str {
-        "diffusion_1d"
-    }
-}
+use diffusion_1d_model::{laplacian_variable, Diffusion1D};
 
 /// #53's original fixed-size target: 1000 points, 10 000 steps, < 100 ms.
 ///
@@ -152,7 +108,7 @@ pub fn laplacian_dispatch(c: &mut Criterion) {
     let ctx = ComputeContext::new(0.0, 1e-4);
     let mut group = c.benchmark_group("diffusion_1d_laplacian_dispatch");
 
-    // Extended past 1e6, then past 1e7 (see BENCHMARKS.md): crossover
+    // Extended past 1e6, then past 1e7 (measured at v0.9.0, #53): crossover
     // confirmed between 1e7 (still 1.02x slower) and 3e7 (1.03x faster),
     // plateauing around 3-4% by 1e8 -- the signature of a
     // memory-bandwidth-bound kernel, not one still climbing toward a
@@ -232,5 +188,234 @@ pub fn raw_rayon_dispatch_diagnostic(c: &mut Criterion) {
             })
         });
     }
+    group.finish();
+}
+
+/// Dispatch of the finite-difference Jacobian assembly of the implicit
+/// solvers (#199, DT-069), sequential vs. parallel, through the public
+/// `BackwardEulerSolver::with_parallel_threshold`. What is timed is one
+/// full Backward Euler step: the threshold changes only the Jacobian
+/// assembly, so the difference between the two timings is the assembly's,
+/// while the rest of the step (the linear solve above all, `O(n³)` on the
+/// dense path) is the same in both. The Laplacian calculator is kept
+/// sequential in both, so that only the Jacobian dispatch differs.
+///
+/// Dense path: one task per column. Banded path (`sparse` feature,
+/// bandwidth 1): one task per colour, so at most 3 tasks whatever the
+/// size — measures how much that limited parallelism still gains. Only
+/// exists when the crate is built with the `parallel` feature.
+#[cfg(feature = "parallel")]
+pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
+    use crate::implicit_dispatch::sequential_vs_parallel;
+    use oxiflow::solver::methods::backward_euler::BackwardEulerSolver;
+
+    let mut group = c.benchmark_group("diffusion_1d_implicit_jacobian_dispatch");
+    group.sample_size(20);
+
+    for &n in &[64usize, 128, 256, 512] {
+        let (scenario, config) = one_backward_euler_step(n);
+        sequential_vs_parallel(&mut group, "dense", n, &scenario, &config, |threshold| {
+            BackwardEulerSolver::new().with_parallel_threshold(threshold)
+        });
+    }
+
+    #[cfg(feature = "sparse")]
+    for &n in &[1_000usize, 10_000, 100_000] {
+        use oxiflow::solver::sparse::FaerSparseSolver;
+
+        let (scenario, config) = one_backward_euler_step(n);
+        sequential_vs_parallel(&mut group, "banded", n, &scenario, &config, |threshold| {
+            BackwardEulerSolver::new()
+                .with_sparse_solver(Box::new(FaerSparseSolver))
+                .with_jacobian_bandwidth(1)
+                .with_sparse_threshold(0)
+                .with_parallel_threshold(threshold)
+        });
+    }
+
+    group.finish();
+}
+
+/// Scenario and configuration of a single Backward Euler step on `n`
+/// nodes, with a sequential Laplacian calculator.
+#[cfg(feature = "parallel")]
+fn one_backward_euler_step(n: usize) -> (Scenario, SolverConfiguration) {
+    const DT: f64 = 1e-3;
+
+    let model = Diffusion1D {
+        alpha: 0.01,
+        amplitude: 1.0,
+        center: 0.0,
+        sigma0: 0.05,
+    };
+    let mesh = UniformGrid1D::new(n, -1.0, 1.0).unwrap();
+    let mesh_arc: Arc<dyn Mesh> = Arc::new(UniformGrid1D::new(n, -1.0, 1.0).unwrap());
+
+    let scenario = Scenario::single(Box::new(model), Box::new(mesh));
+    let config = SolverConfiguration::new(
+        TimeConfiguration::new(DT, StepControl::Fixed { dt: DT }),
+        IntegratorKind::BackwardEuler,
+    )
+    .with_calculator(Box::new(
+        FDLaplacianCalculator::new(mesh_arc, laplacian_variable())
+            .with_parallel_threshold(usize::MAX),
+    ));
+    (scenario, config)
+}
+
+/// Boundary conditions of one configuration of
+/// [`boundary_condition_overhead`].
+#[derive(Clone, Copy)]
+enum Boundaries {
+    /// No condition: the solver skips every boundary step.
+    Without,
+    /// `DanckwertsInlet` on the lower face, fed by a tabulated constant,
+    /// and `DanckwertsOutlet` on the upper one.
+    Danckwerts,
+    /// A constant `Dirichlet` condition on each face.
+    Dirichlet,
+}
+
+impl Boundaries {
+    const ALL: [Self; 3] = [Self::Without, Self::Danckwerts, Self::Dirichlet];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Without => "none",
+            Self::Danckwerts => "danckwerts",
+            Self::Dirichlet => "dirichlet",
+        }
+    }
+}
+
+/// Feed concentration of the Danckwerts inlet.
+fn feed_variable() -> ContextVariable {
+    ContextVariable::External {
+        name: "feed_concentration".into(),
+    }
+}
+
+/// Scenario and configuration of `n_steps` fixed steps of `dt` on `n`
+/// nodes, under `integrator`, with the given boundary conditions.
+///
+/// The Gaussian stays small at both ends of `[-1, 1]` over these runs
+/// (below `1e-6`), so holding them at zero, or feeding zero at the inlet,
+/// barely changes the solution: the configurations differ in what the
+/// solver does, not in the problem solved. The Danckwerts configuration
+/// includes the tabulated feed calculator, part of what that condition
+/// costs a user; its dispersion and velocity only set the inlet weight
+/// `kappa = D / (v dx)`.
+fn bounded_run(
+    n: usize,
+    integrator: IntegratorKind,
+    dt: f64,
+    n_steps: u32,
+    boundaries: Boundaries,
+) -> (Scenario, SolverConfiguration) {
+    const ALPHA: f64 = 0.01;
+    let lower = BoundaryRegion::Face {
+        axis: 0,
+        side: FaceSide::Lower,
+    };
+    let upper = BoundaryRegion::Face {
+        axis: 0,
+        side: FaceSide::Upper,
+    };
+    let t_end = f64::from(n_steps) * dt;
+
+    let model = Diffusion1D {
+        alpha: ALPHA,
+        amplitude: 1.0,
+        center: 0.0,
+        sigma0: 0.05,
+    };
+    let mesh_arc: Arc<dyn Mesh> = Arc::new(UniformGrid1D::new(n, -1.0, 1.0).unwrap());
+    let mut config = SolverConfiguration::new(
+        TimeConfiguration::new(t_end, StepControl::Fixed { dt }),
+        integrator,
+    )
+    .with_calculator(Box::new(FDLaplacianCalculator::new(
+        mesh_arc,
+        laplacian_variable(),
+    )));
+
+    let conditions: Vec<Box<dyn BoundaryCondition>> = match boundaries {
+        Boundaries::Without => vec![],
+        Boundaries::Danckwerts => {
+            config = config.with_calculator(Box::new(
+                ExternalTabulated::new(
+                    feed_variable(),
+                    vec![(0.0, 0.0), (2.0 * t_end, 0.0)],
+                    Interpolation::Linear,
+                )
+                .unwrap(),
+            ));
+            vec![
+                Box::new(DanckwertsInlet::new(ALPHA, 1.0, feed_variable())),
+                Box::new(DanckwertsOutlet::new()),
+            ]
+        }
+        Boundaries::Dirichlet => vec![
+            Box::new(Dirichlet::constant(lower, 0.0)),
+            Box::new(Dirichlet::constant(upper, 0.0)),
+        ],
+    };
+    let domain = Domain::new(
+        "bar",
+        Box::new(model),
+        Box::new(UniformGrid1D::new(n, -1.0, 1.0).unwrap()),
+    )
+    .with_boundary_conditions(conditions);
+    (Scenario::multi(vec![domain]).unwrap(), config)
+}
+
+/// What boundary conditions cost a solve (#202): the model without
+/// conditions, with the two Danckwerts conditions and with two `Dirichlet`
+/// conditions, reported as `<integrator>/<conditions>` for each size.
+///
+/// - RK4, 200 steps at a fifth of the diffusion limit `dx^2 / alpha`, on
+///   101 and 1001 nodes: four derivative evaluations per step, each
+///   applying the conditions and holding their nodes (DD-070).
+/// - Backward Euler, 5 steps of `1e-3`, on 101 and 401 nodes: every
+///   column of the finite-difference Jacobian is one more derivative
+///   evaluation, so the per-evaluation cost is multiplied by `n`.
+///
+/// The difference between a configuration and `none` is the cost of the
+/// conditions, calculators they need included. It grows with the number
+/// of derivative evaluations, not with the number of nodes: the conditions
+/// set two nodes, and the solver's bookkeeping (which calculators the
+/// conditions need, which nodes they declare) runs at each evaluation
+/// whatever `n` (#201). Not tied to the `parallel` feature: the Laplacian
+/// stays below its dispatch threshold at these sizes.
+pub fn boundary_condition_overhead(c: &mut Criterion) {
+    let mut group = c.benchmark_group("diffusion_1d_boundary_condition_overhead");
+    group.sample_size(20);
+
+    for &n in &[101usize, 1001] {
+        let dx = 2.0 / (n - 1) as f64;
+        let dt = 0.2 * dx * dx / 0.01;
+        for boundaries in Boundaries::ALL {
+            let (scenario, config) = bounded_run(n, IntegratorKind::RK4, dt, 200, boundaries);
+            group.bench_with_input(
+                BenchmarkId::new(format!("rk4/{}", boundaries.label()), n),
+                &n,
+                |b, _| b.iter(|| black_box(RK4Solver.solve(&scenario, &config).unwrap())),
+            );
+        }
+    }
+
+    for &n in &[101usize, 401] {
+        for boundaries in Boundaries::ALL {
+            let (scenario, config) =
+                bounded_run(n, IntegratorKind::BackwardEuler, 1e-3, 5, boundaries);
+            let solver = BackwardEulerSolver::new();
+            group.bench_with_input(
+                BenchmarkId::new(format!("backward_euler/{}", boundaries.label()), n),
+                &n,
+                |b, _| b.iter(|| black_box(solver.solve(&scenario, &config).unwrap())),
+            );
+        }
+    }
+
     group.finish();
 }

@@ -1,0 +1,86 @@
+#!/bin/sh
+# =============================================================================
+# pre-push — version checks and fast cargo checks (#185)
+# =============================================================================
+# Enabled once per clone with `git config core.hooksPath .githooks`. Bypass
+# with `git push --no-verify`; CI remains the authority.
+#
+# For each pushed ref, on the commit being pushed:
+#   branch   Cargo.toml version against the target branch, through
+#            scripts/check-version.sh (same rules as the Version check job)
+#   tag      tag vX.Y.Z against the Cargo.toml version, and the tagged commit
+#            must be on <remote>/main, as known locally: the remote-tracking
+#            ref moves on `git fetch` and on a push to main, not otherwise.
+#            Tags go through a named remote, not a bare URL.
+#   deletion nothing
+#
+# Then, if at least one branch is pushed, the local counterpart of the push
+# trigger in ci.yml (#171):
+#   cargo clippy --locked --all-features --all-targets -- -D warnings
+#   cargo test --locked --lib
+#   cargo test --locked --doc
+# `--all-features` needs libhdf5-dev; without it, use --no-verify. Cargo
+# builds the working tree, not the pushed commits: uncommitted changes are
+# reported but do not stop the push.
+#
+# POSIX sh only.
+# =============================================================================
+
+set -eu
+
+remote=$1
+url=$2
+
+fail() {
+    echo "pre-push: $*" >&2
+    exit 1
+}
+
+run() {
+    echo "pre-push: $*"
+    "$@" || fail "'$*' failed; bypass with git push --no-verify, CI remains the authority"
+}
+
+# Cargo.toml of commit $1 against context $2 ($3) of check-version.sh.
+check_version() {
+    git show "$1:Cargo.toml" | sh scripts/check-version.sh -m - "$2" "$3"
+}
+
+branches=no
+# shellcheck disable=SC2034  # local_ref, remote_sha: input format, unused
+while read -r local_ref local_sha remote_ref remote_sha; do
+    case $local_sha in
+        *[!0]*) ;;
+        *) continue ;;              # deletion: all-zero object name
+    esac
+    case $remote_ref in
+        refs/heads/*)
+            check_version "$local_sha" branch "${remote_ref#refs/heads/}"
+            branches=yes
+            ;;
+        refs/tags/*)
+            tag=${remote_ref#refs/tags/}
+            commit=$(git rev-parse --verify --quiet "$local_sha^{commit}") \
+                || fail "tag $tag does not point to a commit"
+            check_version "$commit" tag "$tag"
+            [ "$remote" != "$url" ] \
+                || fail "tag $tag: push tags through a named remote, so that its main can be checked"
+            main=refs/remotes/$remote/main
+            git rev-parse --verify --quiet "$main" >/dev/null \
+                || fail "tag $tag: $main not found; run git fetch $remote"
+            git merge-base --is-ancestor "$commit" "$main" \
+                || fail "tag $tag: commit is not on $remote/main as known locally (git fetch $remote if it was merged since)"
+            echo "pre-push: tag $tag is on $remote/main"
+            ;;
+    esac
+done
+
+[ "$branches" = yes ] || exit 0
+
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    echo "pre-push: note: uncommitted changes; cargo checks the working tree, not the pushed commits" >&2
+fi
+
+run cargo clippy --locked --all-features --all-targets -- -D warnings
+run cargo test --locked --lib
+run cargo test --locked --doc

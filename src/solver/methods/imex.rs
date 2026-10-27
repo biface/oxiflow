@@ -46,7 +46,9 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
-use crate::solver::methods::{check_finite, SteppableSolver};
+use crate::solver::methods::{
+    check_finite, divergence_snapshot, enforce_boundary_conditions, SteppableSolver,
+};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -252,7 +254,10 @@ impl Solver for OperatorSplittingSolver {
     /// a `SteppableSolver` (same posture as DD-036 for DoPri45 — avoiding
     /// reopening multi-domain orchestration for a need #45 doesn't raise).
     /// The loop below deliberately mirrors `solve_fixed_step`'s shape to
-    /// stay consistent with the other fixed-step solvers.
+    /// stay consistent with the other fixed-step solvers, divergence
+    /// included: a non-finite state hands a `SimulationSnapshot` to
+    /// [`Solver::on_divergence`] before `SolverDivergence` is returned
+    /// (DD-025, #134).
     fn solve(
         &self,
         scenario: &Scenario,
@@ -290,6 +295,7 @@ impl Solver for OperatorSplittingSolver {
         let chain = build_calculator_chain(&requirements, &config.calculators)?;
 
         let mut u = domain.model.initial_state(domain.mesh.as_ref());
+        enforce_boundary_conditions(domain, &chain, &mut u, t_start, dt)?;
 
         let n_steps = ((t_end - t_start) / dt).round() as usize;
         let save_every = config.time.save_every.unwrap_or(1);
@@ -305,8 +311,22 @@ impl Solver for OperatorSplittingSolver {
             let t_next = t_start + ((step + 1) as f64) * dt;
 
             u = self.apply_step(&chain, &mut u, t, dt)?;
+            // Saved states satisfy the outer domain's boundary conditions
+            // (DD-070); the sub-steps only re-apply them per evaluation.
+            enforce_boundary_conditions(domain, &chain, &mut u, t_next, dt)?;
 
-            check_finite(&u, t_next)?;
+            if let Err(e) = check_finite(&u, t_next) {
+                self.on_divergence(&divergence_snapshot(
+                    config,
+                    &u,
+                    t_next,
+                    step + 1,
+                    e.to_string(),
+                    &states,
+                    &times,
+                ));
+                return Err(e);
+            }
 
             if (step + 1) % save_every == 0 {
                 states.push(u.clone());
@@ -328,47 +348,21 @@ impl Solver for OperatorSplittingSolver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::compute::ComputeContext;
-    use crate::context::variable::ContextVariable;
     use crate::mesh::structured::UniformGrid1D;
-    use crate::mesh::Mesh;
-    use crate::model::{CompositeModel, PhysicalModel, RequiresContext};
+    use crate::model::{CompositeModel, ExponentialDecay, PhysicalModel};
     use crate::solver::config::{IntegratorKind, TimeConfiguration};
     use crate::solver::methods::euler::ForwardEulerSolver;
-    use nalgebra::DVector;
-
-    /// `du/dt = -rate * u` — pure decay, no time dependence.
-    struct Decay {
-        rate: f64,
-    }
-    impl RequiresContext for Decay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-    impl PhysicalModel for Decay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.rate * v)))
-        }
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-        fn name(&self) -> &str {
-            "decay"
-        }
-    }
 
     fn make_mesh() -> UniformGrid1D {
         UniformGrid1D::new(5, 0.0, 1.0).unwrap()
     }
 
     fn make_domain(rate: f64) -> Domain {
-        Domain::new("decay", Box::new(Decay { rate }), Box::new(make_mesh()))
+        Domain::new(
+            "decay",
+            Box::new(ExponentialDecay { lambda: rate }),
+            Box::new(make_mesh()),
+        )
     }
 
     fn make_solver() -> OperatorSplittingSolver {
@@ -422,8 +416,8 @@ mod tests {
 
         let composite = CompositeModel::new(
             vec![
-                Box::new(Decay { rate: 1.0 }) as Box<dyn PhysicalModel>,
-                Box::new(Decay { rate: 2.0 }) as Box<dyn PhysicalModel>,
+                Box::new(ExponentialDecay { lambda: 1.0 }) as Box<dyn PhysicalModel>,
+                Box::new(ExponentialDecay { lambda: 2.0 }) as Box<dyn PhysicalModel>,
             ],
             "combined_decay",
         )
@@ -457,5 +451,32 @@ mod tests {
         let json = serde_json::to_string(&SplittingScheme::Strang).unwrap();
         let restored: SplittingScheme = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, SplittingScheme::Strang);
+    }
+
+    #[test]
+    fn solve_reports_divergence_of_the_split_state() {
+        // Forward Euler half-steps on a rate of 1e200 multiply the state by
+        // 1 − 0.5e200 twice per outer step (the full step on rate 0.5 only
+        // halves it): the state overflows to infinity on the first step.
+        let solver = OperatorSplittingSolver::strang(
+            make_domain(1e200),
+            Box::new(ForwardEulerSolver),
+            make_domain(0.5),
+            Box::new(ForwardEulerSolver),
+        )
+        .unwrap();
+        let scenario = Scenario::single(
+            Box::new(ExponentialDecay { lambda: 1.0 }),
+            Box::new(make_mesh()),
+        );
+        let config = SolverConfiguration::new(
+            TimeConfiguration::new(10.0, StepControl::Fixed { dt: 1.0 }),
+            IntegratorKind::Euler,
+        );
+        let result = solver.solve(&scenario, &config);
+        assert!(
+            matches!(result, Err(OxiflowError::SolverDivergence { .. })),
+            "expected SolverDivergence, got {result:?}"
+        );
     }
 }

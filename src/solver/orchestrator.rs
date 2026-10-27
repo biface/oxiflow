@@ -5,7 +5,7 @@
 //! ## Why this exists
 //!
 //! [`Solver`](crate::solver::Solver) is deliberately single-domain — it
-//! drives one [`Domain`](crate::solver::scenario::Domain) through a full
+//! drives one [`Domain`] through a full
 //! time range. Coupled scenarios
 //! (lahar–lake, #40) need several domains advancing together, each
 //! exchanging state with the others via
@@ -36,10 +36,10 @@
 //!    [`crate::solver`]). Split into two passes internally (DD-048
 //!    consequence): a Jacobi-parallel compute pass (each domain reads
 //!    only the pre-step state, independent by construction, optionally
-//!    dispatched through Rayon above [`MultiDomainOrchestrator::parallel_threshold`])
+//!    dispatched through Rayon above `MultiDomainOrchestrator::parallel_threshold`)
 //!    followed by a sequential apply pass that writes the results back
 //!    into [`MultiDomainState`]/history. See
-//!    [`MultiDomainOrchestrator::compute_domain_steps`] for why the split
+//!    `MultiDomainOrchestrator::compute_domain_steps` for why the split
 //!    exists and what it does and does not parallelize.
 //! 2. **Apply every registered `CouplingOperator`**, in declaration order,
 //!    each reading the just-updated [`MultiDomainState`] and returning an
@@ -56,7 +56,7 @@ use crate::context::state::MultiDomainState;
 use crate::context::{ContextCalculator, ContextValue};
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::{StepControl, TimeConfiguration};
-use crate::solver::methods::{check_finite, SteppableSolver};
+use crate::solver::methods::{check_finite, enforce_boundary_conditions, SteppableSolver};
 #[cfg(feature = "parallel")]
 use crate::solver::parallel::ParallelThreshold;
 use crate::solver::scenario::{Domain, DomainId, Scenario};
@@ -169,7 +169,7 @@ impl MultiDomainSimulationResult {
 
 // ── MultiDomainOrchestrator ───────────────────────────────────────────────────────
 
-/// Drives multiple coupled [`Domain`](crate::solver::scenario::Domain)s,
+/// Drives multiple coupled [`Domain`]s,
 /// each with its own [`SteppableSolver`].
 ///
 /// See [module documentation](self) for the per-step order and the v1
@@ -222,7 +222,7 @@ impl MultiDomainOrchestrator {
     /// # Panics
     ///
     /// Panics when `threshold == 0` — see
-    /// [`ParallelThreshold::set`](crate::solver::parallel::ParallelThreshold::set).
+    /// `ParallelThreshold::set`.
     #[cfg(feature = "parallel")]
     pub fn with_parallel_threshold(self, threshold: usize) -> Self {
         self.parallel_threshold.set(threshold);
@@ -235,14 +235,14 @@ impl MultiDomainOrchestrator {
     /// # Panics
     ///
     /// Panics when `threshold == 0` (see
-    /// [`ParallelThreshold::set`](crate::solver::parallel::ParallelThreshold::set)).
+    /// `ParallelThreshold::set`).
     #[cfg(feature = "parallel")]
     pub fn set_parallel_threshold(&self, threshold: usize) {
         self.parallel_threshold.set(threshold);
     }
 
     /// Returns the configured Phase-1 dispatch threshold, or
-    /// [`default_parallel_threshold`] (`5_000` — a rough estimate, not
+    /// `default_parallel_threshold` (`5_000` — a rough estimate, not
     /// measured; see its own docs) if none was set.
     #[cfg(feature = "parallel")]
     pub fn parallel_threshold(&self) -> usize {
@@ -257,7 +257,14 @@ impl MultiDomainOrchestrator {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
+    /// ```rust
+    /// use oxiflow::context::PhysicalQuantity;
+    /// use oxiflow::solver::methods::{ForwardEulerSolver, RK4Solver};
+    /// use oxiflow::solver::orchestrator::MultiDomainOrchestrator;
+    /// use oxiflow::solver::DomainId;
+    ///
+    /// let lahar_id = DomainId::new("lahar");
+    /// let lake_id = DomainId::new("lake");
     /// let orchestrator = MultiDomainOrchestrator::new()
     ///     .with_domain(lahar_id, Box::new(ForwardEulerSolver), PhysicalQuantity::concentration())
     ///     .with_domain(lake_id, Box::new(RK4Solver), PhysicalQuantity::concentration());
@@ -342,7 +349,8 @@ impl MultiDomainOrchestrator {
         let mut multi_state = MultiDomainState::new();
         for domain in scenario.domains() {
             let quantity = self.quantity_for(&domain.id)?;
-            let initial = domain.model.initial_state(domain.mesh.as_ref());
+            let mut initial = domain.model.initial_state(domain.mesh.as_ref());
+            enforce_boundary_conditions(domain, &chain, &mut initial, t_start, dt)?;
             multi_state.set(domain.id.clone(), quantity, initial);
         }
 
@@ -386,8 +394,15 @@ impl MultiDomainOrchestrator {
             // `parallel_threshold()`. Phase 1b applies the collected
             // results to `multi_state`/`histories` sequentially -- cheap,
             // O(domain count), not the numerical work itself.
-            let results: Vec<DomainStepResult> =
-                self.compute_domain_steps(scenario, &multi_state, &histories, &chain, t, dt)?;
+            let results: Vec<DomainStepResult> = self.compute_domain_steps(
+                scenario,
+                &multi_state,
+                &histories,
+                &chain,
+                t,
+                dt,
+                t_next,
+            )?;
 
             for result in results {
                 if result.history_depth > 0 {
@@ -438,14 +453,15 @@ impl MultiDomainOrchestrator {
         })
     }
 
-    /// Phase 1a: computes every domain's next state, independently.
+    /// Phase 1a: computes every domain's next state, independently, and
+    /// applies its boundary conditions at `t_next` (DD-070, #200).
     ///
     /// Reads only the pre-step `multi_state`/`histories` (both taken by
     /// shared reference) and writes nothing -- results are collected into
     /// a `Vec`, one domain-local slot each, for [`run`](Self::run)'s
     /// Phase 1b to apply sequentially. Dispatched through Rayon once the
     /// aggregate mesh volume (`Σ domain.mesh.n_dof()`) reaches
-    /// [`parallel_threshold`](Self::parallel_threshold); a plain
+    /// `parallel_threshold` (`parallel` feature); a plain
     /// sequential loop otherwise, and always without the `parallel`
     /// feature.
     ///
@@ -455,6 +471,11 @@ impl MultiDomainOrchestrator {
     /// iteration order) -- domains are independent within a step, so
     /// which one's error is reported first does not change whether the
     /// step as a whole fails.
+    ///
+    /// `dt` and `t_next` are both passed, rather than `t_next` recomputed as
+    /// `t + dt`: the step uses `dt` as before, and the boundary conditions
+    /// are applied at the very time the state is saved with.
+    #[allow(clippy::too_many_arguments)]
     fn compute_domain_steps(
         &self,
         scenario: &Scenario,
@@ -463,6 +484,7 @@ impl MultiDomainOrchestrator {
         chain: &[&dyn ContextCalculator],
         t: f64,
         dt: f64,
+        t_next: f64,
     ) -> Result<Vec<DomainStepResult>, OxiflowError> {
         let compute_one = |domain: &Domain| -> Result<DomainStepResult, OxiflowError> {
             let quantity = self.quantity_for(&domain.id)?;
@@ -478,10 +500,13 @@ impl MultiDomainOrchestrator {
                 })?
                 .clone();
 
-            let next_state = {
+            let mut next_state = {
                 let history = &histories[&domain.id];
                 solver.step(domain, chain, &mut state, history, t, dt)?
             };
+            // Each domain's state satisfies its boundary conditions before
+            // the coupling exchange (DD-070, #200).
+            enforce_boundary_conditions(domain, chain, &mut next_state, t_next, dt)?;
 
             // `state` was mutated in-place by BC application inside
             // `step()` above -- carry *that* corrected u^n forward for
@@ -544,72 +569,12 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::coupling::{CouplingOperator, Interface};
     use crate::mesh::{Mesh, UniformGrid1D};
-    use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::model::traits::RequiresContext;
+    use crate::model::{ExponentialDecay, ZeroDerivative};
     use crate::solver::methods::{ForwardEulerSolver, RK4Solver};
     use crate::solver::scenario::Domain;
-    use nalgebra::DVector;
 
     // ── Fixtures ──────────────────────────────────────────────────────────────
-
-    /// Exponential decay: du/dt = -lambda * u.
-    #[derive(Debug)]
-    struct DecayModel {
-        lambda: f64,
-    }
-
-    impl RequiresContext for DecayModel {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for DecayModel {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.lambda * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "decay"
-        }
-    }
-
-    /// Passive receiver: du/dt = 0.
-    #[derive(Debug)]
-    struct PassiveModel;
-
-    impl RequiresContext for PassiveModel {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for PassiveModel {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(DVector::zeros(u.len())))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::zeros(mesh.n_dof()))
-        }
-
-        fn name(&self) -> &str {
-            "passive"
-        }
-    }
 
     /// Transfers a fixed fraction of the source domain's field to the
     /// target domain at every call -- counts invocations for assertions.
@@ -670,10 +635,14 @@ mod tests {
     fn make_scenario() -> (Scenario, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         let source = Domain::new(
             source_id(),
-            Box::new(DecayModel { lambda: 0.5 }),
+            Box::new(ExponentialDecay { lambda: 0.5 }),
             make_mesh(3),
         );
-        let target = Domain::new(target_id(), Box::new(PassiveModel), make_mesh(3));
+        let target = Domain::new(
+            target_id(),
+            Box::new(ZeroDerivative { initial: 0.0 }),
+            make_mesh(3),
+        );
         let interface = Interface::new(source_id(), target_id());
         let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let coupling = Box::new(CountingMassTransfer {
@@ -784,7 +753,7 @@ mod tests {
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 5);
 
         // Cross-check via effect: target received non-zero mass, which
-        // only the coupling (never PassiveModel itself, zero derivative)
+        // only the coupling (never the passive model itself, zero derivative)
         // can produce.
         let final_state = result.states.last().unwrap();
         let target_field = final_state

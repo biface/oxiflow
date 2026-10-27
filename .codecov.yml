@@ -9,6 +9,9 @@ codecov:
   require_ci_to_pass: yes
   notify:
     wait_for_ci: yes
+    # One upload per flag (coverage.yml matrix): report only once all seven
+    # have arrived, so a partial upload never shows as a coverage drop.
+    after_n_builds: 7
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Coverage targets
@@ -30,8 +33,10 @@ coverage:
         threshold: 5%
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Flags — one upload per feature configuration
-# Activate feature flags in coverage.yml as features are declared in Cargo.toml
+# Flags — one upload per run of the coverage.yml matrix, same names.
+# A new feature needs both a matrix entry there and a flag here, and
+# after_n_builds (above and under `comment`) must match the number of runs.
+# `gpu` has no flag: CI runners have no GPU (#184).
 # ──────────────────────────────────────────────────────────────────────────────
 flags:
   default:
@@ -39,14 +44,33 @@ flags:
       - src/
     carryforward: false
 
-  # J5 (v0.6) — activate when `parallel` feature is declared in Cargo.toml
-  # parallel:
-  #   paths:
-  #     - src/
-  #   carryforward: false
+  sparse:
+    paths:
+      - src/
+    carryforward: false
 
-  # J5 (v0.6) — activate when `serde` feature is declared in Cargo.toml
+  hdf5:
+    paths:
+      - src/
+    carryforward: false
+
+  parallel:
+    paths:
+      - src/
+    carryforward: false
+
+  vtk:
+    paths:
+      - src/
+    carryforward: false
+
   serde:
+    paths:
+      - src/
+    carryforward: false
+
+  # tests/fem_invariants.rs alone (#172)
+  fem:
     paths:
       - src/
     carryforward: false
@@ -55,10 +79,9 @@ flags:
 # Components — per-module coverage visibility
 #
 # Convention:
-#   - Active components reflect implemented jalons
-#   - Commented blocks are activated when the jalon lands
+#   - One component per existing module under src/
 #   - Target 90% for architectural contracts (traits, invariants)
-#   - Target 85% for implementations
+#   - Target 85% for implementations (default rules)
 # ──────────────────────────────────────────────────────────────────────────────
 component_management:
 
@@ -70,8 +93,6 @@ component_management:
         target: 80%
 
   individual_components:
-
-    # ── J1 (v0.1.0) — active ─────────────────────────────────────────────────
 
     # Context layer: ContextVariable, OxiflowError, ContextValue, ComputeContext
     # Architectural contract — highest coverage target
@@ -109,38 +130,36 @@ component_management:
       paths:
         - src/solver/
 
-    # ── J2 (v0.2.0) — activate when boundary conditions are implemented ───────
+    # Boundary conditions: BoundaryCondition trait and implementations
+    - component_id: boundary
+      name: "Boundary Conditions"
+      paths:
+        - src/boundary/
 
-    # - component_id: boundary
-    #   name: "Boundary Conditions"
-    #   paths:
-    #     - src/boundary/
+    # Multi-domain coupling: CouplingOperator (INV-3)
+    - component_id: coupling
+      name: "Multi-Domain Coupling (INV-3)"
+      paths:
+        - src/coupling/
 
-    # ── J3 (v0.3.0) — activate when CouplingOperator is implemented ───────────
+    # Discrete operators: DiscreteOperator and schemes (INV-2)
+    - component_id: operators
+      name: "Discrete Operators (INV-2)"
+      paths:
+        - src/operators/
 
-    # - component_id: coupling
-    #   name: "Multi-Domain Coupling (INV-3)"
-    #   paths:
-    #     - src/coupling/
-
-    # ── J5 (v0.5.0) — activate when DiscreteOperator is implemented ───────────
-
-    # - component_id: operators
-    #   name: "Discrete Operators (INV-2)"
-    #   paths:
-    #     - src/operators/
-
-    # ── J7 (v2.0.0) — activate for FEM invariant audit ───────────────────────
-
-    # - component_id: fem_invariants
-    #   name: "FEM Invariants (INV-1/2/3)"
-    #   paths:
-    #     - src/mesh/
-    #     - src/operators/
-    #     - src/coupling/
-    #   statuses:
-    #     - type: project
-    #       target: 90%
+    # Modules under the FEM invariants, audited in #172 (INV-1/2/3).
+    # Overlaps the mesh/operators/coupling components on purpose: one view
+    # of the whole invariant surface.
+    - component_id: fem_invariants
+      name: "FEM Invariants (INV-1/2/3)"
+      paths:
+        - src/mesh/
+        - src/operators/
+        - src/coupling/
+      statuses:
+        - type: project
+          target: 90%
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Pull request comments
@@ -149,6 +168,7 @@ comment:
   layout: reach,diff,flags,components,files
   behavior: default
   require_changes: true
+  after_n_builds: 7
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Ignored paths — no coverage measurement for tests, examples, benchmarks

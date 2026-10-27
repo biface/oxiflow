@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="1. Clean" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+  <configuration default="false" name="4. Format" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Controls">
     <option name="buildProfileId" value="dev" />
-    <option name="command" value="clean" />
+    <option name="command" value="fmt" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="true" />
@@ -14,6 +14,7 @@
     <option name="isRedirectInput" value="false" />
     <option name="redirectInputPath" value="" />
     <method v="2">
+      <option name="RunConfigurationTask" enabled="true" run_configuration_name="3. Build" run_configuration_type="CargoCommandRunConfiguration" />
     </method>
   </configuration>
 </component>

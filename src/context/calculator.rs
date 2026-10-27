@@ -13,6 +13,8 @@
 //! solved, not WHAT the problem is. `DiscreteOperator` (INV-2, J4b) is an
 //! implementation detail inside spatial calculators, never exposed at configuration level.
 
+use std::sync::Arc;
+
 use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
@@ -33,6 +35,9 @@ use crate::model::traits::RequiresContext;
 /// - `compute()` receives the current field state and a **partially populated**
 ///   `ComputeContext` (variables with lower priority already resolved).
 /// - `compute()` must not modify `ctx` directly — the solver inserts the result.
+/// - The solver calls [`compute_shared()`](Self::compute_shared), which defaults
+///   to `compute()`. A calculator that keeps its value between evaluations
+///   overrides it to hand that value over without a copy (DT-068, #195).
 ///
 /// # DiscreteOperator (INV-2, J4b)
 ///
@@ -86,9 +91,133 @@ pub trait ContextCalculator: RequiresContext + Send + Sync + std::fmt::Debug {
         ctx: &ComputeContext,
     ) -> Result<ContextValue, OxiflowError>;
 
+    /// Computes the value for `provides()` as a shared allocation.
+    ///
+    /// This is the method the solver calls at each derivative evaluation.
+    /// The default wraps the result of [`compute()`](Self::compute) in an
+    /// `Arc`: the value is moved, not copied, at the cost of one `Arc`
+    /// allocation per evaluation.
+    ///
+    /// # When to override
+    ///
+    /// Override it when the calculator keeps a value from one evaluation to
+    /// the next (for instance a coefficient field evaluated once on the mesh).
+    /// Returning a clone of the kept `Arc` hands over the same allocation to
+    /// every evaluation, where `compute()` would have to copy the whole value.
+    ///
+    /// # Contract
+    ///
+    /// An override returns the same value as `compute()` for the same `state`
+    /// and `ctx`. `compute()` stays required, and remains the method to call
+    /// outside the solver.
+    ///
+    /// This method is not a parallel-dispatch capability and carries no
+    /// configuration, so it is consistent with P3 of DA-048 (#140): an
+    /// implementer that ignores it is unaffected.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::sync::Arc;
+    ///
+    /// use nalgebra::DVector;
+    /// use oxiflow::context::{
+    ///     ComputeContext, ContextCalculator, ContextValue, ContextVariable, OxiflowError,
+    /// };
+    /// use oxiflow::model::RequiresContext;
+    ///
+    /// /// Coefficient field evaluated once, then shared with every evaluation.
+    /// #[derive(Debug)]
+    /// struct FixedCoefficient {
+    ///     field: Arc<ContextValue>,
+    /// }
+    ///
+    /// impl RequiresContext for FixedCoefficient {
+    ///     fn required_variables(&self) -> Vec<ContextVariable> { vec![] }
+    /// }
+    ///
+    /// impl ContextCalculator for FixedCoefficient {
+    ///     fn provides(&self) -> ContextVariable {
+    ///         ContextVariable::External { name: "c".into() }
+    ///     }
+    ///     fn compute(&self, _state: &ContextValue, _ctx: &ComputeContext)
+    ///         -> Result<ContextValue, OxiflowError>
+    ///     {
+    ///         Ok(self.field.as_ref().clone())
+    ///     }
+    ///     fn compute_shared(&self, _state: &ContextValue, _ctx: &ComputeContext)
+    ///         -> Result<Arc<ContextValue>, OxiflowError>
+    ///     {
+    ///         Ok(Arc::clone(&self.field))
+    ///     }
+    /// }
+    ///
+    /// let calc = FixedCoefficient {
+    ///     field: Arc::new(ContextValue::ScalarField(DVector::from_element(5, 0.5))),
+    /// };
+    /// let state = ContextValue::ScalarField(DVector::zeros(5));
+    /// let ctx = ComputeContext::new(0.0, 0.01);
+    ///
+    /// let first = calc.compute_shared(&state, &ctx)?;
+    /// let second = calc.compute_shared(&state, &ctx)?;
+    /// assert!(Arc::ptr_eq(&first, &second));
+    /// assert_eq!(*first, calc.compute(&state, &ctx)?);
+    /// # Ok::<(), OxiflowError>(())
+    /// ```
+    fn compute_shared(
+        &self,
+        state: &ContextValue,
+        ctx: &ComputeContext,
+    ) -> Result<Arc<ContextValue>, OxiflowError> {
+        self.compute(state, ctx).map(Arc::new)
+    }
+
     /// Human-readable name for logging and error messages.
     fn name(&self) -> &str {
         "unnamed calculator"
+    }
+}
+
+// ── Test fixture shared across the crate ──────────────────────────────────────
+
+/// Calculator that keeps one value and hands over the same allocation at every
+/// call of `compute_shared` — the case DT-068 (#195) is about.
+///
+/// Shared by the unit tests of this module and of `solver::methods`.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct CachedValueCalculator {
+    /// Variable provided.
+    pub(crate) var: ContextVariable,
+    /// Value kept between calls.
+    pub(crate) value: Arc<ContextValue>,
+}
+
+#[cfg(test)]
+impl RequiresContext for CachedValueCalculator {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl ContextCalculator for CachedValueCalculator {
+    fn provides(&self) -> ContextVariable {
+        self.var.clone()
+    }
+    fn compute(
+        &self,
+        _state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        Ok(self.value.as_ref().clone())
+    }
+    fn compute_shared(
+        &self,
+        _state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<Arc<ContextValue>, OxiflowError> {
+        Ok(Arc::clone(&self.value))
     }
 }
 
@@ -235,6 +364,63 @@ mod tests {
             .compute(&ContextValue::Scalar(0.0), &ctx)
             .unwrap();
         assert_eq!(result.as_scalar().unwrap(), 10.0);
+    }
+
+    // ── compute_shared() ─────────────────────────────────────────────────────
+
+    #[test]
+    fn default_compute_shared_returns_the_value_of_compute() {
+        let ctx = ComputeContext::new(2.5, 0.01);
+        let state = ContextValue::Scalar(0.0);
+        let shared = TimeCalculator.compute_shared(&state, &ctx).unwrap();
+        assert_eq!(*shared, TimeCalculator.compute(&state, &ctx).unwrap());
+    }
+
+    #[test]
+    fn default_compute_shared_propagates_errors_of_compute() {
+        #[derive(Debug)]
+        struct FailingCalculator;
+        impl RequiresContext for FailingCalculator {
+            fn required_variables(&self) -> Vec<ContextVariable> {
+                vec![]
+            }
+        }
+        impl ContextCalculator for FailingCalculator {
+            fn provides(&self) -> ContextVariable {
+                ContextVariable::Time
+            }
+            fn compute(
+                &self,
+                _state: &ContextValue,
+                ctx: &ComputeContext,
+            ) -> Result<ContextValue, OxiflowError> {
+                ctx.scalar(ContextVariable::TimeStep)
+                    .map(ContextValue::Scalar)
+            }
+        }
+        let ctx = ComputeContext::new(0.0, 0.01);
+        let err = FailingCalculator
+            .compute_shared(&ContextValue::Scalar(0.0), &ctx)
+            .unwrap_err();
+        assert!(matches!(err, OxiflowError::MissingCalculator(_)));
+    }
+
+    #[test]
+    fn overridden_compute_shared_hands_over_the_same_allocation() {
+        let calc = CachedValueCalculator {
+            var: ContextVariable::External { name: "c".into() },
+            value: Arc::new(ContextValue::ScalarField(nalgebra::DVector::from_element(
+                8, 1.5,
+            ))),
+        };
+        let ctx = ComputeContext::new(0.0, 0.01);
+        let state = ContextValue::Scalar(0.0);
+        let first = calc.compute_shared(&state, &ctx).unwrap();
+        let second = calc.compute_shared(&state, &ctx).unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        assert!(Arc::ptr_eq(&first, &calc.value));
+        // Same value as compute(), as the contract requires.
+        assert_eq!(*first, calc.compute(&state, &ctx).unwrap());
     }
 
     // ── name() ───────────────────────────────────────────────────────────────

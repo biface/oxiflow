@@ -1,116 +1,82 @@
+# =============================================================================
+# Coverage — cargo-llvm-cov, uploaded to Codecov with one flag per run
+# =============================================================================
+# Not run on sprint or feature branches: coverage follows what reaches main.
+#
+#   PR → staging/**, main   measured and compared with the base commit
+#   push to main            measured again, as the reference later PRs are
+#                           compared against
+#
+# One matrix entry per flag declared in .codecov.yml; Codecov waits for all
+# of them (`after_n_builds`) before reporting. `gpu` is not measured: CI
+# runners have no GPU, its code paths cannot run (#184).
+# =============================================================================
+
 name: Coverage
 
 on:
   push:
-    branches: [main, develop]
-  pull_request:
     branches: [main]
+  pull_request:
+    branches: ["staging/**", "main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # opt-in Node 24 — remove when actions/checkout@v5 available
 
 jobs:
   coverage:
-    name: Code Coverage
+    name: Coverage (${{ matrix.flag }})
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flag: default
+            args: --all-targets
+          # faer sparse backend — DT-013 (#13), DA-043 (#103), #50.
+          - flag: sparse
+            args: --all-targets --features sparse
+          # ExternalTabulated reads HDF5 files — DT-027 (#75), #79.
+          - flag: hdf5
+            args: --all-targets --features hdf5
+            hdf5: true
+          # Rayon dispatch branches — DT-014 (#14), DA-048 (#140).
+          - flag: parallel
+            args: --all-targets --features parallel
+          # SimulationResult::write_vtk — DT-027 (#75), #78.
+          - flag: vtk
+            args: --all-targets --features vtk
+          # Serialisation and SimulationSnapshot — DT-025 (#66), #71.
+          - flag: serde
+            args: --all-targets --features serde
+          # INV-1/2/3 guards, meshes implemented outside the crate (#172).
+          - flag: fem
+            args: --test fem_invariants
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0   # full history required for Codecov branch tracking
-
-      - uses: dtolnay/rust-toolchain@stable
+          fetch-depth: 0   # full history, for Codecov's commit tracking
+      - uses: ./.github/actions/setup-rust
         with:
           components: llvm-tools-preview
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      # ── Dépendances système (à activer si nécessaire) ──────────────────────
-      # Certains modules peuvent requérir des bibliothèques système installées
-      # via apt avant que les tests puissent s'exécuter.
-      # Décommenter et adapter si un tel besoin apparaît :
-      #
-      # - name: Install system dependencies
-      #   run: |
-      #     sudo apt-get update -q
-      #     sudo apt-get install -y --no-install-recommends \
-      #       libnom-du-paquet-dev \
-      #       autre-paquet-dev
-      # ──────────────────────────────────────────────────────────────────────
-
-      # ── Run 1 : default features (core engine) ────────────────────────────
-      # Seul run actif tant que les features parallel/serde ne sont pas
-      # déclarés dans Cargo.toml. À compléter au fur et à mesure des jalons.
-      - name: Coverage — default features
-        run: |
-          cargo llvm-cov --all-targets \
-            --lcov --output-path lcov-default.info
-
-      # ── Run 2 : sparse feature (faer) — DD-013, DD-043 (#50) ───────────────
-      # Code réel depuis ce sprint (solver::sparse, banded jacobian,
-      # BackwardEuler/CrankNicolson dispatch) — contrairement à `hdf5`
-      # ci-dessous, ce run couvre du comportement effectif.
-      - name: Coverage — sparse feature
-        run: |
-          cargo llvm-cov --all-targets --features sparse \
-            --lcov --output-path lcov-sparse.info
-
-      # ── Run 3 : hdf5 feature — DD-027 (#75), migré vers hdf5-metno (#79) ───
-      # Pas encore activé : aucun code n'utilise cette feature
-      # (`ExternalTabulated` non implémenté) — un run de couverture n'aurait
-      # aucune ligne réelle à mesurer. À activer avec l'implémentation
-      # réelle, en réutilisant l'installation système ci-dessous.
-      #
-      # - name: Install system dependencies (HDF5)
-      #   run: |
-      #     sudo apt-get update -q
-      #     sudo apt-get install -y --no-install-recommends libhdf5-dev pkg-config
-      #
-      # - name: Coverage — hdf5 feature
-      #   run: |
-      #     cargo llvm-cov --all-targets --features hdf5 \
-      #       --lcov --output-path lcov-hdf5.info
-
-      # ── Run 4 : all features ──────────────────────────────────────────────
-      # À activer dès qu'au moins un feature optionnel est déclaré dans
-      # Cargo.toml (parallel, serde, hdf5...).
-      #
-      # - name: Coverage — all features
-      #   run: |
-      #     cargo llvm-cov --all-targets --all-features \
-      #       --lcov --output-path lcov-all.info
-
-      # ── Run 5 : parallel feature only ─────────────────────────────────────
-      # À activer quand Cargo.toml contient : [features] parallel = [...]
-      #
-      # - name: Coverage — parallel feature
-      #   run: |
-      #     cargo llvm-cov --all-targets --features parallel \
-      #       --lcov --output-path lcov-parallel.info
-
-      # ── Run 6 : serde feature only ────────────────────────────────────────
-      - name: Coverage — serde feature
-        run: |
-          cargo llvm-cov --all-targets --features serde \
-            --lcov --output-path lcov-serde.info
-
-      # ── FEM invariants integration test ───────────────────────────────────
-      # Dédié aux tests INV-1/2/3 dans tests/fem_invariants.rs.
-      # À activer quand ce fichier de test existe.
-      #
-      # - name: Coverage — FEM invariants
-      #   run: |
-      #     cargo llvm-cov --test fem_invariants \
-      #       --lcov --output-path lcov-fem.info
-
-      # ── Upload to Codecov ─────────────────────────────────────────────────
+          hdf5: ${{ matrix.hdf5 || false }}
+          cache-key: coverage-${{ matrix.flag }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: cargo llvm-cov ${{ matrix.args }}
+        run: cargo llvm-cov --locked ${{ matrix.args }} --lcov --output-path lcov-${{ matrix.flag }}.info
       - name: Upload to Codecov
         uses: codecov/codecov-action@v6
         with:
-          files: lcov-default.info,lcov-sparse.info,lcov-serde.info
+          files: lcov-${{ matrix.flag }}.info
+          flags: ${{ matrix.flag }}
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}

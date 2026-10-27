@@ -6,11 +6,11 @@
 //!
 //! $$u^{n+1} = u^n + \Delta t \cdot f(u^{n+1}, t^{n+1})$$
 //!
-//! A thin wrapper around the shared generalised theta method
-//! (`theta_method_step_newton`, θ=1, DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) —
-//! see that module's docs for the frozen-Jacobian default and the
-//! iterated Newton path configurable via [`BackwardEulerSolver`]'s
-//! builders.
+//! A thin wrapper around the shared generalised theta method, θ=1, of
+//! [`super::implicit`] (DD-044,
+//! [#111](https://github.com/biface/oxiflow/issues/111)) — see that
+//! module's docs for the frozen-Jacobian default and the iterated Newton
+//! path configurable via [`BackwardEulerSolver`]'s builders.
 //!
 //! ## Stability
 //!
@@ -30,11 +30,9 @@
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
-use crate::solver::linear::{LinearSolver, NalgebraDenseSolver};
-#[cfg(feature = "sparse")]
-use crate::solver::methods::implicit::theta_method_step_adaptive;
-use crate::solver::methods::implicit::{stiff_jacobian_convergence, theta_method_step_newton};
-use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence};
+use crate::solver::linear::LinearSolver;
+use crate::solver::methods::implicit::{ImplicitBackend, ImplicitFormula, JacobianDispatch};
+use crate::solver::methods::newton::{JacobianStrategy, NewtonConvergence, NewtonParams};
 use crate::solver::methods::SteppableSolver;
 use crate::solver::scenario::{Domain, Scenario};
 #[cfg(feature = "sparse")]
@@ -45,69 +43,44 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 ///
 /// # Examples
 ///
-/// ```rust,ignore
+/// ```rust
 /// use oxiflow::solver::methods::backward_euler::BackwardEulerSolver;
 ///
+/// // Dense path (default).
 /// let solver = BackwardEulerSolver::new();
-/// // Sparse backend (v0.6.0, DD-013 second phase, DD-043) — dense path
-/// // stays untouched unless all three are configured explicitly:
-/// // let solver = BackwardEulerSolver::new()
-/// //     .with_jacobian_bandwidth(scheme.stencil_radius())
-/// //     .with_sparse_solver(Box::new(FaerSparseSolver))
-/// //     .with_sparse_threshold(100); // default
+///
+/// // Sparse backend (feature `sparse`, v0.6.0, DD-013 second phase, DD-043):
+/// // the dense path stays untouched unless all three are configured explicitly.
+/// # #[cfg(feature = "sparse")]
+/// # {
+/// use oxiflow::solver::sparse::FaerSparseSolver;
+/// let sparse = BackwardEulerSolver::new()
+///     .with_jacobian_bandwidth(1) // e.g. scheme.stencil_radius()
+///     .with_sparse_solver(Box::new(FaerSparseSolver))
+///     .with_sparse_threshold(100); // default
+/// # }
 /// ```
+#[derive(Default)]
 pub struct BackwardEulerSolver {
-    linear_solver: Box<dyn LinearSolver>,
-    /// Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — default
-    /// [`stiff_jacobian_convergence`] (deliberately looser than
-    /// [`NewtonConvergence::default`] — see that function's docs for why
-    /// zero-config construction needs it).
-    newton_convergence: NewtonConvergence,
-    /// Jacobian refresh strategy (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — default
-    /// [`JacobianStrategy::default`] (`ModifiedFrozen`).
-    jacobian_strategy: JacobianStrategy,
-    /// Newton iteration budget (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)). Default `1`: exactly the
-    /// pre-DD-044 single frozen-Jacobian correction — see
-    /// [`super::implicit`]'s module docs for why this reproduces the
-    /// historical behaviour exactly, not approximately, on affine
-    /// problems. Raise this (and typically pair with
-    /// [`JacobianStrategy::FullNewton`]) for genuinely nonlinear models.
-    max_newton_iterations: usize,
-    /// Sparse backend (DD-043) — `None` by default: the dense path
-    /// ([`theta_method_step_newton`]) is unconditionally used unless this is
-    /// explicitly configured via [`Self::with_sparse_solver`]. Not yet
-    /// Newton-aware when configured — see [`super::implicit`]'s module
-    /// docs for the known gap.
-    #[cfg(feature = "sparse")]
-    sparse_solver: Option<Box<dyn SparseLinearSolver>>,
-    /// System size above which the sparse path is used, once a
-    /// `sparse_solver` and a `jacobian_bandwidth` are both configured.
-    /// Ignored (no effect) if `sparse_solver` is `None`.
-    #[cfg(feature = "sparse")]
-    sparse_threshold: usize,
-    /// Half-bandwidth of the Jacobian — a HOW-side assertion supplied by
-    /// the caller (e.g. `scheme.stencil_radius()`, DD-039), never read
-    /// from `Domain`/`PhysicalModel` (DD-043, amendment 1). `None` by
-    /// default: no assumption about locality, dense path only.
-    #[cfg(feature = "sparse")]
-    jacobian_bandwidth: Option<usize>,
-}
-
-impl Default for BackwardEulerSolver {
-    fn default() -> Self {
-        Self {
-            linear_solver: Box::new(NalgebraDenseSolver),
-            newton_convergence: stiff_jacobian_convergence(),
-            jacobian_strategy: JacobianStrategy::default(),
-            max_newton_iterations: 1,
-            #[cfg(feature = "sparse")]
-            sparse_solver: None,
-            #[cfg(feature = "sparse")]
-            sparse_threshold: 100,
-            #[cfg(feature = "sparse")]
-            jacobian_bandwidth: None,
-        }
-    }
+    /// Linear-system backends (DD-013, DD-043): the dense solver and,
+    /// with the `sparse` feature, the banded-path configuration, set by
+    /// `with_linear_solver` and the `with_sparse_*`/`with_jacobian_bandwidth`
+    /// builders.
+    backend: ImplicitBackend,
+    /// Newton configuration (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
+    /// Jacobian refresh strategy and iteration budget, set by the
+    /// `with_newton_convergence`/`with_jacobian_strategy`/
+    /// `with_max_newton_iterations` builders. Default
+    /// [`NewtonParams::default`]: a single frozen-Jacobian correction under
+    /// [`stiff_jacobian_convergence`](super::implicit::stiff_jacobian_convergence),
+    /// exact on affine problems; raise the
+    /// budget (typically with [`JacobianStrategy::FullNewton`]) for a
+    /// nonlinear model.
+    newton: NewtonParams,
+    /// Dispatch configuration of the finite-difference Jacobian assembly
+    /// (DT-069, #198). Its threshold exists only with the `parallel`
+    /// feature — see `with_parallel_threshold`.
+    jacobian_dispatch: JacobianDispatch,
 }
 
 impl BackwardEulerSolver {
@@ -118,19 +91,19 @@ impl BackwardEulerSolver {
 
     /// Substitutes the linear solver backend (DD-013).
     pub fn with_linear_solver(mut self, linear_solver: Box<dyn LinearSolver>) -> Self {
-        self.linear_solver = linear_solver;
+        self.backend.linear_solver = linear_solver;
         self
     }
 
     /// Configures the Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_newton_convergence(mut self, newton_convergence: NewtonConvergence) -> Self {
-        self.newton_convergence = newton_convergence;
+        self.newton.convergence = newton_convergence;
         self
     }
 
     /// Configures the Jacobian refresh strategy (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_jacobian_strategy(mut self, jacobian_strategy: JacobianStrategy) -> Self {
-        self.jacobian_strategy = jacobian_strategy;
+        self.newton.jacobian_strategy = jacobian_strategy;
         self
     }
 
@@ -138,8 +111,47 @@ impl BackwardEulerSolver {
     /// field's own docs for why the default (`1`) reproduces the
     /// pre-DD-044 behaviour exactly on affine problems.
     pub fn with_max_newton_iterations(mut self, max_newton_iterations: usize) -> Self {
-        self.max_newton_iterations = max_newton_iterations;
+        self.newton.max_iterations = max_newton_iterations;
         self
+    }
+
+    /// Overrides the Rayon dispatch threshold of the finite-difference
+    /// Jacobian assembly at construction time (DT-069, #198), in unknowns
+    /// (nodes × components). The Jacobian's columns (dense path) or colors
+    /// (banded path) are dispatched through Rayon once the system has at
+    /// least this many unknowns; the Jacobian is bit-for-bit identical
+    /// either way. Only exists when the crate is built with the `parallel`
+    /// feature.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` — see `ParallelThreshold::set`.
+    #[cfg(feature = "parallel")]
+    pub fn with_parallel_threshold(self, threshold: usize) -> Self {
+        self.jacobian_dispatch.set(threshold);
+        self
+    }
+
+    /// Reconfigures the same threshold at runtime, through `&self` — no
+    /// rebuild required. Scoped to this solver instance. Only exists when
+    /// the crate is built with the `parallel` feature.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `threshold == 0` — see `ParallelThreshold::set`.
+    #[cfg(feature = "parallel")]
+    pub fn set_parallel_threshold(&self, threshold: usize) {
+        self.jacobian_dispatch.set(threshold);
+    }
+
+    /// Returns the effective dispatch threshold of the Jacobian assembly —
+    /// the override if one was set, otherwise an indicative default of 256
+    /// unknowns, to be replaced by a value measured on the target workload
+    /// (`oxiflow_parallel` benchmarks). Only exists when the crate is built
+    /// with the `parallel` feature.
+    #[cfg(feature = "parallel")]
+    pub fn parallel_threshold(&self) -> usize {
+        self.jacobian_dispatch.threshold()
     }
 
     /// Configures the sparse backend (DD-043). Has no effect on its own —
@@ -148,23 +160,27 @@ impl BackwardEulerSolver {
     /// at solve time; otherwise the dense path is used unchanged.
     #[cfg(feature = "sparse")]
     pub fn with_sparse_solver(mut self, sparse_solver: Box<dyn SparseLinearSolver>) -> Self {
-        self.sparse_solver = Some(sparse_solver);
+        self.backend.sparse_solver = Some(sparse_solver);
         self
     }
 
-    /// System size above which the sparse path is used (default 100) —
-    /// see [`Self::with_sparse_solver`].
+    /// Number of unknowns (nodes × components) above which the sparse path
+    /// is used (default 100) — see [`Self::with_sparse_solver`].
     #[cfg(feature = "sparse")]
     pub fn with_sparse_threshold(mut self, sparse_threshold: usize) -> Self {
-        self.sparse_threshold = sparse_threshold;
+        self.backend.sparse_threshold = sparse_threshold;
         self
     }
 
     /// Declares the Jacobian's half-bandwidth (e.g.
     /// `scheme.stencil_radius()`, DD-039) — see [`Self::with_sparse_solver`].
+    ///
+    /// Counted in flat unknowns. For a `ScalarField` state this is the
+    /// stencil half-width `s`; for a `VectorField` state of `d` components,
+    /// whose unknowns are interleaved by node, it is `d·(s + 1) − 1` (#192).
     #[cfg(feature = "sparse")]
     pub fn with_jacobian_bandwidth(mut self, jacobian_bandwidth: usize) -> Self {
-        self.jacobian_bandwidth = Some(jacobian_bandwidth);
+        self.backend.jacobian_bandwidth = Some(jacobian_bandwidth);
         self
     }
 }
@@ -179,7 +195,6 @@ impl Solver for BackwardEulerSolver {
     }
 }
 
-#[cfg(feature = "sparse")]
 impl SteppableSolver for BackwardEulerSolver {
     fn step(
         &self,
@@ -192,66 +207,15 @@ impl SteppableSolver for BackwardEulerSolver {
     ) -> Result<ContextValue, OxiflowError> {
         // history_depth() defaults to 0 -- Backward Euler is a one-step
         // method, `_history` is always empty here and intentionally unused.
-        //
-        // Dispatch is gated on `sparse_solver` alone: with no solver
-        // configured there is nothing to hand `theta_method_step_adaptive`,
-        // so the dense path is taken directly rather than going through it
-        // with a `None` bandwidth (equivalent result, one fewer branch to
-        // reason about). The `n > sparse_threshold && bandwidth.is_some()`
-        // condition is `theta_method_step_adaptive`'s own responsibility.
-        match &self.sparse_solver {
-            Some(sparse_solver) => theta_method_step_adaptive(
-                domain,
-                chain,
-                state,
-                t,
-                dt,
-                1.0,
-                self.linear_solver.as_ref(),
-                sparse_solver.as_ref(),
-                self.sparse_threshold,
-                self.jacobian_bandwidth,
-            ),
-            None => theta_method_step_newton(
-                domain,
-                chain,
-                state,
-                t,
-                dt,
-                1.0,
-                self.linear_solver.as_ref(),
-                self.newton_convergence,
-                self.jacobian_strategy,
-                self.max_newton_iterations,
-            ),
-        }
-    }
-}
-
-#[cfg(not(feature = "sparse"))]
-impl SteppableSolver for BackwardEulerSolver {
-    fn step(
-        &self,
-        domain: &Domain,
-        chain: &[&dyn ContextCalculator],
-        state: &mut ContextValue,
-        _history: &[ContextValue],
-        t: f64,
-        dt: f64,
-    ) -> Result<ContextValue, OxiflowError> {
-        // history_depth() defaults to 0 -- Backward Euler is a one-step
-        // method, `_history` is always empty here and intentionally unused.
-        theta_method_step_newton(
+        self.backend.step(
             domain,
             chain,
             state,
             t,
             dt,
-            1.0,
-            self.linear_solver.as_ref(),
-            self.newton_convergence,
-            self.jacobian_strategy,
-            self.max_newton_iterations,
+            ImplicitFormula::Theta(1.0),
+            &self.newton,
+            &self.jacobian_dispatch,
         )
     }
 }
@@ -265,83 +229,14 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::mesh::{Mesh, UniformGrid1D};
     use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::model::{CubicDecay, ExponentialDecay, ZeroDerivative};
     use crate::solver::config::{
         IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration,
     };
-    use nalgebra::{DMatrix, DVector};
+    use crate::solver::linear::CountingLinearSolver;
+    use nalgebra::DVector;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
-
-    #[derive(Debug)]
-    struct ExponentialDecay {
-        lambda: f64,
-    }
-
-    impl RequiresContext for ExponentialDecay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ExponentialDecay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.lambda * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "exponential_decay"
-        }
-    }
-
-    #[derive(Debug)]
-    struct ZeroDerivative;
-
-    impl RequiresContext for ZeroDerivative {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for ZeroDerivative {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(DVector::zeros(u.len())))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 2.5))
-        }
-
-        fn name(&self) -> &str {
-            "zero_derivative"
-        }
-    }
-
-    /// Delegates to `NalgebraDenseSolver` but counts calls.
-    #[derive(Debug)]
-    struct CountingLinearSolver {
-        calls: Arc<AtomicUsize>,
-    }
-
-    impl LinearSolver for CountingLinearSolver {
-        fn solve(&self, a: &DMatrix<f64>, b: &DVector<f64>) -> Result<DVector<f64>, OxiflowError> {
-            self.calls.fetch_add(1, Ordering::SeqCst);
-            NalgebraDenseSolver.solve(a, b)
-        }
-    }
 
     fn make_config(t_end: f64, dt: f64) -> SolverConfiguration {
         SolverConfiguration::new(
@@ -356,7 +251,7 @@ mod tests {
 
     #[test]
     fn zero_derivative_field_stays_constant() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(5));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(5));
         let config = make_config(1.0, 0.1);
         let result = BackwardEulerSolver::new()
             .solve(&scenario, &config)
@@ -389,7 +284,7 @@ mod tests {
 
     #[test]
     fn result_times_match_expected_steps() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(3));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(3));
         let config = make_config(0.5, 0.1);
         let result = BackwardEulerSolver::new()
             .solve(&scenario, &config)
@@ -401,7 +296,7 @@ mod tests {
 
     #[test]
     fn n_steps_is_correct() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = make_config(1.0, 0.25);
         let result = BackwardEulerSolver::new()
             .solve(&scenario, &config)
@@ -411,7 +306,7 @@ mod tests {
 
     #[test]
     fn save_every_reduces_stored_states() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = SolverConfiguration::new(
             TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }).saving_every(5),
             IntegratorKind::BackwardEuler,
@@ -483,7 +378,7 @@ mod tests {
 
     #[test]
     fn negative_dt_returns_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2));
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2));
         let config = make_config(1.0, -0.1);
         assert!(BackwardEulerSolver::new()
             .solve(&scenario, &config)
@@ -492,7 +387,8 @@ mod tests {
 
     #[test]
     fn t_end_before_t_start_returns_error() {
-        let scenario = Scenario::single(Box::new(ZeroDerivative), make_mesh(2)).with_t_start(5.0);
+        let scenario = Scenario::single(Box::new(ZeroDerivative { initial: 2.5 }), make_mesh(2))
+            .with_t_start(5.0);
         let config = make_config(1.0, 0.1);
         assert!(BackwardEulerSolver::new()
             .solve(&scenario, &config)
@@ -535,34 +431,6 @@ mod tests {
     }
 
     // ── Iterated Newton (DD-044, #111) ─────────────────────────────────────────
-
-    #[derive(Debug)]
-    struct CubicDecay;
-
-    impl RequiresContext for CubicDecay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for CubicDecay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -v * v * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "cubic_decay_test"
-        }
-    }
 
     #[test]
     fn full_newton_resolves_nonaffine_correction_beyond_frozen_jacobian() {

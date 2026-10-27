@@ -1,0 +1,54 @@
+#!/bin/sh
+# =============================================================================
+# commit-msg — Conventional Commits header (#185)
+# =============================================================================
+# Enabled once per clone with `git config core.hooksPath .githooks`. Bypass
+# with `git commit --no-verify`; CI remains the authority.
+#
+# The header is the first line that is neither blank nor a comment (git runs
+# this hook before stripping comments). It must read
+#     type(scope)!: subject
+# with an optional scope and an optional `!` marking a breaking change.
+# Git-generated headers pass unchecked: `Merge …`, `Revert "…"`, `fixup! …`,
+# `squash! …`, `amend! …`.
+#
+# POSIX sh only.
+# =============================================================================
+
+set -eu
+
+types='feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|bench'
+
+# `auto` lets git pick the character per message; `#` is then the best guess.
+comment_char=$(git config --get core.commentChar || true)
+case $comment_char in
+    '' | auto) comment_char='#' ;;
+esac
+
+header=$(awk -v c="$comment_char" '
+    /^[[:space:]]*$/ { next }
+    index($0, c) == 1 { next }
+    { print; exit }
+' "$1")
+
+# An empty message: git aborts the commit by itself.
+[ -n "$header" ] || exit 0
+
+case $header in
+    'Merge '* | 'Revert "'* | 'fixup! '* | 'squash! '* | 'amend! '*) exit 0 ;;
+esac
+
+if printf '%s\n' "$header" \
+    | grep -Eq "^($types)(\\([a-z0-9][a-z0-9._/-]*\\))?!?: [^[:space:]]"; then
+    exit 0
+fi
+
+cat >&2 <<MSG
+commit-msg: the header does not follow Conventional Commits:
+    $header
+expected: type(scope): subject, scope optional, '!' before ':' for a breaking change
+types:    $(printf '%s' "$types" | sed 's/|/, /g')
+scope:    lowercase letters, digits, '.', '_', '/', '-'
+example:  ci(hooks): add versioned pre-commit, commit-msg and pre-push hooks
+MSG
+exit 1

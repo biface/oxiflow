@@ -16,10 +16,19 @@
 //! $$v \, u(0, t) - D \left.\frac{\partial u}{\partial x}\right|_{x=0}
 //!   = v \, u_{\text{feed}}(t)$$
 //!
-//! Rearranged into an explicit assignment for the inlet node:
+//! Discretised with the one-sided difference between the inlet node and its
+//! neighbour, $(u_1 - u_0)/\Delta x$ with $\Delta x = x_1 - x_0$, and solved
+//! for the inlet node (DD-070, #201):
 //!
-//! $$u(0, t) = u_{\text{feed}}(t) + \frac{D}{v}
-//!   \left.\frac{\partial u}{\partial x}\right|_{x=0}$$
+//! $$u_0 = \frac{u_{\text{feed}}(t) + \kappa \, u_1}{1 + \kappa},
+//!   \qquad \kappa = \frac{D}{v \, \Delta x}$$
+//!
+//! The inlet value follows from its neighbour alone, not from a gradient
+//! computed on the state before the condition was applied. The former form,
+//! $u_0 = u_{\text{feed}} + (D/v)\,\partial_x u|_0$ with the gradient read
+//! from the context, iterated $u_0$ with a factor $-\kappa$ from one
+//! evaluation to the next and diverged as soon as $\kappa > 1$, that is
+//! $(n - 1)/\text{Pe} > 1$ on a uniform grid with $\text{Pe} = vL/D$.
 //!
 //! The feed concentration $u_{\text{feed}}(t)$ is read from [`ComputeContext`] via
 //! a typed [`ContextVariable`] key — it can be constant, time-dependent, or
@@ -34,6 +43,19 @@
 //! Applied as a first-order finite-difference approximation: the last node value
 //! is set equal to its immediate predecessor, enforcing zero gradient.
 //!
+//! ## Supported meshes
+//!
+//! Each condition acts on a boundary region of the mesh (DA-071, #204): by
+//! default the lower face of axis 0 for the inlet, the upper face for the
+//! outlet — the two ends of a 1D column, flow towards increasing `x`.
+//! [`DanckwertsInlet::on`] and [`DanckwertsOutlet::on`] choose another face,
+//! for a flow towards decreasing `x` for instance. The mesh resolves the
+//! region with [`Mesh::boundary_neighbours`]: every node of the face is set
+//! from its first interior neighbour along the normal. A mesh that does not
+//! define the region refuses it with `PreconditionFailed`; with the default
+//! implementation of `Mesh`, that is any mesh that is not 1D (#187), and a
+//! 1D mesh whose boundary nodes are not ordered along the axis.
+//!
 //! ## Souplesse
 //!
 //! The physical parameters $D$ (dispersion) and $v$ (velocity) are struct fields —
@@ -45,8 +67,11 @@
 //! ## Serialisation
 //!
 //! Both types implement `serde::Serialize` / `serde::Deserialize` under the `serde`
-//! feature flag. All fields are either `f64` or [`ContextVariable`] — both
-//! already serialisable.
+//! feature flag. All fields are `f64`, [`ContextVariable`] or
+//! [`BoundaryRegion`] — all serialisable. An inlet serialised before DA-071,
+//! without a region, reads back on the lower face of axis 0. The outlet,
+//! formerly a unit value, now serialises as a map holding its region; an
+//! empty map reads back on the upper face.
 //!
 //! [`ComputeContext`]: crate::context::compute::ComputeContext
 //! [`ContextCalculator`]: crate::context::calculator::ContextCalculator
@@ -56,18 +81,43 @@ use crate::boundary::BoundaryCondition;
 use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
 use crate::context::variable::ContextVariable;
-use crate::mesh::Mesh;
+use crate::mesh::{BoundaryRegion, FaceSide, Mesh};
 use crate::model::traits::RequiresContext;
 use nalgebra::DVector;
+
+/// Default region of the inlet: the lower face of axis 0.
+fn lower_face() -> BoundaryRegion {
+    BoundaryRegion::Face {
+        axis: 0,
+        side: FaceSide::Lower,
+    }
+}
+
+/// Default region of the outlet: the upper face of axis 0.
+fn upper_face() -> BoundaryRegion {
+    BoundaryRegion::Face {
+        axis: 0,
+        side: FaceSide::Upper,
+    }
+}
 
 // ── DanckwertsInlet ───────────────────────────────────────────────────────────
 
 /// Danckwerts inlet condition — Robin BC at $x = 0$.
 ///
-/// Enforces mass-flux continuity at the column inlet:
+/// Enforces mass-flux continuity at the column inlet,
+/// $v\,u(0, t) - D\,\partial_x u|_{x=0} = v\,u_{\text{feed}}(t)$, through its
+/// one-sided discretisation solved for node 0 (see the module
+/// documentation):
 ///
-/// $$u(0, t) = u_{\text{feed}}(t) + \frac{D}{v}
-///   \left.\frac{\partial u}{\partial x}\right|_{x=0}$$
+/// $$u_0 = \frac{u_{\text{feed}}(t) + \kappa \, u_1}{1 + \kappa},
+///   \qquad \kappa = \frac{D}{v \, (x_1 - x_0)}$$
+///
+/// Written for node 0 and its neighbour 1 of a 1D column, the default
+/// region; on any region, each boundary node and its interior neighbour
+/// play these roles. The nodes of the region are declared as constrained
+/// nodes (DD-070): the solver keeps their derivative at zero and the
+/// condition alone sets them.
 ///
 /// # Parameters
 ///
@@ -80,14 +130,17 @@ use nalgebra::DVector;
 ///
 /// # Requirements
 ///
-/// Declares two required context variables:
+/// Declares one required context variable, `feed_variable` — the feed
+/// concentration $u_{\text{feed}}(t)$, which does not depend on the state.
+/// The solver validates that it is covered before the first time step. No
+/// gradient calculator is needed.
 ///
-/// - `ContextVariable::SpatialGradient { dimension: 0, component: None }` —
-///   the nodal gradient field $\partial u / \partial x$ computed by a gradient
-///   calculator registered in `SolverConfiguration`.
-/// - `feed_variable` — the feed concentration $u_{\text{feed}}(t)$.
+/// # Supported meshes
 ///
-/// The solver validates that both are covered before the first time step.
+/// Any mesh defining the region through [`Mesh::boundary_neighbours`]; see
+/// the module documentation. With the default implementation of `Mesh`: 1D
+/// meshes with at least two nodes, whose inlet pair is ordered along the
+/// axis.
 ///
 /// # Serialisation
 ///
@@ -116,6 +169,10 @@ pub struct DanckwertsInlet {
     pub velocity: f64,
     /// Context key used to read the feed concentration $u_{\text{feed}}(t)$.
     pub feed_variable: ContextVariable,
+    /// Boundary region the condition acts on (DA-071) — the lower face of
+    /// axis 0 unless set with [`Self::on`].
+    #[cfg_attr(feature = "serde", serde(default = "lower_face"))]
+    pub region: BoundaryRegion,
 }
 
 impl DanckwertsInlet {
@@ -126,24 +183,29 @@ impl DanckwertsInlet {
     /// - `dispersion` — axial dispersion coefficient $D$.
     /// - `velocity`   — interstitial velocity $v$ (must be non-zero at apply time).
     /// - `feed_variable` — context key for $u_{\text{feed}}(t)$.
+    ///
+    /// The condition acts on the lower face of axis 0 — node `0` of a 1D
+    /// column; [`Self::on`] chooses another face.
     pub fn new(dispersion: f64, velocity: f64, feed_variable: ContextVariable) -> Self {
         Self {
             dispersion,
             velocity,
             feed_variable,
+            region: lower_face(),
         }
+    }
+
+    /// Sets the boundary region the condition acts on (DA-071) — the upper
+    /// face of axis 0 for a flow towards decreasing `x`, for instance.
+    pub fn on(mut self, region: BoundaryRegion) -> Self {
+        self.region = region;
+        self
     }
 }
 
 impl RequiresContext for DanckwertsInlet {
     fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![
-            ContextVariable::SpatialGradient {
-                dimension: 0,
-                component: None,
-            },
-            self.feed_variable.clone(),
-        ]
+        vec![self.feed_variable.clone()]
     }
 
     fn priority(&self) -> u32 {
@@ -160,43 +222,62 @@ impl BoundaryCondition for DanckwertsInlet {
         Some(crate::boundary::BoundaryLocation::Inlet)
     }
 
-    /// Applies the Danckwerts inlet condition to `state[0]`.
+    /// Applies the Danckwerts inlet condition to every node of its region.
     ///
-    /// Reads `∂u/∂x|_{x=0}` from the gradient field at node 0 and
+    /// For each boundary node, reads its interior neighbour from `state` and
+    /// their distance from [`Mesh::boundary_neighbours`], and
     /// $u_{\text{feed}}$ from the context variable declared at construction.
     ///
     /// # Errors
     ///
-    /// - [`OxiflowError::MissingCalculator`] if the gradient field or the feed
-    ///   variable is absent from the context.
+    /// - [`OxiflowError::MissingCalculator`] if the feed variable is absent
+    ///   from the context.
     /// - [`OxiflowError::TypeMismatch`] if the feed variable is not a `Scalar`.
-    /// - [`OxiflowError::PreconditionFailed`] if the mesh has no nodes or if
-    ///   `velocity` is zero (division by zero in $D/v$).
+    /// - [`OxiflowError::PreconditionFailed`] if the mesh does not define the
+    ///   region (with the default implementation of `Mesh`: a mesh that is
+    ///   not 1D, has fewer than two nodes, or whose boundary pair is not
+    ///   ordered along the axis), if `velocity` is zero, or if
+    ///   $1 + \kappa = 0$.
     fn apply(
         &self,
         state: &mut DVector<f64>,
         ctx: &ComputeContext,
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError> {
-        if mesh.n_dof() == 0 {
-            return Err(OxiflowError::PreconditionFailed {
-                context: "DanckwertsInlet",
-                message: "mesh has no degrees of freedom".into(),
-            });
-        }
+        let refuse = |message: String| OxiflowError::PreconditionFailed {
+            context: "DanckwertsInlet",
+            message,
+        };
+        let boundary = mesh.boundary_neighbours(&self.region)?;
         if self.velocity == 0.0 {
-            return Err(OxiflowError::PreconditionFailed {
-                context: "DanckwertsInlet",
-                message: "velocity must be non-zero".into(),
-            });
+            return Err(refuse("velocity must be non-zero".into()));
         }
-
-        let gradient = ctx.gradient(0)?;
-        let du_dx_0 = gradient[0];
         let u_feed = ctx.external(self.feed_variable.clone())?.as_scalar()?;
 
-        state[0] = u_feed + (self.dispersion / self.velocity) * du_dx_0;
+        // Every kappa is checked before any node is set: a refused condition
+        // leaves the state as is.
+        let mut kappas = Vec::with_capacity(boundary.len());
+        for b in &boundary {
+            let kappa = self.dispersion / (self.velocity * b.distance);
+            if 1.0 + kappa == 0.0 {
+                return Err(refuse(format!(
+                    "1 + D / (v dx) is zero at node {} (D = {}, v = {}, dx = {})",
+                    b.node, self.dispersion, self.velocity, b.distance
+                )));
+            }
+            kappas.push(kappa);
+        }
+        for (b, kappa) in boundary.iter().zip(kappas) {
+            state[b.node] = (u_feed + kappa * state[b.inner]) / (1.0 + kappa);
+        }
         Ok(())
+    }
+
+    /// The nodes of its region, set by [`apply`](Self::apply) (DD-070). A
+    /// region the mesh does not define gives no node here; `apply` reports
+    /// the error.
+    fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {
+        mesh.boundary_nodes(&self.region).unwrap_or_default()
     }
 }
 
@@ -212,8 +293,19 @@ impl BoundaryCondition for DanckwertsInlet {
 ///
 /// $$u_{n-1} = u_{n-2}$$
 ///
+/// written for the last node of a 1D column, the default region; on any
+/// region, each boundary node takes the value of its interior neighbour.
+/// The nodes of the region are declared as constrained nodes (DD-070).
+///
 /// No context variables are required — the condition depends only on the
 /// current field state and the mesh geometry.
+///
+/// # Supported meshes
+///
+/// Any mesh defining the region through [`Mesh::boundary_neighbours`]; see
+/// the module documentation. With the default implementation of `Mesh`: 1D
+/// meshes with at least two nodes, whose outlet pair is ordered along the
+/// axis.
 ///
 /// # Serialisation
 ///
@@ -231,12 +323,27 @@ impl BoundaryCondition for DanckwertsInlet {
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct DanckwertsOutlet;
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct DanckwertsOutlet {
+    /// Boundary region the condition acts on (DA-071) — the upper face of
+    /// axis 0 unless set with [`Self::on`].
+    pub region: BoundaryRegion,
+}
 
 impl DanckwertsOutlet {
-    /// Creates a new `DanckwertsOutlet`.
+    /// Creates a new `DanckwertsOutlet`, acting on the upper face of axis 0
+    /// — node `n − 1` of a 1D column; [`Self::on`] chooses another face.
     pub fn new() -> Self {
-        Self
+        Self {
+            region: upper_face(),
+        }
+    }
+
+    /// Sets the boundary region the condition acts on (DA-071) — the lower
+    /// face of axis 0 for a flow towards decreasing `x`, for instance.
+    pub fn on(mut self, region: BoundaryRegion) -> Self {
+        self.region = region;
+        self
     }
 }
 
@@ -265,29 +372,35 @@ impl BoundaryCondition for DanckwertsOutlet {
         Some(crate::boundary::BoundaryLocation::Outlet)
     }
 
-    /// Applies the Danckwerts outlet condition.
+    /// Applies the Danckwerts outlet condition to every node of its region.
     ///
-    /// Sets `state[n-1] = state[n-2]` — first-order approximation of zero
-    /// gradient at the outlet. Requires at least two nodes.
+    /// Sets each boundary node to the value of its first interior neighbour
+    /// ([`Mesh::boundary_neighbours`]) — first-order approximation of a zero
+    /// gradient across the outlet; on a 1D column, `state[n-1] = state[n-2]`.
     ///
     /// # Errors
     ///
-    /// - [`OxiflowError::PreconditionFailed`] if the mesh has fewer than two nodes.
+    /// - [`OxiflowError::PreconditionFailed`] if the mesh does not define the
+    ///   region (with the default implementation of `Mesh`: a mesh that is
+    ///   not 1D, has fewer than two nodes, or whose boundary pair is not
+    ///   ordered along the axis).
     fn apply(
         &self,
         state: &mut DVector<f64>,
         _ctx: &ComputeContext,
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError> {
-        let n = mesh.n_dof();
-        if n < 2 {
-            return Err(OxiflowError::PreconditionFailed {
-                context: "DanckwertsOutlet",
-                message: "mesh must have at least 2 nodes".into(),
-            });
+        for b in mesh.boundary_neighbours(&self.region)? {
+            state[b.node] = state[b.inner];
         }
-        state[n - 1] = state[n - 2];
         Ok(())
+    }
+
+    /// The nodes of its region, set by [`apply`](Self::apply) (DD-070). A
+    /// region the mesh does not define gives no node here; `apply` reports
+    /// the error.
+    fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {
+        mesh.boundary_nodes(&self.region).unwrap_or_default()
     }
 }
 
@@ -298,6 +411,7 @@ mod tests {
     use super::*;
     use crate::context::value::ContextValue;
     use crate::mesh::structured::UniformGrid1D;
+    use crate::mesh::NodeCloud;
     use nalgebra::DVector;
 
     // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -316,18 +430,8 @@ mod tests {
         UniformGrid1D::new(n, 0.0, 1.0).unwrap()
     }
 
-    fn make_ctx_with_gradient_and_feed(gradient_at_0: f64, u_feed: f64) -> ComputeContext {
+    fn make_ctx_with_feed(u_feed: f64) -> ComputeContext {
         let mut ctx = ComputeContext::new(0.0, 0.01);
-        let n = 5;
-        let mut grad = DVector::zeros(n);
-        grad[0] = gradient_at_0;
-        ctx.insert(
-            ContextVariable::SpatialGradient {
-                dimension: 0,
-                component: None,
-            },
-            ContextValue::ScalarField(grad),
-        );
         ctx.insert(feed_var(), ContextValue::Scalar(u_feed));
         ctx
     }
@@ -369,15 +473,21 @@ mod tests {
     // ── RequiresContext — DanckwertsInlet ─────────────────────────────────────
 
     #[test]
-    fn inlet_required_variables_contains_gradient_and_feed() {
+    fn inlet_requires_the_feed_only() {
+        // DD-070: no state-dependent variable, so no gradient.
+        assert_eq!(
+            make_inlet(1e-7, 1e-3).required_variables(),
+            vec![feed_var()]
+        );
+    }
+
+    #[test]
+    fn inlet_declares_node_zero() {
         let inlet = make_inlet(1e-7, 1e-3);
-        let reqs = inlet.required_variables();
-        assert!(reqs.contains(&ContextVariable::SpatialGradient {
-            dimension: 0,
-            component: None,
-        }));
-        assert!(reqs.contains(&feed_var()));
-        assert_eq!(reqs.len(), 2);
+        assert_eq!(inlet.constrained_nodes(&make_mesh(5)), vec![0]);
+        assert!(inlet
+            .constrained_nodes(&NodeCloud::new::<1>(&[], 0.0))
+            .is_empty());
     }
 
     #[test]
@@ -409,80 +519,96 @@ mod tests {
 
     // ── apply — DanckwertsInlet ───────────────────────────────────────────────
 
-    #[test]
-    fn inlet_apply_zero_gradient_equals_u_feed() {
-        // When ∂u/∂x|₀ = 0, state[0] = u_feed exactly.
-        let inlet = make_inlet(1e-7, 1e-3);
-        let mesh = make_mesh(5);
-        let ctx = make_ctx_with_gradient_and_feed(0.0, 1.0);
-        let mut state = DVector::zeros(5);
-        inlet.apply(&mut state, &ctx, &mesh).unwrap();
-        assert!((state[0] - 1.0).abs() < 1e-12);
+    /// `v u0 - D (u1 - u0) / dx - v u_feed`: zero when the discrete Robin
+    /// condition holds.
+    fn robin_residual(inlet: &DanckwertsInlet, state: &DVector<f64>, dx: f64, u_feed: f64) -> f64 {
+        inlet.velocity * state[0]
+            - inlet.dispersion * (state[1] - state[0]) / dx
+            - inlet.velocity * u_feed
     }
 
     #[test]
-    fn inlet_apply_formula_is_correct() {
-        // u(0) = u_feed + (D/v) * du_dx_0
-        // With D=1e-4, v=1e-2, du_dx_0=0.5, u_feed=0.8:
-        // u(0) = 0.8 + (1e-4/1e-2)*0.5 = 0.8 + 0.005 = 0.805
+    fn inlet_apply_equals_u_feed_on_a_flat_profile() {
+        // u1 = u_feed gives u0 = u_feed, whatever kappa.
         let inlet = make_inlet(1e-4, 1e-2);
-        let mesh = make_mesh(5);
-        let ctx = make_ctx_with_gradient_and_feed(0.5, 0.8);
-        let mut state = DVector::zeros(5);
-        inlet.apply(&mut state, &ctx, &mesh).unwrap();
-        let expected = 0.8 + (1e-4 / 1e-2) * 0.5;
-        assert!((state[0] - expected).abs() < 1e-12);
+        let mut state = DVector::from_element(5, 0.8);
+        state[0] = 0.0;
+        inlet
+            .apply(&mut state, &make_ctx_with_feed(0.8), &make_mesh(5))
+            .unwrap();
+        assert!((state[0] - 0.8).abs() < 1e-15);
+    }
+
+    #[test]
+    fn inlet_apply_solves_the_discrete_robin_relation() {
+        // D = 1e-3, v = 1e-2, dx = 0.25: kappa = 0.4.
+        // u0 = (0.8 + 0.4 * 2.0) / 1.4.
+        let inlet = make_inlet(1e-3, 1e-2);
+        let mut state = DVector::from_element(5, 2.0);
+        inlet
+            .apply(&mut state, &make_ctx_with_feed(0.8), &make_mesh(5))
+            .unwrap();
+        assert!((state[0] - (0.8 + 0.4 * 2.0) / 1.4).abs() < 1e-15);
+        assert!(robin_residual(&inlet, &state, 0.25, 0.8).abs() < 1e-15);
+    }
+
+    #[test]
+    fn inlet_apply_does_not_depend_on_the_previous_inlet_value() {
+        // The former form iterated u0 with a factor -kappa; this one does
+        // not read u0 at all.
+        let inlet = make_inlet(1.0, 1e-2); // kappa = 400 on dx = 0.25
+        let mut a = DVector::from_element(5, 2.0);
+        let mut b = a.clone();
+        b[0] = 1e6;
+        let ctx = make_ctx_with_feed(0.8);
+        inlet.apply(&mut a, &ctx, &make_mesh(5)).unwrap();
+        inlet.apply(&mut b, &ctx, &make_mesh(5)).unwrap();
+        assert_eq!(a[0].to_bits(), b[0].to_bits());
+        assert!(robin_residual(&inlet, &a, 0.25, 0.8).abs() < 1e-12);
     }
 
     #[test]
     fn inlet_apply_does_not_modify_other_nodes() {
         let inlet = make_inlet(1e-7, 1e-3);
-        let mesh = make_mesh(5);
-        let ctx = make_ctx_with_gradient_and_feed(0.0, 1.0);
+        let ctx = make_ctx_with_feed(1.0);
         let mut state = DVector::from_element(5, 2.0);
-        inlet.apply(&mut state, &ctx, &mesh).unwrap();
-        // Only node 0 is changed.
+        inlet.apply(&mut state, &ctx, &make_mesh(5)).unwrap();
         for i in 1..5 {
             assert!((state[i] - 2.0).abs() < 1e-12, "node {i} was modified");
         }
     }
 
     #[test]
-    fn inlet_apply_missing_gradient_returns_error() {
+    fn inlet_apply_missing_feed_returns_error() {
         let inlet = make_inlet(1e-7, 1e-3);
-        let mesh = make_mesh(5);
-        let mut ctx = ComputeContext::new(0.0, 0.01);
-        ctx.insert(feed_var(), ContextValue::Scalar(1.0));
-        // Gradient not inserted.
+        let ctx = ComputeContext::new(0.0, 0.01);
         let mut state = DVector::zeros(5);
-        let err = inlet.apply(&mut state, &ctx, &mesh).unwrap_err();
+        let err = inlet.apply(&mut state, &ctx, &make_mesh(5)).unwrap_err();
         assert!(matches!(err, OxiflowError::MissingCalculator(_)));
     }
 
     #[test]
-    fn inlet_apply_missing_feed_returns_error() {
+    fn inlet_apply_refuses_a_single_node_or_a_reversed_mesh() {
         let inlet = make_inlet(1e-7, 1e-3);
-        let mesh = make_mesh(5);
-        let mut ctx = ComputeContext::new(0.0, 0.01);
-        let grad = ContextValue::ScalarField(DVector::zeros(5));
-        ctx.insert(
-            ContextVariable::SpatialGradient {
-                dimension: 0,
-                component: None,
-            },
-            grad,
-        );
-        // Feed not inserted.
-        let mut state = DVector::zeros(5);
-        let err = inlet.apply(&mut state, &ctx, &mesh).unwrap_err();
-        assert!(matches!(err, OxiflowError::MissingCalculator(_)));
+        let ctx = make_ctx_with_feed(1.0);
+        let single = NodeCloud::new(&[[0.0]], 0.0);
+        let reversed = NodeCloud::new(&[[1.0], [0.5], [0.0]], 0.5);
+        for (mesh, n) in [(&single, 1), (&reversed, 3)] {
+            let mut state = DVector::from_element(n, 2.0);
+            let err = inlet.apply(&mut state, &ctx, mesh).unwrap_err();
+            assert!(
+                matches!(err, OxiflowError::PreconditionFailed { .. }),
+                "{err:?}"
+            );
+            assert_eq!(state, DVector::from_element(n, 2.0));
+        }
     }
 
     #[test]
     fn inlet_apply_zero_velocity_returns_error() {
         let inlet = make_inlet(1e-7, 0.0);
         let mesh = make_mesh(5);
-        let ctx = make_ctx_with_gradient_and_feed(0.0, 1.0);
+        let ctx = make_ctx_with_feed(1.0);
         let mut state = DVector::zeros(5);
         let err = inlet.apply(&mut state, &ctx, &mesh).unwrap_err();
         assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
@@ -491,29 +617,9 @@ mod tests {
     #[test]
     fn inlet_apply_empty_mesh_returns_error() {
         let inlet = make_inlet(1e-7, 1e-3);
-        // UniformGrid1D requires n >= 2, so we use a DummyMesh for this edge case.
-        struct EmptyMesh;
-        impl Mesh for EmptyMesh {
-            fn n_dof(&self) -> usize {
-                0
-            }
-            fn coordinates(&self, _: usize) -> &[f64] {
-                &[]
-            }
-            fn spatial_dimension(&self) -> usize {
-                1
-            }
-            fn characteristic_length(&self) -> f64 {
-                0.0
-            }
-        }
-        impl std::fmt::Debug for EmptyMesh {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "EmptyMesh")
-            }
-        }
-        let mesh = EmptyMesh;
-        let ctx = make_ctx_with_gradient_and_feed(0.0, 1.0);
+        // UniformGrid1D requires n >= 2: a node cloud without nodes covers this edge case.
+        let mesh = NodeCloud::new::<1>(&[], 0.0);
+        let ctx = make_ctx_with_feed(1.0);
         let mut state = DVector::zeros(0);
         let err = inlet.apply(&mut state, &ctx, &mesh).unwrap_err();
         assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
@@ -562,28 +668,73 @@ mod tests {
     }
 
     #[test]
+    fn outlet_declares_its_last_node() {
+        // DD-070: the node `apply` sets is declared to the solver.
+        let outlet = DanckwertsOutlet::new();
+        assert_eq!(outlet.constrained_nodes(&make_mesh(5)), vec![4]);
+        assert!(outlet
+            .constrained_nodes(&NodeCloud::new::<1>(&[], 0.0))
+            .is_empty());
+    }
+
+    // ── Boundary regions (DA-071) ────────────────────────────────────────────
+
+    #[test]
+    fn conditions_on_the_opposite_faces_for_a_flow_towards_decreasing_x() {
+        use crate::mesh::{BoundaryRegion, FaceSide};
+        let face = |side| BoundaryRegion::Face { axis: 0, side };
+        let mesh = make_mesh(5); // dx = 0.25
+        let inlet = make_inlet(1e-3, 1e-2).on(face(FaceSide::Upper)); // kappa = 0.4
+        let outlet = DanckwertsOutlet::new().on(face(FaceSide::Lower));
+        assert_eq!(inlet.constrained_nodes(&mesh), vec![4]);
+        assert_eq!(outlet.constrained_nodes(&mesh), vec![0]);
+
+        let mut state = DVector::from_vec(vec![9.0, 1.0, 2.0, 3.0, 9.0]);
+        inlet
+            .apply(&mut state, &make_ctx_with_feed(0.8), &mesh)
+            .unwrap();
+        outlet
+            .apply(&mut state, &make_ctx_with_feed(0.8), &mesh)
+            .unwrap();
+        assert!((state[4] - (0.8 + 0.4 * 3.0) / 1.4).abs() < 1e-15);
+        assert_eq!(state[0], 1.0);
+        assert_eq!(state.rows(1, 3).as_slice(), &[1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn new_conditions_act_on_the_two_ends_of_axis_0() {
+        use crate::mesh::{BoundaryRegion, FaceSide};
+        assert_eq!(
+            make_inlet(1e-7, 1e-3).region,
+            BoundaryRegion::Face {
+                axis: 0,
+                side: FaceSide::Lower
+            }
+        );
+        assert_eq!(
+            DanckwertsOutlet::new().region,
+            BoundaryRegion::Face {
+                axis: 0,
+                side: FaceSide::Upper
+            }
+        );
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serialised_conditions_without_a_region_read_back_on_their_default_face() {
+        let mut inlet = serde_json::to_value(make_inlet(1e-7, 1e-3)).unwrap();
+        inlet.as_object_mut().unwrap().remove("region").unwrap();
+        let inlet: DanckwertsInlet = serde_json::from_value(inlet).unwrap();
+        assert_eq!(inlet.region, make_inlet(1e-7, 1e-3).region);
+
+        let outlet: DanckwertsOutlet = serde_json::from_str("{}").unwrap();
+        assert_eq!(outlet.region, DanckwertsOutlet::new().region);
+    }
+
+    #[test]
     fn outlet_apply_single_node_returns_error() {
-        struct SingleMesh;
-        impl Mesh for SingleMesh {
-            fn n_dof(&self) -> usize {
-                1
-            }
-            fn coordinates(&self, _: usize) -> &[f64] {
-                &[0.0]
-            }
-            fn spatial_dimension(&self) -> usize {
-                1
-            }
-            fn characteristic_length(&self) -> f64 {
-                0.0
-            }
-        }
-        impl std::fmt::Debug for SingleMesh {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "SingleMesh")
-            }
-        }
-        let mesh = SingleMesh;
+        let mesh = NodeCloud::new(&[[0.0]], 0.0);
         let ctx = ComputeContext::new(0.0, 0.01);
         let mut state = DVector::from_element(1, 1.0);
         let err = DanckwertsOutlet::new()
