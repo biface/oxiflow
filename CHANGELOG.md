@@ -125,6 +125,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   solute and the mass balance against the equilibrium theory (Nicoud,
   *Chromatographic Processes*, 2015), exits with an error beyond its
   tolerances and runs in CI with the reference examples (#174).
+- `examples/gray_scott_1d`, the reaction–diffusion reference example: the
+  Gray–Scott model in dimensionless form on a periodic 1D ring, closed by
+  the model itself across its two end nodes. Single modes laid on a
+  Turing-unstable homogeneous state grow or decay at the rates of the
+  linearised discrete equations (four modes, relative error checked to
+  1e-7); a local perturbation of the trivial state grows into pulses that
+  split until the ring fills, checked by the pulse count at three times and
+  by the mirror symmetry of the state. The example exits with an error
+  beyond its tolerances and runs in CI with the reference examples (#176).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
   builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and
