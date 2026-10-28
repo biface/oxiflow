@@ -2,7 +2,7 @@
 //!
 //! Temporal integration methods.
 //!
-//! ## Active at J4a (v0.4.0)
+//! ## Available integrators
 //!
 //! | Method | Type | Issue |
 //! |---|---|---|
@@ -15,7 +15,7 @@
 //! | [`imex::OperatorSplittingSolver`] | Operator splitting (Strang), n ≥ 2 | #45, DA-037 |
 //!
 //! All integrators are decoupled from the spatial scheme via
-//! `DiscreteOperator<M: Mesh>` (INV-2, J4b) — no FD/FV/FEM
+//! `DiscreteOperator<M: Mesh>` (INV-2, J5) — no FD/FV/FEM
 //! method is called directly inside an integrator.
 //!
 //! ## Shared evaluation contract

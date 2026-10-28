@@ -34,16 +34,14 @@
 //! configuration, the bootstrap step is the single frozen-Jacobian
 //! correction it has always been.
 //!
-//! ## Scope at J4a — fixed `dt` only
+//! ## Scope — fixed `dt` only
 //!
 //! *"Step-size change logic for adaptive dt"* (as #44 originally asked)
-//! is **not implemented**: `StepControl::Adaptive` doesn't exist yet
-//! anywhere in `oxiflow` (rejected by every solver, including this one),
-//! and #42 (DoPri45) — the issue that would introduce it — hasn't landed.
-//! Writing a variable-step BDF2 formula now would mean testing it against
-//! nothing real. Revisit once #42 lands; the classical fixed-step
-//! coefficients used here (3/2, -2, 1/2) would need to become
-//! ratio-dependent for a varying step size between `u^{n-1}` and `u^n`.
+//! is **not implemented**: this solver rejects `StepControl::Adaptive`,
+//! which only `DoPri45Solver` (#42) accepts. A variable-step BDF2 would
+//! need the classical fixed-step coefficients used here (3/2, -2, 1/2) to
+//! become ratio-dependent for a varying step size between `u^{n-1}` and
+//! `u^n`, and an error estimate to drive the step; no model needs it yet.
 //!
 //! ## State variants
 //!
@@ -85,7 +83,7 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// BDF2 solver — implicit multi-step, 2nd order.
 ///
 /// See [module docs](self) for the startup phase and the fixed-`dt`-only
-/// scope at J4a.
+/// scope.
 ///
 /// # Examples
 ///

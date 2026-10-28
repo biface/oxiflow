@@ -6,8 +6,8 @@
 //!
 //! `dt: f64` is never exposed directly in the public API. Instead, `StepControl`
 //! encapsulates both fixed-step and adaptive-step strategies. `TimeConfiguration`
-//! groups all temporal parameters. This prevents the breaking change that would
-//! occur at J4 when adaptive integrators (DoPri45, BDF2) are introduced (DA-021).
+//! groups all temporal parameters. This avoided the breaking change that would
+//! have occurred at J4, when the adaptive integrator (DoPri45) arrived (DA-021).
 
 use crate::context::calculator::ContextCalculator;
 
@@ -15,8 +15,8 @@ use crate::context::calculator::ContextCalculator;
 
 /// Time step control strategy.
 ///
-/// At J1, only `Fixed` is used. `Adaptive` is reserved for J4 (DoPri45, BDF2)
-/// and added as a new variant — non-breaking for all J1/J2 code.
+/// `Fixed` exists since J1. `Adaptive` was added at J4 as a new variant,
+/// without breaking J1/J2 code; only `DoPri45Solver` accepts it.
 ///
 /// # Examples
 ///
@@ -40,7 +40,7 @@ pub enum StepControl {
         dt: f64,
     },
 
-    /// Adaptive step-size control — RESERVED J4 (DoPri45, BDF2, DA-021).
+    /// Adaptive step-size control — J4 (DoPri45, DA-021).
     ///
     /// The integrator adjusts $\Delta t$ to keep the local truncation error
     /// within the tolerance band:
@@ -85,7 +85,7 @@ impl StepControl {
 /// Temporal integration method.
 ///
 /// `Euler` is active since J1; `RK4`, `BackwardEuler`, `CrankNicolson`,
-/// `BDF2`, `DoPri45`, `Imex` since J4a (#41, #43, #44, #42, #45).
+/// `BDF2`, `DoPri45`, `Imex` since J4 (#41, #43, #44, #42, #45).
 ///
 /// # Examples
 ///
@@ -101,22 +101,22 @@ impl StepControl {
 pub enum IntegratorKind {
     /// Forward Euler — explicit, 1st order — J1.
     Euler,
-    /// Runge-Kutta 4 — explicit, 4th order — J4a (#41).
+    /// Runge-Kutta 4 — explicit, 4th order — J4 (#41).
     RK4,
-    /// Backward Euler — implicit, 1st order — J4a (#43, DT-013, DD-033).
+    /// Backward Euler — implicit, 1st order — J4 (#43, DT-013, DD-033).
     BackwardEuler,
-    /// Crank-Nicolson — semi-implicit, 2nd order — J4a (#43, DT-013, DD-033).
+    /// Crank-Nicolson — semi-implicit, 2nd order — J4 (#43, DT-013, DD-033).
     CrankNicolson,
-    /// BDF2 — implicit multi-step, 2nd order — J4a (#44, DD-034). Fixed
+    /// BDF2 — implicit multi-step, 2nd order — J4 (#44, DD-034). Fixed
     /// `dt` only; see `BDF2Solver` module docs for the deferred
     /// variable-step formula.
     BDF2,
-    /// Dormand-Prince DoPri45 — explicit, adaptive step, order 5 — J4a
+    /// Dormand-Prince DoPri45 — explicit, adaptive step, order 5 — J4
     /// (#42, DD-036). `Solver` only, not `SteppableSolver` — see
     /// `DoPri45Solver` module docs.
     DoPri45,
     /// Operator splitting (Strang) — n ≥ 2 sub-models, each with its own
-    /// integrator — J4a (#45, DA-037). `Solver` only, not
+    /// integrator — J4 (#45, DA-037). `Solver` only, not
     /// `SteppableSolver` — see `OperatorSplittingSolver` module docs.
     /// Neither purely explicit nor purely implicit — excluded from
     /// `is_explicit()`.
@@ -200,8 +200,10 @@ impl TimeConfiguration {
 /// Solving configuration — HOW pole.
 ///
 /// Groups the integration method, temporal parameters, and context calculators.
-/// `DiscreteOperator` (INV-2, J4b) is **not** a configuration field — it is
-/// an implementation detail inside spatial `ContextCalculator`s.
+/// The spatial scheme (INV-2, J5) is **not** a configuration field: an FD
+/// `DiscreteOperator` sits inside spatial `ContextCalculator`s, and a
+/// `FluxDivergenceOperator` (FV, WENO) is wrapped by `DiscretizedModel` on
+/// the WHAT side (DA-038).
 ///
 /// # Serialisation
 ///

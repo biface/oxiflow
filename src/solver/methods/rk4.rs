@@ -45,14 +45,16 @@
 //! like a `ScalarField` (#192). For a `ScalarField`, results are
 //! bit-identical to the former `DVector` arithmetic.
 //!
-//! ## Scope at J4a
+//! ## Scope
 //!
 //! - Single-domain scenarios only (`n_domains() == 1`) — same restriction
-//!   as `ForwardEulerSolver`. Multi-domain `CouplingOperator` scenarios are
-//!   out of scope; see #40 for the dedicated multi-domain proto.
-//! - No `DiscreteOperator` (INV-2) — spatial schemes arrive at J4b.
+//!   as `ForwardEulerSolver`. Multi-domain `CouplingOperator` scenarios go
+//!   through `MultiDomainOrchestrator`, which drives this solver per domain
+//!   as a `SteppableSolver` (DA-031).
+//! - No spatial scheme inside the integrator (INV-2): the model returns
+//!   `du/dt`, spatial operators included.
 //! - `StepControl::Fixed { dt }` only — adaptive step control is DoPri45's
-//!   job (reserved, J4).
+//!   job (#42).
 //!
 //! ## Stability
 //!

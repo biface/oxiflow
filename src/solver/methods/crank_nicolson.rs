@@ -21,7 +21,7 @@
 //! damping. Preferred over Backward Euler when 2nd-order accuracy matters
 //! more than damping every mode aggressively.
 //!
-//! ## Scope at J4a
+//! ## Scope
 //!
 //! Same restrictions as `BackwardEulerSolver`: single-domain,
 //! `StepControl::Fixed` only. BC interaction with the perturbed Jacobian

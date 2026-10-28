@@ -10,7 +10,7 @@
 //! ## Placement
 //!
 //! Calculators live in `SolverConfiguration` — they are part of HOW the problem is
-//! solved, not WHAT the problem is. `DiscreteOperator` (INV-2, J4b) is an
+//! solved, not WHAT the problem is. An FD `DiscreteOperator` (INV-2, J5) is an
 //! implementation detail inside spatial calculators, never exposed at configuration level.
 
 use std::sync::Arc;
@@ -39,7 +39,7 @@ use crate::model::traits::RequiresContext;
 ///   to `compute()`. A calculator that keeps its value between evaluations
 ///   overrides it to hand that value over without a copy (DT-068, #195).
 ///
-/// # DiscreteOperator (INV-2, J4b)
+/// # DiscreteOperator (INV-2, J5)
 ///
 /// Spatial calculators (gradient, Laplacian, flux) may internally hold a
 /// `DiscreteOperator` implementation. This is an implementation detail of the

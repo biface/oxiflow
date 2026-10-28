@@ -116,7 +116,8 @@ pub struct SimulationResult {
     /// Solver metadata: timing, rejected steps, convergence info.
     ///
     /// Keys follow the convention `"solver.<key>"` (e.g. `"solver.rejected_steps"`).
-    /// Empty at J1 — populated by adaptive integrators at J4 (DoPri45, BDF2).
+    /// Filled by `DoPri45Solver` (`solver.accepted_steps`,
+    /// `solver.rejected_steps`); empty for the fixed-step integrators.
     pub metadata: std::collections::HashMap<String, f64>,
 }
 

@@ -31,16 +31,20 @@
 //!
 //! oxiflow covers any problem expressible as the canonical form above.
 //!
-//! | Domain | Primary field `u` | Milestone |
+//! | Domain | Primary field `u` | Reference example (J10) |
 //! |---|---|---|
-//! | Chromatographic transport | concentration `c(z,t)` | J1 |
-//! | Transient heat conduction | temperature `T(x,t)` | J2+ |
-//! | Reaction-diffusion | species `(u,v)` | J2+ |
-//! | Flow in porous media (Darcy) | water content `θ` | J2+ |
-//! | Shallow water (Saint-Venant) | depth `h`, momentum `hv` | J3 |
-//! | Electrochemical (Nernst-Planck) | ionic concentrations `cᵢ` | J3+ |
-//! | Resistive magnetic diffusion | flux density `B` | J10 (prototype, #179) |
-//! | Structural dynamics | displacement `u`, velocity `v` | J4+ |
+//! | Chromatographic transport | concentrations `cᵢ(z,t)` | `competitive_frontal_analysis` (#174) |
+//! | Transient heat conduction | temperature `T(x,t)` | `heat_transfer_1d` (#175) |
+//! | Reaction-diffusion | species `(u,v)` | `gray_scott_1d` (#176) |
+//! | Viscous flow (Burgers) | velocity `u(x,t)` | `burgers_boundary_layer` (#177) |
+//! | Porous media consolidation (Terzaghi) | excess pore pressure `u(z,t)` | `consolidation_1d` (#178) |
+//! | Resistive magnetic diffusion | flux density `B` | `magnetic_diffusion_1d` (prototype, #179) |
+//! | Shallow water (Saint-Venant) | depth `h`, momentum `hv` | `lahar_lake_wave` (#180) |
+//!
+//! Other problems of the canonical form are candidates without a reference
+//! example yet: Darcy flow (water content `θ`), Nernst-Planck (ionic
+//! concentrations `cᵢ`), structural dynamics (displacement `u`, velocity `v`,
+//! through order reduction, DD-030).
 //!
 //! For full equations, physical derivations, and numerical details,
 //! see the **[project wiki](https://github.com/biface/oxiflow/wiki)**.
@@ -59,7 +63,7 @@
 //! | Time integration | `Solver` — Euler, RK4, … (J4) |
 //! | Boundary conditions | `BoundaryCondition: RequiresContext` (J2) |
 //! | Multi-domain coupling | `CouplingOperator` (INV-3, J3) |
-//! | Spatial operators | `DiscreteOperator<M: Mesh>` (INV-2, J4b) |
+//! | Spatial operators | `DiscreteOperator<M: Mesh>` (INV-2, J5) |
 //!
 //! ## Architecture — WHAT / HOW separation
 //!
@@ -87,7 +91,7 @@
 //! - [`solver`]    — [`solver::Scenario`], [`solver::SolverConfiguration`],
 //!   [`solver::Solver`], [`solver::SimulationResult`]
 //! - [`boundary`]  — `BoundaryCondition` trait (J2)
-//! - [`operators`] — `DiscreteOperator<M: Mesh>` (INV-2, J4b)
+//! - [`operators`] — `DiscreteOperator<M: Mesh>` (INV-2, J5)
 //! - [`coupling`]  — `CouplingOperator` (INV-3, J3)
 //!
 //! ## FEM invariants — forward compatibility

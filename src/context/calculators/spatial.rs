@@ -306,7 +306,7 @@ impl ContextCalculator for FDGradientCalculator {
                     UpwindGradient::compute_from_dx(&u, dx, Direction::Backward, threshold)
                 }
                 FDScheme::Central => CenteredGradient::compute_from_dx(&u, dx, threshold),
-                // J5+: higher-order stencils will be added here.
+                // Higher-order stencils (new `FDScheme` variants) go here.
                 #[allow(unreachable_patterns)]
                 _ => {
                     return Err(OxiflowError::PreconditionFailed {

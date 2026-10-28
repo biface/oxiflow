@@ -12,18 +12,19 @@
 //! returned by the physical model, evaluated on `u` *after* boundary
 //! conditions have been enforced (see `super::evaluate_derivative`).
 //!
-//! ## Scope at J4a
+//! ## Scope
 //!
 //! - Single-domain scenarios only (`n_domains() == 1`). Multi-domain
-//!   scenarios with `CouplingOperator` are out of scope for this solver —
-//!   see #40 for the dedicated multi-domain proto.
-//! - No `DiscreteOperator` (INV-2) — spatial schemes arrive at J4b.
-//!   The model computes `du/dt` internally from the field state and context.
+//!   scenarios with `CouplingOperator` go through `MultiDomainOrchestrator`,
+//!   which drives this solver per domain as a `SteppableSolver` (DA-031).
+//! - No spatial scheme inside the integrator (INV-2): the model computes
+//!   `du/dt` from the field state and context, spatial operators included.
 //! - Boundary conditions ARE applied (since v0.2.0 / DA-008) — fixed in #41;
 //!   the original J1 implementation predated `BoundaryCondition` and never
 //!   called it, silently violating the contractual order documented in
 //!   [`crate::solver`].
-//! - `StepControl::Fixed { dt }` only — adaptive step at J4 (DoPri45).
+//! - `StepControl::Fixed { dt }` only — adaptive step control is
+//!   DoPri45's job (#42).
 //!
 //! ## Stability
 //!

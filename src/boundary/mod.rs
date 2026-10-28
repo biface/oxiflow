@@ -193,7 +193,7 @@ pub enum BoundaryLocation {
     /// Relevant for Stefan problems, solidification fronts, boiling,
     /// condensation. The interface position may evolve during the simulation.
     PhaseInterface,
-    /// Coupling interface between two domains (INV-3, J3+).
+    /// Coupling interface between two domains (INV-3, J3).
     ///
     /// Managed by `CouplingOperator` — reserved from v0.3.0.
     CouplingInterface,

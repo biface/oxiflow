@@ -13,10 +13,10 @@
 //! ## Simplified physics
 //!
 //! Both domains are intentionally 0D-per-node ODEs, not real Bingham
-//! viscoplastic rheology or shallow-water flux divergence — those need
-//! `DiscreteOperator` (INV-2), which lands at J4b/v0.5.0. This prototype
-//! validates the multi-domain *architecture* (INV-1, INV-3), not spatial
-//! accuracy:
+//! viscoplastic rheology or shallow-water flux divergence — those needed
+//! the spatial operators (INV-2) that came at J5, after this J3 prototype;
+//! `lahar_lake_wave` is the full version (#180). This prototype validates
+//! the multi-domain *architecture* (INV-1, INV-3), not spatial accuracy:
 //!
 //! - **Lahar** (granular flow stand-in): `dC/dt = -lambda * C` — mass
 //!   leaving the flow at rate `lambda`.

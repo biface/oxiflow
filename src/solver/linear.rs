@@ -12,7 +12,7 @@
 //! of `LinearSolver` itself.
 //!
 //! [`NalgebraDenseSolver`] (dense LU) is the default for the small systems
-//! implicit integrators produce at J4a. The sparse `faer` backend arrives
+//! implicit integrators produce since J4. The sparse `faer` backend arrives
 //! at v0.6.0 (DT-013 second phase, DA-043) as **`SparseLinearSolver`**
 //! (`solver::sparse`) — a sibling trait, not another implementation of
 //! `LinearSolver` itself: `faer`'s sparse matrix type is structurally

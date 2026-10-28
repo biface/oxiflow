@@ -55,14 +55,14 @@ pub enum ContextVariable {
     /// `dimension = 0` → ∂u/∂x, `dimension = 1` → ∂u/∂y, etc.
     ///
     /// `component = None` — mono-component field (J1/J2 default).
-    /// `component = Some(k)` — gradient of component k (J3+, DD-010).
+    /// `component = Some(k)` — gradient of component k (J3, DD-010).
     SpatialGradient {
         /// Spatial dimension index (0-based).
         dimension: usize,
-        /// Species/component index for multi-component fields (J3+, DD-010).
+        /// Species/component index for multi-component fields (J3, DD-010).
         ///
-        /// `None` at J1/J2 (single-component). Adding this field now avoids a
-        /// breaking change when multi-component support lands at J3.
+        /// `None` for a single-component field. The field exists since J1,
+        /// so that multi-component support (J3) came without a breaking change.
         component: Option<usize>,
     },
 
@@ -107,7 +107,7 @@ impl std::fmt::Display for ContextVariable {
             }
             Self::External { name } => write!(f, "External({})", name),
             Self::Coefficient { name } => write!(f, "Coefficient({})", name),
-            // J3+ variants handled when added
+            // Variants added later (`#[non_exhaustive]`) fall back here
             #[allow(unreachable_patterns)]
             _ => write!(f, "Unknown"),
         }

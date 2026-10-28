@@ -19,10 +19,11 @@
 //! point: stiff problems (`λΔt ≫ 1`) that would blow up under
 //! `ForwardEulerSolver` remain bounded here.
 //!
-//! ## Scope at J4a
+//! ## Scope
 //!
 //! - Single-domain scenarios only — same restriction as the explicit
-//!   solvers; see #40 for the dedicated multi-domain path.
+//!   solvers; multi-domain scenarios go through `MultiDomainOrchestrator`
+//!   (DA-031).
 //! - `StepControl::Fixed { dt }` only.
 //! - See [`super::implicit`] for the boundary-condition interaction with
 //!   the perturbed Jacobian — covered by a dedicated test since #113.

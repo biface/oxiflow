@@ -6,8 +6,8 @@
 //!
 //! `Scenario` is unified: it handles both single-domain (J1) and multi-domain
 //! (J3) problems. The single-domain case is the degenerate case with one element
-//! in `domains` and empty `couplings`. Ergonomic helpers cover the J1 use case
-//! without verbosity. At J3, additional domains and coupling operators are added
+//! in `domains` and empty `couplings`. Ergonomic helpers cover the single-domain
+//! case without verbosity; additional domains and coupling operators are added
 //! without any API change (DD-020).
 
 use crate::boundary::BoundaryCondition;
@@ -21,8 +21,9 @@ use crate::model::traits::PhysicalModel;
 
 /// Typed identifier for a domain within a multi-domain scenario.
 ///
-/// At J1, a single-domain scenario uses `DomainId::default()` ("default").
-/// At J3, each domain gets a meaningful identifier for coupling resolution.
+/// A single-domain scenario uses `DomainId::default()` ("default"). In a
+/// multi-domain scenario, each domain gets a meaningful identifier for
+/// coupling resolution.
 ///
 /// # Examples
 ///
@@ -73,7 +74,7 @@ impl From<&str> for DomainId {
 
 /// Single physical domain: model + mesh + boundary conditions.
 ///
-/// `boundary_conditions` is empty at J1. At J2, BCs are added via the
+/// `boundary_conditions` is empty unless conditions are added with the
 /// `Domain::with_boundary_conditions` builder.
 ///
 /// # Serialisation
@@ -380,9 +381,8 @@ impl Scenario {
 
     /// Aggregates context variable requirements from all domains.
     ///
-    /// At J1: model requirements only.
-    /// At J2: model + boundary condition requirements (deduplicated).
-    /// At J3: + coupling operator requirements.
+    /// Collects the requirements of the models, of the boundary conditions
+    /// and of the coupling operators, sorted and deduplicated.
     pub fn context_requirements(&self) -> Vec<ContextVariable> {
         let mut requirements: Vec<ContextVariable> = self
             .domains
