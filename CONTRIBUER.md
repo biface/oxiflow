@@ -7,8 +7,8 @@
   d'écrire du code. Les fonctionnalités qui violent les invariants de conception (voir
   [DEVELOPPEMENT.md](DEVELOPPEMENT.md)) ne seront pas acceptées.
 - **Documentation et exemples** — toujours bienvenus, sans discussion préalable nécessaire.
-- **Benchmarks et tests** — toujours bienvenus, particulièrement pour les composants INV
-  (`mesh`, `coupling`, `solver_spatial`).
+- **Benchmarks et tests** — toujours bienvenus, particulièrement pour les modules soumis
+  aux invariants FEM (`mesh`, `operators`, `coupling`).
 - **Frameworks de niche** — développer une crate `oxiflow-*` spécialisée est explicitement
   encouragé. Voir la section dédiée ci-dessous.
 
@@ -129,24 +129,42 @@ activé, et les suites complètes tournent quand le sprint passe sur
 
 Toute pull request doit satisfaire l'ensemble des points suivants avant d'être fusionnée.
 
+Ce sont les contrôles que le CI exécute sur une pull request vers `staging/x.y.z` ; les
+lancer en local avant de demander une revue évite un aller-retour. `--all-features` demande
+les fichiers de développement HDF5 (`libhdf5-dev` sous Debian et Ubuntu). Le seul test qui
+demande un adaptateur graphique est ignoré ; le lancer avec
+`cargo test --features gpu -- --ignored` sur une machine qui en a un.
+
 **Tests**
 - `cargo test --all-features` passe.
 - Toute nouvelle fonction publique a au moins un test.
 - `cargo test --test fem_invariants` passe.
 
 **Qualité du code**
-- `cargo fmt --all` appliqué, aucune modification de formatage non commitée.
-- `cargo clippy --all-targets --all-features -- -D warnings` propre.
+- `cargo fmt --all -- --check` ne signale rien.
+- `cargo clippy --all-targets --all-features -- -D warnings` propre ; le CI lance aussi
+  clippy avec chaque feature seule (`sparse`, `hdf5`, `gpu`, `parallel`, `serde`, `vtk`) et
+  avec les features par défaut.
+- `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features` sans avertissement.
 
-**Couverture**
-- Couverture globale ≥ 85% (suivie sur Codecov).
-- Composants INV (`mesh`, `coupling`, `solver_spatial`) ≥ 90%.
+**Couverture** (Codecov, `.codecov.yml`)
+- Couverture globale ≥ 85 %, avec une tolérance de 2 % d'un commit à l'autre.
+- Lignes nouvelles (couverture du patch) ≥ 80 %.
+- `context`, `model` et `mesh` ≥ 90 %, et les modules soumis aux invariants FEM (`mesh`,
+  `operators`, `coupling`) ≥ 90 % pris ensemble.
 - Si la modification fait baisser la couverture, ajouter les tests manquants avant
   de demander une revue.
 
+**Stabilité de l'API** ([DQ-016](https://github.com/biface/oxiflow/issues/16))
+- `cargo semver-checks` tourne sur chaque pull request vers `staging/x.y.z` et `main`.
+  Tant que la crate est en 0.x, une version mineure peut casser l'API publique, mais la
+  rupture doit être déclarée : `!` dans l'en-tête du commit et une entrée `**Breaking:**`
+  dans le CHANGELOG.
+
 **CHANGELOG**
 - Ajouter une entrée sous `[Unreleased]` dans `CHANGELOG.md`.
-- Utiliser `### Added`, `### Changed`, `### Fixed`, ou `### Breaking`.
+- Utiliser `### Added`, `### Changed`, `### Fixed` ou `### Security` ; un changement
+  cassant est une entrée qui commence par `**Breaking:**`, en général sous `### Changed`.
 - Une ligne par changement logique.
 
 **Documentation (locale, pour contributeurs)**
@@ -165,7 +183,7 @@ Toute pull request doit satisfaire l'ensemble des points suivants avant d'être 
 
 ## Invariants de conception
 
-Toute contribution touchant `src/mesh/`, `src/coupling/`, `src/solver/spatial/`, ou
+Toute contribution touchant `src/mesh/`, `src/operators/`, `src/coupling/`, ou
 tout trait public doit préserver les quatre invariants de conception :
 
 - **INV-1** — `Mesh` reste abstrait ; aucune API publique n'expose `dx`, `nx` ou des
@@ -174,19 +192,24 @@ tout trait public doit préserver les quatre invariants de conception :
   sur le schéma.
 - **INV-3** — Le couplage inter-domaines passe uniquement par `CouplingOperator`, jamais
   par un solveur.
-- **INV-4** — Tous les traits publics restent object-safe ; aucun breaking change pour
-  les crates externes.
+- **INV-4** — Tous les traits publics restent object-safe et implémentables depuis une
+  crate externe, sans accès aux internes du moteur.
 
-INV-4 est critique à partir de v0.30.0 : les frameworks de niche publiés par des tiers sur
-crates.io dépendent de la stabilité et de l'object-safety de l'API publique du moteur.
-La violation de cet invariant bloque le merge indépendamment des résultats des tests.
+INV-1 à INV-3 sont actifs (depuis v0.1.0, v0.5.0 et v0.3.0) ; `tests/fem_invariants.rs`
+vérifie INV-1 et INV-3 depuis l'extérieur de la crate, comme le ferait une crate aval.
+INV-4 devient contraignant à v0.30.0 [J30], avec l'architecture de plugins de
+[DA-017](https://github.com/biface/oxiflow/issues/17) : les frameworks de niche publiés
+par des tiers sur crates.io dépendent de l'object-safety des traits publics du moteur.
+D'ici là, une modification qui rend un trait public non object-safe est un changement
+cassant, déclaré comme tel.
 
 ## Développer un framework de niche
 
 Si vous développez un framework spécialisé (`oxiflow-chrom`, `oxiflow-geo`, ou tout
 autre domaine), voici la démarche recommandée.
 
-**Avant de commencer**, ouvrez une Discussion GitHub décrivant le domaine, les modèles
+**Avant de commencer**, ouvrez une [Discussion
+GitHub](https://github.com/biface/oxiflow/discussions) décrivant le domaine, les modèles
 envisagés et le public cible. Cela évite les redondances avec des travaux en cours et
 permet au framework d'être référencé dans la documentation officielle de l'écosystème.
 
@@ -194,7 +217,7 @@ permet au framework d'être référencé dans la documentation officielle de l'�
 
 ```
 oxiflow-votredomaine/
-├── Cargo.toml          # dépend de oxiflow = "2", versioning indépendant
+├── Cargo.toml          # dépend de oxiflow = "0.10", versioning indépendant
 ├── NOTICE              # requis par Apache 2.0 — doit mentionner le copyright oxiflow
 ├── LICENSE             # votre propre licence Apache 2.0 (ou compatible)
 ├── src/
@@ -202,15 +225,21 @@ oxiflow-votredomaine/
 │   ├── models/         # implémentations de PhysicalModel
 │   ├── boundary/       # implémentations de BoundaryCondition
 │   ├── calculators/    # implémentations de ContextCalculator
-│   └── config.rs       # désérialisation TOML (optionnel, pour intégration CLI)
+│   └── config.rs       # configuration TOML (optionnel, pour la CLI)
 ├── examples/
 └── tests/
 ```
 
-**Pattern d'enregistrement** — implémenter la fonction d'enregistrement pour que
-votre framework s'intègre à la CLI `oxiflow` (prévue pour v0.30.0) :
+Tant qu'oxiflow est en 0.x, chaque version mineure peut casser l'API publique
+([DQ-016](https://github.com/biface/oxiflow/issues/16)) : dépendre d'une seule mineure
+(`"0.10"` n'admet que 0.10.x) et passer à la suivante en connaissance de cause.
 
-```rust
+**Pattern d'enregistrement (prévu)** — la CLI `oxiflow` et son registre de plugins
+arrivent à v0.30.0 [J30] ([DA-017](https://github.com/biface/oxiflow/issues/17),
+[DT-018](https://github.com/biface/oxiflow/issues/18)) ; `PluginRegistry` n'existe pas
+encore dans la crate. La fonction d'enregistrement envisagée a cette forme :
+
+```rust,ignore
 // Dans oxiflow-votredomaine/src/lib.rs
 pub fn register(registry: &mut oxiflow::PluginRegistry) {
     registry.register_model("nom-du-modele", VotreModelFactory);
@@ -225,16 +254,20 @@ imposé mais facilite la découverte et signale la compatibilité avec le moteur
 `cargo-llvm-cov` + Codecov que le moteur si vous souhaitez un badge de couverture.
 
 **Une fois publié**, ouvrir une PR sur le dépôt du moteur pour ajouter votre crate à la
-liste de l'écosystème dans `DEVELOPPEMENT.md`. C'est la seule contribution au dépôt du
-moteur requise pour un framework tiers.
+liste de l'écosystème dans `DEVELOPPEMENT.md` (§15, Frameworks de l'écosystème connus).
+C'est la seule contribution au dépôt du moteur requise pour un framework tiers.
 
 ## Checklist de pull request
 
 - [ ] `cargo test --all-features` passe
 - [ ] `cargo test --test fem_invariants` passe
-- [ ] `cargo fmt --all` appliqué
+- [ ] `cargo fmt --all -- --check` ne signale rien
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings` propre
-- [ ] Codecov ≥ 85% global et ≥ 90% sur les composants INV
+- [ ] `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features` propre
+- [ ] Couverture : 85 % global, 80 % sur les lignes nouvelles, 90 % sur `context`,
+      `model`, `mesh` et les modules soumis aux invariants FEM
+- [ ] Changement cassant, s'il y en a un, déclaré (`!` dans l'en-tête du commit,
+      entrée `**Breaking:**`)
 - [ ] `CHANGELOG.md` mis à jour sous `[Unreleased]`
 - [ ] La PR cible la branche `update/x.y.z` du sprint ouvert
 
@@ -257,7 +290,9 @@ générés par git (`Merge …`, `Revert "…"`, `fixup! …`, `squash! …`,
 
 ## Questions
 
-Ouvrir une issue avec le label `question` ou démarrer une Discussion GitHub.
+Démarrer une [Discussion GitHub](https://github.com/biface/oxiflow/discussions) pour les
+questions d'usage et les propositions informelles ; ouvrir une issue pour un bug ou une
+demande de fonctionnalité.
 
 ## Licence
 
