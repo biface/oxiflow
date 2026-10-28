@@ -409,9 +409,12 @@ Parallélisme Rayon (feature `parallel` opt-in, seuil configurable via
 
 ## 12. J10 — Écosystème stable (v1.0)
 
-Sept exemples multi-domaines : chromatographie compétitive, transfert thermique transitoire,
-motifs de Turing (Gray–Scott), couche limite de Burgers, consolidation de Terzaghi,
-diffusion magnétique (proto), lahar–lac sur grilles couplées.
+Sept exemples de référence multi-domaines, un par domaine du tableau du README : analyse
+frontale binaire en adsorption compétitive ; conduction transitoire 1D dans une barre (homogène
+et graduée) ; Gray–Scott en 1D : instabilité de Turing, réplication ; couche limite visqueuse
+1D contre une paroi (Burgers) ; consolidation 1D d'une couche d'argile (Terzaghi) ; diffusion
+magnétique 1D dans un conducteur (proto) ; génération d'une vague par un lahar dans un lac.
+Chacun se contrôle contre sa référence de validation et tourne aussi en CI.
 
 Audit des invariants FEM avant publication (INV-1/2/3 vérifiés sur l'ensemble de la codebase).
 

@@ -400,9 +400,12 @@ modern CPU, with and without `parallel`.
 
 ## 12. J10 — Stable Ecosystem (v1.0)
 
-Seven multi-domain examples: competitive chromatography, transient heat transfer,
-Gray–Scott Turing patterns, Burgers boundary layer, Terzaghi consolidation,
-magnetic diffusion (proto), lahar–lake coupled grids.
+Seven multi-domain reference examples, one per domain of the README table: binary frontal
+analysis with competitive adsorption; 1D transient conduction in a bar (uniform and graded);
+Gray–Scott in 1D: Turing instability, pulse splitting; 1D viscous boundary layer at a wall
+(Burgers); 1D consolidation of a clay layer (Terzaghi); 1D magnetic diffusion into a
+conductor (proto); lahar–lake wave generation. Each one checks itself against its validation
+reference and also runs in CI.
 
 FEM invariant audit before publication (INV-1/2/3 verified across the full codebase).
 
