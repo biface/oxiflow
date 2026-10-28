@@ -192,7 +192,7 @@ oxiflow-yourdom/
 ```
 
 **Registration pattern** — implement the plugin registration function so that
-your framework can integrate with the `oxiflow` CLI (v3.0):
+your framework can integrate with the `oxiflow` CLI (planned for v0.30.0):
 
 ```rust
 // In oxiflow-yourdom/src/lib.rs

@@ -208,7 +208,7 @@ oxiflow-votredomaine/
 ```
 
 **Pattern d'enregistrement** — implémenter la fonction d'enregistrement pour que
-votre framework s'intègre à la CLI `oxiflow` (v3.0) :
+votre framework s'intègre à la CLI `oxiflow` (prévue pour v0.30.0) :
 
 ```rust
 // Dans oxiflow-votredomaine/src/lib.rs
