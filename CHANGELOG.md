@@ -238,7 +238,7 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the bulk mass `rho_bar(psi) * Q`. Deposition is also capped so that one
   step deposits at most the solids present: in a thin layer, an explicit
   step could take more and drive the depth negative. Pure-water runs, the
-  only ones so far, are unchanged bit for bit (#BUGNUM).
+  only ones so far, are unchanged bit for bit (#209).
 - The banded path of `BackwardEulerSolver` and `CrankNicolsonSolver`
   (`sparse` feature: sparse solver configured, bandwidth declared, system
   above the sparse threshold) ran a single linearised correction without
@@ -257,7 +257,7 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   step used a fixed single frozen-Jacobian correction, so a nonlinear model
   could fail at the first step with `NewtonNotConverged { iterations: 1 }`
   whatever budget was configured. Results with the default configuration
-  are unchanged (#NNN).
+  are unchanged (#205).
 - `DanckwertsInlet` diverged as soon as `κ = D / (v Δx) > 1`, i.e.
   `(n − 1) / Pe > 1` on a uniform grid with `Pe = vL/D`: it set `u0` from
   the gradient at node 0, computed from the previous `u0`, which iterated
