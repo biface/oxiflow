@@ -1,7 +1,7 @@
-//! # Integration test: meshes supported by the Danckwerts conditions (#187)
+//! # Integration test: meshes supported by the Danckwerts conditions ([#187](https://github.com/biface/oxiflow/issues/187))
 //!
 //! `DanckwertsInlet` and `DanckwertsOutlet` act on a boundary region the mesh
-//! resolves (DA-071): with the default implementation of `Mesh`, the two
+//! resolves ([DA-071](https://github.com/biface/oxiflow/issues/203)): with the default implementation of `Mesh`, the two
 //! ends of a 1D mesh whose nodes are ordered along the axis. These tests
 //! check, from outside the crate, that both conditions refuse a 2D mesh that
 //! defines no boundary region with `PreconditionFailed`, and still apply on a

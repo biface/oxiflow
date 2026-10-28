@@ -1,18 +1,18 @@
-//! Criterion benchmarks for the viscous Burgers model (#137, feeds #53).
+//! Criterion benchmarks for the viscous Burgers model ([#137](https://github.com/biface/oxiflow/issues/137), feeds [#53](https://github.com/biface/oxiflow/issues/53)).
 //! The model comes from `rsc/models/viscous_burgers.rs`, shared with the
 //! example and the analytical test.
 //!
 //! Same two-measurement split as `diffusion_1d.rs`:
 //!
 //! - [`full_run`] — fixed-size performance, no external target documented
-//!   for this model in #53 (unlike diffusion_1d's explicit "< 100 ms")\;
-//!   measured for its own sake (v0.9.0, #53).
+//!   for this model in [#53](https://github.com/biface/oxiflow/issues/53) (unlike diffusion_1d's explicit "< 100 ms")\;
+//!   measured for its own sake (v0.9.0, [#53](https://github.com/biface/oxiflow/issues/53)).
 //! - [`combined_dispatch_diagnostic`] — Burgers needs *two* calculators per
 //!   step (`FDGradientCalculator` for the nonlinear term,
 //!   `FDLaplacianCalculator` for the diffusive one), both already sharing
 //!   `crate::operators::fd::default_parallel_threshold()`. This measures
 //!   their *combined* per-node cost, sequential vs. parallel -- the
-//!   relevant profile for this model's place in the #53 abaque, heavier
+//!   relevant profile for this model's place in the [#53](https://github.com/biface/oxiflow/issues/53) abaque, heavier
 //!   than diffusion_1d's Laplacian-only cost.
 
 use std::hint::black_box;
@@ -48,7 +48,7 @@ mod viscous_burgers_model;
 use viscous_burgers_model::{laplacian_variable, ViscousBurgers};
 
 /// Fixed-size performance run -- no external ms target documented for this
-/// model in #53; measured on its own terms (v0.9.0). `dt` scaled
+/// model in [#53](https://github.com/biface/oxiflow/issues/53); measured on its own terms (v0.9.0). `dt` scaled
 /// with `dx^2/nu` for stability, same choice as the accuracy test.
 pub fn full_run(c: &mut Criterion) {
     const N_NODES: usize = 1000;

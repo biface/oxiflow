@@ -1,6 +1,6 @@
 //! # Module `mesh`
 //!
-//! Spatial mesh abstraction — INV-1 invariant (DA-007, DA-019, issue #31).
+//! Spatial mesh abstraction — INV-1 invariant ([DA-007](https://github.com/biface/oxiflow/issues/7), [DA-019](https://github.com/biface/oxiflow/issues/56), issue [#31](https://github.com/biface/oxiflow/issues/31)).
 //!
 //! ## Core principle (INV-1)
 //!
@@ -9,7 +9,7 @@
 //! forward compatibility with FEM unstructured meshes (v0.11.0 (J11)) — zero breaking change
 //! on existing code when `unstructured/` is added.
 //!
-//! ## Module hierarchy (DA-019)
+//! ## Module hierarchy ([DA-019](https://github.com/biface/oxiflow/issues/56))
 //!
 //! ```text
 //! src/mesh/
@@ -27,7 +27,7 @@
 //! | `UnstructuredMesh2D` | unstructured | 2D triangular mesh, FEM | J11 — v0.11.0 |
 //! | `TetrahedralMesh3D` | unstructured | 3D tetrahedral mesh, FEM | J11 — v0.11.0 |
 //!
-//! ## Boundary regions (DA-071)
+//! ## Boundary regions ([DA-071](https://github.com/biface/oxiflow/issues/203))
 //!
 //! The mesh, not the boundary conditions, knows where its boundary is.
 //! [`BoundaryRegion`] names a region (today a [`BoundaryRegion::Face`] of a
@@ -49,14 +49,14 @@ use crate::context::error::OxiflowError;
 
 // ── Boundary regions (DA-071) ─────────────────────────────────────────────────
 
-/// A region of the boundary of a mesh (DA-071, #203).
+/// A region of the boundary of a mesh ([DA-071](https://github.com/biface/oxiflow/issues/203)).
 ///
 /// Boundary conditions designate the nodes they act on through a region,
 /// which the mesh resolves with [`Mesh::boundary_nodes`] and
 /// [`Mesh::boundary_neighbours`], rather than through node indices (INV-1).
 ///
 /// `#[non_exhaustive]`: the boundaries of unstructured meshes, identified by
-/// node tags (Gmsh physical groups, DD-050), will be a further variant.
+/// node tags (Gmsh physical groups, [DD-050](https://github.com/biface/oxiflow/issues/151)), will be a further variant.
 ///
 /// # Examples
 ///
@@ -86,7 +86,7 @@ pub enum BoundaryRegion {
     },
 }
 
-/// Which of the two faces normal to an axis (DA-071).
+/// Which of the two faces normal to an axis ([DA-071](https://github.com/biface/oxiflow/issues/203)).
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -98,7 +98,7 @@ pub enum FaceSide {
 }
 
 /// A node of a boundary region with its first neighbour along the inward
-/// normal, as returned by [`Mesh::boundary_neighbours`] (DA-071).
+/// normal, as returned by [`Mesh::boundary_neighbours`] ([DA-071](https://github.com/biface/oxiflow/issues/203)).
 ///
 /// `#[non_exhaustive]` so that further fields (a normal, a weight) can be
 /// added; a mesh implemented outside the crate builds it with
@@ -162,7 +162,7 @@ fn default_face(
 /// # Object safety
 ///
 /// This trait is object-safe: it can be used as `Box<dyn Mesh>` and `&dyn Mesh`.
-/// Required for INV-4 (plugin-safe API, v0.30.0 / J30, DA-017).
+/// Required for INV-4 (plugin-safe API, v0.30.0 / J30, [DA-017](https://github.com/biface/oxiflow/issues/17)).
 ///
 /// # Implementing `Mesh`
 ///
@@ -222,7 +222,7 @@ pub trait Mesh: Send + Sync {
     /// the minimum element diameter or average edge length.
     fn characteristic_length(&self) -> f64;
 
-    /// Nodes of the boundary `region` (DA-071, #203).
+    /// Nodes of the boundary `region` ([DA-071](https://github.com/biface/oxiflow/issues/203)).
     ///
     /// The default implementation covers the two faces of a 1D mesh, normal
     /// to axis 0, assuming nodes ordered along the axis: `Lower` is node `0`,
@@ -243,7 +243,7 @@ pub trait Mesh: Send + Sync {
     }
 
     /// Nodes of the boundary `region`, each with its first neighbour along
-    /// the inward normal and their distance (DA-071, #203) — what a
+    /// the inward normal and their distance ([DA-071](https://github.com/biface/oxiflow/issues/203)) — what a
     /// condition written on a structured grid needs, such as a one-sided
     /// difference across the boundary.
     ///

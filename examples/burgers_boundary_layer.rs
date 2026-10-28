@@ -1,4 +1,4 @@
-//! # Reference example: viscous Burgers boundary layer at a wall (#177)
+//! # Reference example: viscous Burgers boundary layer at a wall ([#177](https://github.com/biface/oxiflow/issues/177))
 //!
 //! A viscous shock runs into a wall where the velocity is held at zero. It
 //! stops there and relaxes to a steady boundary layer, whose thickness

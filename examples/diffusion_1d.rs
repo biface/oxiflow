@@ -1,6 +1,6 @@
-//! # Example: 1D diffusion benchmark model (#136, feeds #53)
+//! # Example: 1D diffusion benchmark model ([#136](https://github.com/biface/oxiflow/issues/136), feeds [#53](https://github.com/biface/oxiflow/issues/53))
 //!
-//! Demonstrates the lightest-weight benchmark subject in the #53 family:
+//! Demonstrates the lightest-weight benchmark subject in the [#53](https://github.com/biface/oxiflow/issues/53) family:
 //! `rho*Cp*du/dt = lambda*d2u/dx2` on `UniformGrid1D`, via
 //! `FDLaplacianCalculator`. Per-node cost is a single FD stencil, no
 //! nonlinear term — the cheapest of the four benchmark models (diffusion,

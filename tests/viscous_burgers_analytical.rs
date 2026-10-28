@@ -1,8 +1,8 @@
-//! # Integration test: viscous Burgers model vs. exact solution (#137)
+//! # Integration test: viscous Burgers model vs. exact solution ([#137](https://github.com/biface/oxiflow/issues/137))
 //!
 //! Companion to `examples/viscous_burgers.rs`, on the same model
 //! (`rsc/models/viscous_burgers.rs`): this file asserts the acceptance
-//! criteria from #137 as a regression gate:
+//! criteria from [#137](https://github.com/biface/oxiflow/issues/137) as a regression gate:
 //! matches the exact traveling-shock solution within a documented
 //! tolerance, and the measured convergence order approaches 2 as the mesh
 //! is refined.

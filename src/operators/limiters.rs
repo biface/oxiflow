@@ -2,8 +2,8 @@
 //!
 //! Flux-limited (MUSCL-style) advective flux + centered diffusive flux for
 //! [`UniformGrid1D`] — [`Limiter`] (`MinMod`, `VanLeer`, `Superbee`) and
-//! [`LimitedFlux`] (#99, split out of `#49` at closing time — DA-012,
-//! DA-039, DD-041).
+//! [`LimitedFlux`] ([#99](https://github.com/biface/oxiflow/issues/99), split out of `#49` at closing time — [DA-012](https://github.com/biface/oxiflow/issues/12),
+//! [DA-039](https://github.com/biface/oxiflow/issues/95), [DD-041](https://github.com/biface/oxiflow/issues/98)).
 //!
 //! ## Why a limiter, alongside FV and WENO
 //!
@@ -50,8 +50,8 @@
 //!
 //! ## Cell semantics
 //!
-//! Same cell-average interpretation as `operators::fv` (DD-040) and
-//! `operators::weno` (DD-041) — `u[i]` is the average of `u` over the cell
+//! Same cell-average interpretation as `operators::fv` ([DD-040](https://github.com/biface/oxiflow/issues/96)) and
+//! `operators::weno` ([DD-041](https://github.com/biface/oxiflow/issues/98)) — `u[i]` is the average of `u` over the cell
 //! whose faces sit at nodes `i` and `i+1`.
 //!
 //! ## `r = 0/0` (locally constant field)

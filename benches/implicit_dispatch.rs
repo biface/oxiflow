@@ -1,5 +1,5 @@
 //! Shared measurement for the Jacobian-assembly dispatch diagnostics of the
-//! implicit solvers (#199, DT-069), used by the `implicit_jacobian_dispatch`
+//! implicit solvers ([#199](https://github.com/biface/oxiflow/issues/199), [DT-069](https://github.com/biface/oxiflow/issues/198)), used by the `implicit_jacobian_dispatch`
 //! benchmark of each model module.
 //!
 //! Declared only with the `parallel` feature: there is nothing to compare

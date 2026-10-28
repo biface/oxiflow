@@ -1,6 +1,6 @@
 //! # Module `solver::chain`
 //!
-//! Calculator chain — validation and ordered execution (issues #33, #36, DD-009).
+//! Calculator chain — validation and ordered execution (issues [#33](https://github.com/biface/oxiflow/issues/33), [#36](https://github.com/biface/oxiflow/issues/36), [DD-009](https://github.com/biface/oxiflow/issues/9)).
 //!
 //! ## Responsibility
 //!
@@ -8,7 +8,7 @@
 //! scenario has a corresponding calculator in `SolverConfiguration`, then returns
 //! the calculators in a correct execution order.
 //!
-//! ## Ordering strategy (DD-009)
+//! ## Ordering strategy ([DD-009](https://github.com/biface/oxiflow/issues/9))
 //!
 //! A hybrid two-path algorithm is selected at chain-build time:
 //!
@@ -57,7 +57,7 @@ const BUILTIN_VARIABLES: &[ContextVariable] = &[ContextVariable::Time, ContextVa
 /// A variable covered by multiple calculators is accepted — the last one
 /// to execute wins (consistent with `ComputeContext::insert` overwrite).
 ///
-/// # Ordering (DD-009)
+/// # Ordering ([DD-009](https://github.com/biface/oxiflow/issues/9))
 ///
 /// If no calculator declares a non-empty `depends_on()`, calculators are sorted
 /// by ascending `priority()` (stable sort — registration order preserved within

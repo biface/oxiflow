@@ -1,6 +1,6 @@
 //! # Module `solver::scenario`
 //!
-//! Problem declaration — `Scenario` (WHAT pole, DD-020, issue #32).
+//! Problem declaration — `Scenario` (WHAT pole, [DD-020](https://github.com/biface/oxiflow/issues/57), issue [#32](https://github.com/biface/oxiflow/issues/32)).
 //!
 //! ## Design
 //!
@@ -8,7 +8,7 @@
 //! (J3) problems. The single-domain case is the degenerate case with one element
 //! in `domains` and empty `couplings`. Ergonomic helpers cover the single-domain
 //! case without verbosity; additional domains and coupling operators are added
-//! without any API change (DD-020).
+//! without any API change ([DD-020](https://github.com/biface/oxiflow/issues/57)).
 
 use crate::boundary::BoundaryCondition;
 use crate::context::error::OxiflowError;
@@ -82,7 +82,7 @@ impl From<&str> for DomainId {
 /// `Domain` does not implement `serde::Serialize` / `serde::Deserialize`.
 /// It holds `Box<dyn PhysicalModel>`, `Box<dyn Mesh>`, and
 /// `Box<dyn BoundaryCondition>` (trait objects), which cannot be serialised
-/// directly. See `SimulationSnapshot` (DT-025 Option B).
+/// directly. See `SimulationSnapshot` ([DT-025](https://github.com/biface/oxiflow/issues/66) Option B).
 #[non_exhaustive]
 pub struct Domain {
     /// Unique identifier for this domain.
@@ -169,7 +169,7 @@ impl Domain {
 /// Holds one or more `Domain`s, coupling operators between them (J3), and
 /// the simulation start time. Single-domain problems use the ergonomic helper
 /// `Scenario::single()`. Multi-domain problems add domains and couplings without
-/// any breaking change (DD-020).
+/// any breaking change ([DD-020](https://github.com/biface/oxiflow/issues/57)).
 ///
 /// `Scenario` is declarative — it contains no solving logic. The `Solver`
 /// receives it and validates it via `context_requirements()` before solving.
@@ -180,7 +180,7 @@ impl Domain {
 /// It contains `Vec<Domain>`, which holds trait objects (`Box<dyn PhysicalModel>`,
 /// `Box<dyn Mesh>`). Restoring a simulation from a snapshot requires user code
 /// to reconstruct `Scenario` from its own configuration and inject the physical
-/// state from `SimulationSnapshot` (DT-025 Option B, v0.6.0).
+/// state from `SimulationSnapshot` ([DT-025](https://github.com/biface/oxiflow/issues/66) Option B, v0.6.0).
 ///
 /// # Examples
 ///
@@ -214,9 +214,9 @@ impl Domain {
 pub struct Scenario {
     /// Physical domains — at least one required.
     domains: Vec<Domain>,
-    /// Coupling operators between domains (J3, DA-011, INV-3).
+    /// Coupling operators between domains (J3, [DA-011](https://github.com/biface/oxiflow/issues/11), INV-3).
     couplings: Vec<Box<dyn CouplingOperator>>,
-    /// Interfaces shared between domains (J3, DA-011).
+    /// Interfaces shared between domains (J3, [DA-011](https://github.com/biface/oxiflow/issues/11)).
     interfaces: Vec<Interface>,
     /// Simulation start time.
     pub t_start: f64,
@@ -415,7 +415,7 @@ impl Scenario {
     ///
     /// Verifies that at least one domain is present and that no domain has an
     /// empty mesh. Interface consistency and coupling coverage are not checked
-    /// (finding of the #172 audit).
+    /// (finding of the [#172](https://github.com/biface/oxiflow/issues/172) audit).
     pub fn validate(&self) -> Result<(), OxiflowError> {
         if self.domains.is_empty() {
             return Err(OxiflowError::InvalidDomain(

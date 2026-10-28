@@ -1,6 +1,6 @@
 //! # Module `boundary::dirichlet`
 //!
-//! Dirichlet boundary condition on a boundary region of the mesh (#202).
+//! Dirichlet boundary condition on a boundary region of the mesh ([#202](https://github.com/biface/oxiflow/issues/202)).
 //!
 //! ## Condition
 //!
@@ -15,14 +15,14 @@
 //! ## Region
 //!
 //! The condition acts on a [`BoundaryRegion`] the mesh resolves with
-//! [`Mesh::boundary_nodes`] (DA-071): with the default implementation of
+//! [`Mesh::boundary_nodes`] ([DA-071](https://github.com/biface/oxiflow/issues/203)): with the default implementation of
 //! `Mesh`, either face of a 1D mesh, normal to axis 0. A mesh that does not
 //! define the region refuses it with `PreconditionFailed`. Only the nodes of
 //! the region are needed, not their interior neighbours: unlike the
 //! Danckwerts conditions, a Dirichlet condition also applies on a 1D mesh of
 //! a single node.
 //!
-//! ## Constrained nodes (DD-070)
+//! ## Constrained nodes ([DD-070](https://github.com/biface/oxiflow/issues/200))
 //!
 //! The nodes of the region are declared through
 //! [`BoundaryCondition::constrained_nodes`]: the solver keeps their
@@ -86,9 +86,9 @@ impl std::fmt::Debug for PrescribedValue {
 }
 
 /// Dirichlet condition — every node of a boundary region holds a prescribed
-/// value $g(t)$, constant or a function of time (#202).
+/// value $g(t)$, constant or a function of time ([#202](https://github.com/biface/oxiflow/issues/202)).
 ///
-/// The nodes of the region are declared as constrained nodes (DD-070): the
+/// The nodes of the region are declared as constrained nodes ([DD-070](https://github.com/biface/oxiflow/issues/200)): the
 /// solver keeps their derivative at zero, and every saved state holds the
 /// value $g(t)$ of its own time. See the module documentation.
 ///
@@ -125,7 +125,7 @@ impl std::fmt::Debug for PrescribedValue {
 /// ```
 #[derive(Debug, Clone)]
 pub struct Dirichlet {
-    /// Boundary region the condition acts on (DA-071).
+    /// Boundary region the condition acts on ([DA-071](https://github.com/biface/oxiflow/issues/203)).
     pub region: BoundaryRegion,
     value: PrescribedValue,
 }
@@ -203,7 +203,7 @@ impl BoundaryCondition for Dirichlet {
         Ok(())
     }
 
-    /// The nodes of its region, set by [`apply`](Self::apply) (DD-070). A
+    /// The nodes of its region, set by [`apply`](Self::apply) ([DD-070](https://github.com/biface/oxiflow/issues/200)). A
     /// region the mesh does not define gives no node here; `apply` reports
     /// the error.
     fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {

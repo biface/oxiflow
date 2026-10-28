@@ -1,7 +1,7 @@
 //! # Module `boundary`
 //!
-//! Boundary conditions — [`BoundaryCondition`] trait (DA-008, issue #34)
-//! and built-in implementations (issue #35).
+//! Boundary conditions — [`BoundaryCondition`] trait ([DA-008](https://github.com/biface/oxiflow/issues/8), issue [#34](https://github.com/biface/oxiflow/issues/34))
+//! and built-in implementations (issue [#35](https://github.com/biface/oxiflow/issues/35)).
 //!
 //! ## Classification
 //!
@@ -25,19 +25,19 @@
 //! | [`DanckwertsOutlet`] | `Neumann` | `Some(Outlet)` |
 //!
 //! Each acts on a boundary region of the mesh
-//! ([`BoundaryRegion`](crate::mesh::BoundaryRegion), DA-071), resolved by
+//! ([`BoundaryRegion`](crate::mesh::BoundaryRegion), [DA-071](https://github.com/biface/oxiflow/issues/203)), resolved by
 //! the mesh, rather than on node indices.
 //!
 //! ## Role
 //!
 //! A boundary condition constrains the primary field $u$ at the boundary of a
-//! spatial domain. At every derivative evaluation (DD-070, #200), the solver
+//! spatial domain. At every derivative evaluation ([DD-070](https://github.com/biface/oxiflow/issues/200)), the solver
 //! runs the calculators providing the variables the conditions require, then
 //! applies the conditions, then runs the remaining calculators and calls
 //! `PhysicalModel::compute_physics`: the calculators that read the state (a
 //! gradient, a Laplacian) see the constrained state.
 //!
-//! ## Constrained nodes (DD-070)
+//! ## Constrained nodes ([DD-070](https://github.com/biface/oxiflow/issues/200))
 //!
 //! A condition that sets node values declares them through
 //! [`BoundaryCondition::constrained_nodes`]. These nodes are algebraic, not
@@ -212,7 +212,7 @@ pub enum BoundaryLocation {
 ///
 /// - `apply` is called at every derivative evaluation, after the calculators
 ///   providing the variables declared in `required_variables()` and before
-///   the other calculators and `PhysicalModel::compute_physics` (DD-070). The
+///   the other calculators and `PhysicalModel::compute_physics` ([DD-070](https://github.com/biface/oxiflow/issues/200)). The
 ///   solver drivers also call it on the initial state and at the end of each
 ///   step.
 /// - `apply` must not modify `ctx` or `mesh` — only `state`.
@@ -233,7 +233,7 @@ pub enum BoundaryLocation {
 /// closed at the operator level instead, through
 /// [`Self::ghost_value`] (as in the `langmuir_multi` and `lahar_multifield`
 /// examples). Conditions applied component by component belong with the
-/// mixed finite-element spaces (#150).
+/// mixed finite-element spaces ([#150](https://github.com/biface/oxiflow/issues/150)).
 ///
 /// # Classification
 ///
@@ -246,7 +246,7 @@ pub enum BoundaryLocation {
 /// `BoundaryCondition` does not implement `serde::Serialize` / `serde::Deserialize`.
 /// Concrete implementations may hold arbitrary state that cannot be serialised
 /// generically. If persistence is required, provide a dedicated configuration
-/// type and reconstruct the BC from it — see `SimulationSnapshot` (DT-025).
+/// type and reconstruct the BC from it — see `SimulationSnapshot` ([DT-025](https://github.com/biface/oxiflow/issues/66)).
 ///
 /// # Examples
 ///
@@ -285,9 +285,9 @@ pub enum BoundaryLocation {
 /// [`RequiresContext`]: crate::model::RequiresContext
 /// [`ComputeContext`]: crate::context::ComputeContext
 ///
-/// # `Send + Sync` (DA-037)
+/// # `Send + Sync` ([DA-037](https://github.com/biface/oxiflow/issues/90))
 ///
-/// Added alongside DA-037 (#45): [`crate::solver::methods::imex::SplitOperator`]
+/// Added alongside [DA-037](https://github.com/biface/oxiflow/issues/90) ([#45](https://github.com/biface/oxiflow/issues/45)): [`crate::solver::methods::imex::SplitOperator`]
 /// is the first place in the engine where a `Domain` is *owned* by a type
 /// that must itself be `Send + Sync` (`Solver: Send + Sync`) rather than
 /// only borrowed as `&Domain`. Without this bound, `Box<dyn BoundaryCondition>`
@@ -336,8 +336,8 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError>;
 
-    /// Indices of the nodes [`apply`](Self::apply) sets, for `mesh` (DD-070,
-    /// #200).
+    /// Indices of the nodes [`apply`](Self::apply) sets, for `mesh` ([DD-070](https://github.com/biface/oxiflow/issues/200),
+    /// [#200](https://github.com/biface/oxiflow/issues/200)).
     ///
     /// The solver treats these nodes as algebraic: it sets the derivative to
     /// zero there at every evaluation, so that the integrators and the Newton
@@ -364,7 +364,7 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
     }
 
     /// Ghost-cell value for this boundary condition, at reflection depth
-    /// `depth` (DD-042, amendment 1).
+    /// `depth` ([DD-042](https://github.com/biface/oxiflow/issues/100), amendment 1).
     ///
     /// `FluxBoundary::GhostCell` (`operators::fv`, `operators::weno`) needs
     /// values *outside* the real domain to close its face-flux computation
@@ -384,14 +384,14 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
     /// [`DanckwertsInlet`]) stays exact at every depth instead of eroding
     /// through repeated extrapolation. A chained scheme (each ghost derived
     /// from the previous one) was considered and rejected for exactly this
-    /// reason — see DD-042, amendment 1.
+    /// reason — see [DD-042](https://github.com/biface/oxiflow/issues/100), amendment 1.
     ///
     /// Defaults to `None` — non-breaking for every existing or external
     /// implementation. A generic Dirichlet/Neumann formula is deliberately
     /// *not* supplied here as a fallback: a Robin condition has no generic
     /// ghost value independent of its own α/β coefficients, and silently
     /// approximating one for it would be wrong, not merely imprecise — see
-    /// DD-042 for the two concrete consumers (lahar-lake, chromatography)
+    /// [DD-042](https://github.com/biface/oxiflow/issues/100) for the two concrete consumers (lahar-lake, chromatography)
     /// that motivated this method and why a generic-by-`BoundaryType`
     /// fallback was rejected in favor of per-implementation exactness.
     ///
@@ -402,7 +402,7 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
     /// approximation of its own.
     ///
     /// Takes `ctx` (added alongside [`InjectionInlet`]) so a ghost value can
-    /// depend on simulation time — the two motivating cases at DD-042
+    /// depend on simulation time — the two motivating cases at [DD-042](https://github.com/biface/oxiflow/issues/100)
     /// (lahar-lake, Danckwerts) were both steady-state, so the original
     /// signature had no way to express a time-varying boundary; a
     /// competitive-adsorption inlet (chromatography) needs exactly that
@@ -423,7 +423,7 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
 // ── Test condition ────────────────────────────────────────────────────────────
 
 /// Test condition setting some nodes to a value that may depend on time,
-/// declared as constrained nodes (DD-070) or not, and counting its
+/// declared as constrained nodes ([DD-070](https://github.com/biface/oxiflow/issues/200)) or not, and counting its
 /// applications. Shared by the solver tests.
 #[cfg(test)]
 pub(crate) struct PinnedNodes {
@@ -436,7 +436,7 @@ pub(crate) struct PinnedNodes {
 #[cfg(test)]
 impl PinnedNodes {
     /// Sets `nodes` to `value(t)` without declaring them, as a condition
-    /// written before DD-070.
+    /// written before [DD-070](https://github.com/biface/oxiflow/issues/200).
     pub(crate) fn new(nodes: &[usize], value: impl Fn(f64) -> f64 + Send + Sync + 'static) -> Self {
         Self {
             nodes: nodes.to_vec(),

@@ -1,13 +1,13 @@
 //! # Module `solver::methods::backward_euler`
 //!
-//! Backward Euler integrator — implicit, 1st order (issue #43).
+//! Backward Euler integrator — implicit, 1st order (issue [#43](https://github.com/biface/oxiflow/issues/43)).
 //!
 //! ## Algorithm
 //!
 //! $$u^{n+1} = u^n + \Delta t \cdot f(u^{n+1}, t^{n+1})$$
 //!
 //! A thin wrapper around the shared generalised theta method, θ=1, of
-//! [`super::implicit`] (DD-044,
+//! [`super::implicit`] ([DD-044](https://github.com/biface/oxiflow/issues/109),
 //! [#111](https://github.com/biface/oxiflow/issues/111)) — see that
 //! module's docs for the frozen-Jacobian default and the iterated Newton
 //! path configurable via [`BackwardEulerSolver`]'s builders.
@@ -23,10 +23,10 @@
 //!
 //! - Single-domain scenarios only — same restriction as the explicit
 //!   solvers; multi-domain scenarios go through `MultiDomainOrchestrator`
-//!   (DA-031).
+//!   ([DA-031](https://github.com/biface/oxiflow/issues/82)).
 //! - `StepControl::Fixed { dt }` only.
 //! - See [`super::implicit`] for the boundary-condition interaction with
-//!   the perturbed Jacobian — covered by a dedicated test since #113.
+//!   the perturbed Jacobian — covered by a dedicated test since [#113](https://github.com/biface/oxiflow/issues/113).
 
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
@@ -63,12 +63,12 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// ```
 #[derive(Default)]
 pub struct BackwardEulerSolver {
-    /// Linear-system backends (DT-013, DA-043): the dense solver and,
+    /// Linear-system backends ([DT-013](https://github.com/biface/oxiflow/issues/13), [DA-043](https://github.com/biface/oxiflow/issues/103)): the dense solver and,
     /// with the `sparse` feature, the banded-path configuration, set by
     /// `with_linear_solver` and the `with_sparse_*`/`with_jacobian_bandwidth`
     /// builders.
     backend: ImplicitBackend,
-    /// Newton configuration (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
+    /// Newton configuration ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
     /// Jacobian refresh strategy and iteration budget, set by the
     /// `with_newton_convergence`/`with_jacobian_strategy`/
     /// `with_max_newton_iterations` builders. Default
@@ -79,7 +79,7 @@ pub struct BackwardEulerSolver {
     /// nonlinear model.
     newton: NewtonParams,
     /// Dispatch configuration of the finite-difference Jacobian assembly
-    /// (DT-069, #198). Its threshold exists only with the `parallel`
+    /// ([DT-069](https://github.com/biface/oxiflow/issues/198)). Its threshold exists only with the `parallel`
     /// feature — see `with_parallel_threshold`.
     jacobian_dispatch: JacobianDispatch,
 }
@@ -90,34 +90,34 @@ impl BackwardEulerSolver {
         Self::default()
     }
 
-    /// Substitutes the linear solver backend (DT-013).
+    /// Substitutes the linear solver backend ([DT-013](https://github.com/biface/oxiflow/issues/13)).
     pub fn with_linear_solver(mut self, linear_solver: Box<dyn LinearSolver>) -> Self {
         self.backend.linear_solver = linear_solver;
         self
     }
 
-    /// Configures the Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
+    /// Configures the Newton convergence criterion ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_newton_convergence(mut self, newton_convergence: NewtonConvergence) -> Self {
         self.newton.convergence = newton_convergence;
         self
     }
 
-    /// Configures the Jacobian refresh strategy (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
+    /// Configures the Jacobian refresh strategy ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_jacobian_strategy(mut self, jacobian_strategy: JacobianStrategy) -> Self {
         self.newton.jacobian_strategy = jacobian_strategy;
         self
     }
 
-    /// Configures the Newton iteration budget (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — see the
+    /// Configures the Newton iteration budget ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111)) — see the
     /// field's own docs for why the default (`1`) reproduces the
-    /// pre-DD-044 behaviour exactly on affine problems.
+    /// pre-[DD-044](https://github.com/biface/oxiflow/issues/109) behaviour exactly on affine problems.
     pub fn with_max_newton_iterations(mut self, max_newton_iterations: usize) -> Self {
         self.newton.max_iterations = max_newton_iterations;
         self
     }
 
     /// Overrides the Rayon dispatch threshold of the finite-difference
-    /// Jacobian assembly at construction time (DT-069, #198), in unknowns
+    /// Jacobian assembly at construction time ([DT-069](https://github.com/biface/oxiflow/issues/198)), in unknowns
     /// (nodes × components). The Jacobian's columns (dense path) or colors
     /// (banded path) are dispatched through Rayon once the system has at
     /// least this many unknowns; the Jacobian is bit-for-bit identical
@@ -155,7 +155,7 @@ impl BackwardEulerSolver {
         self.jacobian_dispatch.threshold()
     }
 
-    /// Configures the sparse backend (DA-043). Has no effect on its own —
+    /// Configures the sparse backend ([DA-043](https://github.com/biface/oxiflow/issues/103)). Has no effect on its own —
     /// the sparse path also requires [`Self::with_jacobian_bandwidth`] and
     /// a system larger than [`Self::with_sparse_threshold`] (default 100)
     /// at solve time; otherwise the dense path is used unchanged.
@@ -174,11 +174,11 @@ impl BackwardEulerSolver {
     }
 
     /// Declares the Jacobian's half-bandwidth (e.g.
-    /// `scheme.stencil_radius()`, DA-039) — see [`Self::with_sparse_solver`].
+    /// `scheme.stencil_radius()`, [DA-039](https://github.com/biface/oxiflow/issues/95)) — see [`Self::with_sparse_solver`].
     ///
     /// Counted in flat unknowns. For a `ScalarField` state this is the
     /// stencil half-width `s`; for a `VectorField` state of `d` components,
-    /// whose unknowns are interleaved by node, it is `d·(s + 1) − 1` (#192).
+    /// whose unknowns are interleaved by node, it is `d·(s + 1) − 1` ([#192](https://github.com/biface/oxiflow/issues/192)).
     #[cfg(feature = "sparse")]
     pub fn with_jacobian_bandwidth(mut self, jacobian_bandwidth: usize) -> Self {
         self.backend.jacobian_bandwidth = Some(jacobian_bandwidth);

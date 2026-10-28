@@ -1,4 +1,4 @@
-//! # Integration test: FEM invariants INV-1 and INV-3 (#172)
+//! # Integration test: FEM invariants INV-1 and INV-3 ([#172](https://github.com/biface/oxiflow/issues/172))
 //!
 //! Regression gate for the parts of the FEM invariants that hold today, written
 //! from outside the crate on purpose: every `Mesh` here is implemented outside
@@ -15,7 +15,7 @@
 //!   it.
 //!
 //! Components that accept any `Mesh` but are only correct on a uniform 1D grid
-//! (findings of the #172 audit) are guarded in the tests of the component
+//! (findings of the [#172](https://github.com/biface/oxiflow/issues/172) audit) are guarded in the tests of the component
 //! itself: `tests/fd_calculators.rs` and `tests/danckwerts.rs`.
 
 mod common;
@@ -48,7 +48,7 @@ use oxiflow::{
 /// `Mesh::coordinates()`, which is what INV-1 promises any mesh can provide.
 /// The rates are computed at construction from the same mesh, because
 /// `compute_physics` has no mesh argument (coordinate-dependent coefficients
-/// are the subject of DD-066, #182).
+/// are the subject of [DD-066](https://github.com/biface/oxiflow/issues/181), [#182](https://github.com/biface/oxiflow/issues/182)).
 struct CoordinateDecay {
     rates: DVector<f64>,
 }

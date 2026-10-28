@@ -1,4 +1,4 @@
-//! # Integration test: Langmuir multi-species model vs. references (#138)
+//! # Integration test: Langmuir multi-species model vs. references ([#138](https://github.com/biface/oxiflow/issues/138))
 //!
 //! Companion to `examples/langmuir_multi.rs`, on the same model
 //! (`rsc/models/langmuir_multi.rs`). Two independent validation levels,

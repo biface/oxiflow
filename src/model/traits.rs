@@ -1,16 +1,16 @@
 //! # Module `model::traits`
 //!
-//! Core traits for physical model components (DA-005, issue #29, #32).
+//! Core traits for physical model components ([DA-005](https://github.com/biface/oxiflow/issues/5), issue [#29](https://github.com/biface/oxiflow/issues/29), [#32](https://github.com/biface/oxiflow/issues/32)).
 //!
 //! ## `RequiresContext`
 //!
-//! Standalone trait — `required_variables()` is mandatory (DA-005).
+//! Standalone trait — `required_variables()` is mandatory ([DA-005](https://github.com/biface/oxiflow/issues/5)).
 //!
 //! ## `PhysicalModel`
 //!
 //! Supertrait of `RequiresContext`. Declares the physical equations and computes
 //! field derivatives. The method is named `compute_physics` — the `_v2` suffix
-//! from chrom-rs is dropped because oxiflow never had a v1 (DA-006).
+//! from chrom-rs is dropped because oxiflow never had a v1 ([DA-006](https://github.com/biface/oxiflow/issues/6)).
 
 use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
@@ -40,7 +40,7 @@ pub trait RequiresContext {
 
     /// Variables that must be computed before this component runs.
     ///
-    /// Used by `chain.rs` for topological ordering (DD-009, J2).
+    /// Used by `chain.rs` for topological ordering ([DD-009](https://github.com/biface/oxiflow/issues/9), J2).
     fn depends_on(&self) -> Vec<ContextVariable> {
         vec![]
     }
@@ -67,7 +67,7 @@ pub trait RequiresContext {
 ///
 /// The method is named `compute_physics` (not `compute_physics_v2`).
 /// oxiflow never had a v1 API — the `_v2` suffix was a chrom-rs migration
-/// artifact that does not apply here (DA-006).
+/// artifact that does not apply here ([DA-006](https://github.com/biface/oxiflow/issues/6)).
 ///
 /// # Examples
 ///

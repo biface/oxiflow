@@ -1,4 +1,4 @@
-//! # Integration test: meshes supported by the FD spatial calculators (#186)
+//! # Integration test: meshes supported by the FD spatial calculators ([#186](https://github.com/biface/oxiflow/issues/186))
 //!
 //! `FDGradientCalculator` and `FDLaplacianCalculator` hold an `Arc<dyn Mesh>`
 //! but their stencils are only correct on a 1D mesh with equally spaced nodes.

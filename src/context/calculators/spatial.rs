@@ -2,9 +2,9 @@
 //!
 //! Finite-difference spatial calculators: gradient and Laplacian.
 //!
-//! Both calculators hold an `Arc<dyn Mesh>` internally (INV-1, DA-007) and
+//! Both calculators hold an `Arc<dyn Mesh>` internally (INV-1, [DA-007](https://github.com/biface/oxiflow/issues/7)) and
 //! delegate their stencil math to `operators::fd`'s `compute_from_dx`
-//! functions (#47, FD delegation refactor) — see that module's documentation
+//! functions ([#47](https://github.com/biface/oxiflow/issues/47), FD delegation refactor) — see that module's documentation
 //! for why the delegation bypasses `DiscreteOperator::apply()` itself.
 //!
 //! ## Supported meshes
@@ -15,10 +15,10 @@
 //! `DiscreteOperator::MeshType = UniformGrid1D` would at compile time, so both
 //! calculators resolve the step from the mesh at construction (see
 //! `mesh::uniform_spacing`) and `compute()` returns `PreconditionFailed` on
-//! any other mesh instead of a silently wrong field (#186). Generalising the
-//! stencils to nD structured grids is #152.
+//! any other mesh instead of a silently wrong field ([#186](https://github.com/biface/oxiflow/issues/186)). Generalising the
+//! stencils to nD structured grids is [#152](https://github.com/biface/oxiflow/issues/152).
 //!
-//! ## `parallel_threshold` via `solver::parallel::ParallelThreshold` (DT-014, DA-048)
+//! ## `parallel_threshold` via `solver::parallel::ParallelThreshold` ([DT-014](https://github.com/biface/oxiflow/issues/14), [DA-048](https://github.com/biface/oxiflow/issues/140))
 //!
 //! Both calculators hold a
 //! `ParallelThreshold` field
@@ -43,7 +43,7 @@ use crate::operators::fd::{CenteredGradient, CenteredLaplacian, Direction, Upwin
 #[cfg(feature = "parallel")]
 use crate::solver::parallel::ParallelThreshold;
 
-/// Translates `operators::fd`'s `InvalidDomain` (#47) into this calculator's
+/// Translates `operators::fd`'s `InvalidDomain` ([#47](https://github.com/biface/oxiflow/issues/47)) into this calculator's
 /// `PreconditionFailed`, preserved from before the delegation refactor.
 ///
 /// `operators::fd` is new code with no external consumer yet, so it is free
@@ -101,7 +101,7 @@ fn stored_step(step: &Result<f64, String>, context: &'static str) -> Result<f64,
 /// `ContextValue::ScalarField` — one gradient value per mesh node.
 ///
 /// The mesh is held as `Arc<dyn Mesh>` internally (INV-1). Stencil math is
-/// delegated to `operators::fd::{UpwindGradient, CenteredGradient}` (#47).
+/// delegated to `operators::fd::{UpwindGradient, CenteredGradient}` ([#47](https://github.com/biface/oxiflow/issues/47)).
 ///
 /// # Supported meshes
 ///
@@ -151,7 +151,7 @@ pub struct FDGradientCalculator {
     /// Stencil step resolved from `mesh` at construction, or the reason
     /// `mesh`/`dimension` is not supported (see `grid_step`).
     step: Result<f64, String>,
-    /// Rayon dispatch threshold (DT-014, DA-048) — see
+    /// Rayon dispatch threshold ([DT-014](https://github.com/biface/oxiflow/issues/14), [DA-048](https://github.com/biface/oxiflow/issues/140)) — see
     /// [`ParallelThreshold`]'s own docs for the sentinel/gating rationale.
     #[cfg(feature = "parallel")]
     parallel_threshold: ParallelThreshold,
@@ -173,7 +173,7 @@ impl FDGradientCalculator {
     /// `parallel_threshold` has no override by default —
     /// `parallel_threshold` reports
     /// `operators::fd::default_parallel_threshold`
-    /// (DT-014, #51) until one is set, at construction with
+    /// ([DT-014](https://github.com/biface/oxiflow/issues/14), [#51](https://github.com/biface/oxiflow/issues/51)) until one is set, at construction with
     /// `with_parallel_threshold` or at runtime with
     /// `set_parallel_threshold`; all three exist only when the crate is
     /// built with the `parallel` feature.
@@ -204,10 +204,10 @@ impl FDGradientCalculator {
         }
     }
 
-    /// Overrides the Rayon dispatch threshold at construction time (DT-014,
-    /// #51). Only exists when the crate is built with the `parallel`
+    /// Overrides the Rayon dispatch threshold at construction time ([DT-014](https://github.com/biface/oxiflow/issues/14),
+    /// [#51](https://github.com/biface/oxiflow/issues/51)). Only exists when the crate is built with the `parallel`
     /// feature — mirrors `BackwardEulerSolver::with_sparse_threshold`'s
-    /// gating (DA-043).
+    /// gating ([DA-043](https://github.com/biface/oxiflow/issues/103)).
     ///
     /// # Panics
     ///
@@ -347,7 +347,7 @@ impl ContextCalculator for FDGradientCalculator {
 /// Provides a user-chosen `ContextVariable::External { name }` as a
 /// `ContextValue::ScalarField`. The Laplacian is a scalar nodal field of the
 /// same length as the primary field — no new `ContextVariable` variant is
-/// needed (DA-026 deferred).
+/// needed ([DA-026](https://github.com/biface/oxiflow/issues/73) deferred).
 ///
 /// # Stencil
 ///
@@ -402,7 +402,7 @@ pub struct FDLaplacianCalculator {
     /// Stencil step resolved from `mesh` at construction, or the reason
     /// `mesh` is not supported (see `grid_step`).
     step: Result<f64, String>,
-    /// Rayon dispatch threshold (DT-014, DA-048) — see
+    /// Rayon dispatch threshold ([DT-014](https://github.com/biface/oxiflow/issues/14), [DA-048](https://github.com/biface/oxiflow/issues/140)) — see
     /// [`ParallelThreshold`]'s own docs for the sentinel/gating rationale.
     #[cfg(feature = "parallel")]
     parallel_threshold: ParallelThreshold,
@@ -425,7 +425,7 @@ impl FDLaplacianCalculator {
     /// `parallel_threshold` has no override by default —
     /// `parallel_threshold` reports
     /// `operators::fd::default_parallel_threshold`
-    /// (DT-014, #51) until one is set, at construction with
+    /// ([DT-014](https://github.com/biface/oxiflow/issues/14), [#51](https://github.com/biface/oxiflow/issues/51)) until one is set, at construction with
     /// `with_parallel_threshold` or at runtime with
     /// `set_parallel_threshold`; all three exist only when the crate is
     /// built with the `parallel` feature.
@@ -456,9 +456,9 @@ impl FDLaplacianCalculator {
         self
     }
 
-    /// Overrides the Rayon dispatch threshold at construction time (DT-014,
-    /// #51). Only exists when the crate is built with the `parallel`
-    /// feature (DA-043 gating pattern).
+    /// Overrides the Rayon dispatch threshold at construction time ([DT-014](https://github.com/biface/oxiflow/issues/14),
+    /// [#51](https://github.com/biface/oxiflow/issues/51)). Only exists when the crate is built with the `parallel`
+    /// feature ([DA-043](https://github.com/biface/oxiflow/issues/103) gating pattern).
     ///
     /// # Panics
     ///

@@ -1,7 +1,7 @@
 //! # Module `solver::methods::step_control`
 //!
 //! Adaptive step-size control — shared machinery for variable-step
-//! integrators (DD-036).
+//! integrators ([DD-036](https://github.com/biface/oxiflow/issues/89)).
 //!
 //! ## Why this is separate from `dopri45.rs`
 //!
@@ -10,7 +10,7 @@
 //! error norm in and produces an accept/reject decision and a new `dt`
 //! out. [`DoPri45Solver`](super::dopri45::DoPri45Solver) is the first
 //! consumer (the error norm comes from the embedded RK4/5 difference),
-//! but a future adaptive implicit solver (deferred, see DD-033's note on
+//! but a future adaptive implicit solver (deferred, see [DD-033](https://github.com/biface/oxiflow/issues/86)'s note on
 //! iterated Newton) would plug in the same controller with a different
 //! error source: the usual truncation-error norm when Newton converges,
 //! or a forced rejection when it doesn't — a guard applied *before*
@@ -87,7 +87,7 @@ impl StepSizeController {
 
     /// [`Self::error_norm`] for an error and a reference given as states:
     /// `ScalarField` or `VectorField`, every value of the state weighing
-    /// the same in the RMS (#192). Reads the values in place, without
+    /// the same in the RMS ([#192](https://github.com/biface/oxiflow/issues/192)). Reads the values in place, without
     /// copying them.
     ///
     /// # Errors

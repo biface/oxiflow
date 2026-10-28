@@ -1,8 +1,8 @@
-//! # Example: lahar–lake coupled prototype (#40, J3 exit criterion)
+//! # Example: lahar–lake coupled prototype ([#40](https://github.com/biface/oxiflow/issues/40), J3 exit criterion)
 //!
-//! Demonstrates `MultiDomainOrchestrator` (DA-031) driving two coupled
+//! Demonstrates `MultiDomainOrchestrator` ([DA-031](https://github.com/biface/oxiflow/issues/82)) driving two coupled
 //! domains — a lahar (volcanic mudflow) losing mass and a lake receiving
-//! it — through `CouplingOperator` (INV-3, DA-011).
+//! it — through `CouplingOperator` (INV-3, [DA-011](https://github.com/biface/oxiflow/issues/11)).
 //!
 //! Run with: `cargo run --example lahar_lake_proto`
 //!
@@ -15,7 +15,7 @@
 //! Both domains are intentionally 0D-per-node ODEs, not real Bingham
 //! viscoplastic rheology or shallow-water flux divergence — those needed
 //! the spatial operators (INV-2) that came at J5, after this J3 prototype;
-//! `lahar_lake_wave` is the full version (#180). This prototype validates
+//! `lahar_lake_wave` is the full version ([#180](https://github.com/biface/oxiflow/issues/180)). This prototype validates
 //! the multi-domain *architecture* (INV-1, INV-3), not spatial accuracy:
 //!
 //! - **Lahar** (granular flow stand-in): `dC/dt = -lambda * C` — mass

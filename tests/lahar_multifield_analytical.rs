@@ -1,8 +1,8 @@
-//! # Integration test: multi-field lahar model vs. analytical scaling laws (#139)
+//! # Integration test: multi-field lahar model vs. analytical scaling laws ([#139](https://github.com/biface/oxiflow/issues/139))
 //!
 //! Companion to `examples/lahar_multifield.rs`, on the same model
 //! (`rsc/models/lahar_physics.rs`, `lahar_flux.rs`, `lahar_source.rs`):
-//! this file asserts the acceptance criteria from #139 as a regression
+//! this file asserts the acceptance criteria from [#139](https://github.com/biface/oxiflow/issues/139) as a regression
 //! gate.
 //!
 //! Three-tier validation, agreed in session after the drag-dominated

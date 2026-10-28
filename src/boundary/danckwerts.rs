@@ -1,6 +1,6 @@
 //! # Module `boundary::danckwerts`
 //!
-//! Danckwerts boundary conditions for convection-diffusion problems (issue #35).
+//! Danckwerts boundary conditions for convection-diffusion problems (issue [#35](https://github.com/biface/oxiflow/issues/35)).
 //!
 //! ## Physical context
 //!
@@ -18,7 +18,7 @@
 //!
 //! Discretised with the one-sided difference between the inlet node and its
 //! neighbour, $(u_1 - u_0)/\Delta x$ with $\Delta x = x_1 - x_0$, and solved
-//! for the inlet node (DD-070, #201):
+//! for the inlet node ([DD-070](https://github.com/biface/oxiflow/issues/200), [#201](https://github.com/biface/oxiflow/issues/201)):
 //!
 //! $$u_0 = \frac{u_{\text{feed}}(t) + \kappa \, u_1}{1 + \kappa},
 //!   \qquad \kappa = \frac{D}{v \, \Delta x}$$
@@ -45,7 +45,7 @@
 //!
 //! ## Supported meshes
 //!
-//! Each condition acts on a boundary region of the mesh (DA-071, #204): by
+//! Each condition acts on a boundary region of the mesh ([DA-071](https://github.com/biface/oxiflow/issues/203), [#204](https://github.com/biface/oxiflow/issues/204)): by
 //! default the lower face of axis 0 for the inlet, the upper face for the
 //! outlet — the two ends of a 1D column, flow towards increasing `x`.
 //! [`DanckwertsInlet::on`] and [`DanckwertsOutlet::on`] choose another face,
@@ -53,7 +53,7 @@
 //! region with [`Mesh::boundary_neighbours`]: every node of the face is set
 //! from its first interior neighbour along the normal. A mesh that does not
 //! define the region refuses it with `PreconditionFailed`; with the default
-//! implementation of `Mesh`, that is any mesh that is not 1D (#187), and a
+//! implementation of `Mesh`, that is any mesh that is not 1D ([#187](https://github.com/biface/oxiflow/issues/187)), and a
 //! 1D mesh whose boundary nodes are not ordered along the axis.
 //!
 //! ## Souplesse
@@ -68,7 +68,7 @@
 //!
 //! Both types implement `serde::Serialize` / `serde::Deserialize` under the `serde`
 //! feature flag. All fields are `f64`, [`ContextVariable`] or
-//! [`BoundaryRegion`] — all serialisable. An inlet serialised before DA-071,
+//! [`BoundaryRegion`] — all serialisable. An inlet serialised before [DA-071](https://github.com/biface/oxiflow/issues/203),
 //! without a region, reads back on the lower face of axis 0. The outlet,
 //! formerly a unit value, now serialises as a map holding its region; an
 //! empty map reads back on the upper face.
@@ -116,7 +116,7 @@ fn upper_face() -> BoundaryRegion {
 /// Written for node 0 and its neighbour 1 of a 1D column, the default
 /// region; on any region, each boundary node and its interior neighbour
 /// play these roles. The nodes of the region are declared as constrained
-/// nodes (DD-070): the solver keeps their derivative at zero and the
+/// nodes ([DD-070](https://github.com/biface/oxiflow/issues/200)): the solver keeps their derivative at zero and the
 /// condition alone sets them.
 ///
 /// # Parameters
@@ -169,7 +169,7 @@ pub struct DanckwertsInlet {
     pub velocity: f64,
     /// Context key used to read the feed concentration $u_{\text{feed}}(t)$.
     pub feed_variable: ContextVariable,
-    /// Boundary region the condition acts on (DA-071) — the lower face of
+    /// Boundary region the condition acts on ([DA-071](https://github.com/biface/oxiflow/issues/203)) — the lower face of
     /// axis 0 unless set with [`Self::on`].
     #[cfg_attr(feature = "serde", serde(default = "lower_face"))]
     pub region: BoundaryRegion,
@@ -195,7 +195,7 @@ impl DanckwertsInlet {
         }
     }
 
-    /// Sets the boundary region the condition acts on (DA-071) — the upper
+    /// Sets the boundary region the condition acts on ([DA-071](https://github.com/biface/oxiflow/issues/203)) — the upper
     /// face of axis 0 for a flow towards decreasing `x`, for instance.
     pub fn on(mut self, region: BoundaryRegion) -> Self {
         self.region = region;
@@ -273,7 +273,7 @@ impl BoundaryCondition for DanckwertsInlet {
         Ok(())
     }
 
-    /// The nodes of its region, set by [`apply`](Self::apply) (DD-070). A
+    /// The nodes of its region, set by [`apply`](Self::apply) ([DD-070](https://github.com/biface/oxiflow/issues/200)). A
     /// region the mesh does not define gives no node here; `apply` reports
     /// the error.
     fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {
@@ -295,7 +295,7 @@ impl BoundaryCondition for DanckwertsInlet {
 ///
 /// written for the last node of a 1D column, the default region; on any
 /// region, each boundary node takes the value of its interior neighbour.
-/// The nodes of the region are declared as constrained nodes (DD-070).
+/// The nodes of the region are declared as constrained nodes ([DD-070](https://github.com/biface/oxiflow/issues/200)).
 ///
 /// No context variables are required — the condition depends only on the
 /// current field state and the mesh geometry.
@@ -325,7 +325,7 @@ impl BoundaryCondition for DanckwertsInlet {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct DanckwertsOutlet {
-    /// Boundary region the condition acts on (DA-071) — the upper face of
+    /// Boundary region the condition acts on ([DA-071](https://github.com/biface/oxiflow/issues/203)) — the upper face of
     /// axis 0 unless set with [`Self::on`].
     pub region: BoundaryRegion,
 }
@@ -339,7 +339,7 @@ impl DanckwertsOutlet {
         }
     }
 
-    /// Sets the boundary region the condition acts on (DA-071) — the lower
+    /// Sets the boundary region the condition acts on ([DA-071](https://github.com/biface/oxiflow/issues/203)) — the lower
     /// face of axis 0 for a flow towards decreasing `x`, for instance.
     pub fn on(mut self, region: BoundaryRegion) -> Self {
         self.region = region;
@@ -396,7 +396,7 @@ impl BoundaryCondition for DanckwertsOutlet {
         Ok(())
     }
 
-    /// The nodes of its region, set by [`apply`](Self::apply) (DD-070). A
+    /// The nodes of its region, set by [`apply`](Self::apply) ([DD-070](https://github.com/biface/oxiflow/issues/200)). A
     /// region the mesh does not define gives no node here; `apply` reports
     /// the error.
     fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {

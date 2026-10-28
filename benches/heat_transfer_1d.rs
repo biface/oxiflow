@@ -1,5 +1,5 @@
 //! Criterion benchmark for the coefficient fields of the heat-transfer
-//! reference example (#175). The graded conductivity comes from
+//! reference example ([#175](https://github.com/biface/oxiflow/issues/175)). The graded conductivity comes from
 //! `rsc/models/graded_conductivity.rs`, shared with the example.
 //!
 //! - [`coefficient_dispatch`] — dispatch of `CoefficientField`'s node
@@ -63,7 +63,7 @@ fn layered(x: f64) -> f64 {
 /// The graded profile is the one of the example and the cheapest case, so
 /// its crossover is an upper bound for a closed-form coefficient; the
 /// layered profile shows how the crossover moves when the function costs
-/// more. Both feed the dispatch charts of DA-048; the default threshold
+/// more. Both feed the dispatch charts of [DA-048](https://github.com/biface/oxiflow/issues/140); the default threshold
 /// (10 000 nodes) stays indicative.
 pub fn coefficient_dispatch(c: &mut Criterion) {
     let mut group = c.benchmark_group("heat_transfer_1d_coefficient_dispatch");

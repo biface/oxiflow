@@ -1,4 +1,4 @@
-//! # Reference example: magnetic diffusion into a conductor (#179)
+//! # Reference example: magnetic diffusion into a conductor ([#179](https://github.com/biface/oxiflow/issues/179))
 //!
 //! A uniform magnetic field B0 is switched on at t = 0, parallel to the
 //! flat surface of a thick conductor that holds no field beforehand. The

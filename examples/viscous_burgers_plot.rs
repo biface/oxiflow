@@ -1,4 +1,4 @@
-//! # Example: viscous_burgers reference plot (#145)
+//! # Example: viscous_burgers reference plot ([#145](https://github.com/biface/oxiflow/issues/145))
 //!
 //! `u(x)` profiles at several times showing the traveling front, overlaid
 //! with the analytical Cole-Hopf traveling-shock solution -- same

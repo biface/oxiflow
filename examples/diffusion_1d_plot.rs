@@ -1,4 +1,4 @@
-//! # Example: diffusion_1d reference plot (#145)
+//! # Example: diffusion_1d reference plot ([#145](https://github.com/biface/oxiflow/issues/145))
 //!
 //! `u(x)` profiles at several times, overlaid with the analytical
 //! Gaussian solution -- the standard textbook figure for a 1D diffusion

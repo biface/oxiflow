@@ -1,8 +1,8 @@
 //! # Module `solver::methods::newton`
 //!
-//! Iterated Newton solver — shared, integrator-agnostic core (DD-044,
+//! Iterated Newton solver — shared, integrator-agnostic core ([DD-044](https://github.com/biface/oxiflow/issues/109),
 //! issue [#109](https://github.com/biface/oxiflow/issues/109), activating
-//! DD-033's ([#86](https://github.com/biface/oxiflow/issues/86)) Option A).
+//! [DD-033](https://github.com/biface/oxiflow/issues/86)'s ([#86](https://github.com/biface/oxiflow/issues/86)) Option A).
 //!
 //! ## Why this exists
 //!
@@ -11,7 +11,7 @@
 //! correction with a frozen Jacobian — exact when the underlying
 //! `compute_physics` is affine in `u`, a first-order approximation
 //! otherwise. This module provides the genuinely iterated alternative
-//! DD-033 always anticipated, shared by both call sites rather than
+//! [DD-033](https://github.com/biface/oxiflow/issues/86) always anticipated, shared by both call sites rather than
 //! duplicated: theta-method and BDF2 (this sprint's two concrete
 //! consumers) differ only in how they express their residual as an
 //! affine transform of `u` plus an implicit term — see
@@ -49,7 +49,7 @@
 //! ## Wiring status
 //!
 //! `solve` is called from a single place, the implicit step of
-//! [`super::implicit`] (DD-044,
+//! [`super::implicit`] ([DD-044](https://github.com/biface/oxiflow/issues/109),
 //! [#111](https://github.com/biface/oxiflow/issues/111),
 //! [#112](https://github.com/biface/oxiflow/issues/112)), which expresses
 //! each integrator's equation in the residual convention above
@@ -77,12 +77,12 @@ use crate::solver::linear::LinearSolver;
 ///
 /// Default: [`ResidualOnly`](Self::ResidualOnly) with `tol_abs = 1e-8`,
 /// `tol_rel = 1e-6` — starting points, not fixed constants; tune via the
-/// solver builders once this lands (#111/#112).
+/// solver builders once this lands ([#111](https://github.com/biface/oxiflow/issues/111)/[#112](https://github.com/biface/oxiflow/issues/112)).
 ///
 /// Note: this default is *not* what
 /// `theta_method_step` or the
 /// implicit solvers' own zero-config constructors use internally — those
-/// need a looser, explicitly named tolerance to guarantee the pre-DD-044
+/// need a looser, explicitly named tolerance to guarantee the pre-[DD-044](https://github.com/biface/oxiflow/issues/109)
 /// single-correction contract on very stiff affine problems (see
 /// [`super::implicit`]'s module docs for why). This `Default` impl is a
 /// general starting point for callers configuring the loop themselves,
@@ -130,7 +130,7 @@ impl NewtonConvergence {
 /// Jacobian refresh strategy for the iterated Newton loop (`solve`).
 ///
 /// Default: [`ModifiedFrozen`](Self::ModifiedFrozen) — matches the
-/// pre-DD-044 behaviour (Jacobian evaluated once, at the initial guess,
+/// pre-[DD-044](https://github.com/biface/oxiflow/issues/109) behaviour (Jacobian evaluated once, at the initial guess,
 /// never refreshed) as a special case of the generic loop, rather than a
 /// separate code path.
 #[non_exhaustive]
@@ -274,7 +274,7 @@ pub(crate) struct NewtonParams {
 /// `max_iterations == 1`. This is deliberate: whether `f` is affine in
 /// `u` is not tracked or asserted anywhere (doing so would require the
 /// HOW pole to know something about the WHAT pole's `PhysicalModel`,
-/// which DD-044 does not introduce) — it is instead *inferred for free*
+/// which [DD-044](https://github.com/biface/oxiflow/issues/109) does not introduce) — it is instead *inferred for free*
 /// from the residual itself. For an affine `f`, a single correction is
 /// exact, so the post-application residual already sits at
 /// floating-point precision and passes any reasonable tolerance; for a
@@ -283,7 +283,7 @@ pub(crate) struct NewtonParams {
 /// [`OxiflowError::NewtonNotConverged`] instead of silently returning a
 /// first-order-accurate value.
 ///
-/// Consequence for callers migrating from the pre-DD-044
+/// Consequence for callers migrating from the pre-[DD-044](https://github.com/biface/oxiflow/issues/109)
 /// `theta_method_step`/`bdf2_step` (which never checked convergence, and
 /// so could never fail this way): calling this loop with the historical
 /// defaults (`max_iterations = 1`, `ModifiedFrozen`) reproduces the exact

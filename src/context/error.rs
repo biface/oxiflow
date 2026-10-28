@@ -1,6 +1,6 @@
 //! # Module `context::error`
 //!
-//! Main error type of the oxiflow engine (DD-004, issue #28).
+//! Main error type of the oxiflow engine ([DD-004](https://github.com/biface/oxiflow/issues/4), issue [#28](https://github.com/biface/oxiflow/issues/28)).
 //!
 //! `OxiflowError` is a typed enum built with `thiserror` covering all engine
 //! failure cases. Every public function returns `Result<_, OxiflowError>` —
@@ -27,7 +27,7 @@ use crate::context::variable::ContextVariable;
 /// The `ComputationFailed` variant holds a `Box<dyn std::error::Error + Send + Sync>`
 /// (a trait object), which cannot be serialised directly. Error context for
 /// post-mortem analysis is captured as a `String` in `SimulationSnapshot`
-/// (DT-025 Option B, v0.6.0).
+/// ([DT-025](https://github.com/biface/oxiflow/issues/66) Option B, v0.6.0).
 ///
 /// # Examples
 ///
@@ -103,7 +103,7 @@ pub enum OxiflowError {
 
     /// A `SimulationSnapshot` read/write operation failed — file I/O or
     /// (de)serialisation (JSON or bincode). See
-    /// [`crate::solver::snapshot`] (DT-025 Option B / DD-029, issue #71).
+    /// [`crate::solver::snapshot`] ([DT-025](https://github.com/biface/oxiflow/issues/66) Option B / [DD-029](https://github.com/biface/oxiflow/issues/77), issue [#71](https://github.com/biface/oxiflow/issues/71)).
     #[error("snapshot persistence error: {0}")]
     Persistence(String),
 
@@ -113,7 +113,7 @@ pub enum OxiflowError {
     /// Distinct from [`SolverDivergence`]: this is a failure of the
     /// *nonlinear correction* to converge, not a non-finite field value —
     /// though both are routed through [`crate::solver::Solver::on_divergence`]
-    /// before being returned (DD-044, issue #109).
+    /// before being returned ([DD-044](https://github.com/biface/oxiflow/issues/109)).
     ///
     /// [`SolverDivergence`]: OxiflowError::SolverDivergence
     #[error("Newton iteration did not converge after {iterations} iterations (residual = {residual:.4e})")]
@@ -126,10 +126,10 @@ pub enum OxiflowError {
         residual: f64,
     },
 
-    /// No compatible GPU adapter was found (DT-045, `gpu` feature).
+    /// No compatible GPU adapter was found ([DT-045](https://github.com/biface/oxiflow/issues/128), `gpu` feature).
     ///
     /// Returned by `solver::gpu::GpuContext::new` — never a silent
-    /// CPU fallback (DT-045's explicit-error policy). The caller decides
+    /// CPU fallback ([DT-045](https://github.com/biface/oxiflow/issues/128)'s explicit-error policy). The caller decides
     /// which CPU solver to fall back to. Present unconditionally (not
     /// `#[cfg(feature = "gpu")]`), consistent with `Persistence` above,
     /// which is likewise feature-agnostic in the enum's shape even though

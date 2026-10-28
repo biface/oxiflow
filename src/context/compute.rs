@@ -1,6 +1,6 @@
 //! # Module `context::compute`
 //!
-//! Type-safe computation context (DA-006, issue #30).
+//! Type-safe computation context ([DA-006](https://github.com/biface/oxiflow/issues/6), issue [#30](https://github.com/biface/oxiflow/issues/30)).
 //!
 //! ## `ComputeContext`
 //!
@@ -9,14 +9,14 @@
 //! `compute_physics_v2()` and access variables through typed accessors —
 //! no string keys, no `HashMap<String, f64>`, no runtime type guessing.
 //!
-//! ## Revised signatures (DA-006)
+//! ## Revised signatures ([DA-006](https://github.com/biface/oxiflow/issues/6))
 //!
 //! - `gradient(dim)` returns `&DVector<f64>` — the full nodal field, consistent
 //!   with `ContextValue::ScalarField`. The model indexes the node it needs.
 //! - `external(var)` takes a typed `ContextVariable` — no `&str` shortcut that
 //!   would bypass the type system.
 //!
-//! ## Shared values (DT-068, #195)
+//! ## Shared values ([DT-068](https://github.com/biface/oxiflow/issues/195))
 //!
 //! Values are stored behind `Arc`. A calculator that keeps a value between
 //! evaluations hands it over through
@@ -59,7 +59,7 @@ pub struct ComputeContext {
     /// Current time step `dt`.
     time_step: f64,
     /// Resolved context variables, keyed by typed `ContextVariable`.
-    /// Shared so that a calculator can hand over a value it keeps (DT-068).
+    /// Shared so that a calculator can hand over a value it keeps ([DT-068](https://github.com/biface/oxiflow/issues/195)).
     variables: HashMap<ContextVariable, Arc<ContextValue>>,
 }
 

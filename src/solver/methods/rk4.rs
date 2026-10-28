@@ -1,6 +1,6 @@
 //! # Module `solver::methods::rk4`
 //!
-//! Classical Runge-Kutta 4 integrator — explicit, 4th order (issue #41).
+//! Classical Runge-Kutta 4 integrator — explicit, 4th order (issue [#41](https://github.com/biface/oxiflow/issues/41)).
 //!
 //! ## Algorithm
 //!
@@ -42,7 +42,7 @@
 //! The stages and the final combination go through
 //! `ContextValue::add_scaled` and the crate's linear combination of states,
 //! so a `VectorField` state (n nodes × d components) is advanced exactly
-//! like a `ScalarField` (#192). For a `ScalarField`, results are
+//! like a `ScalarField` ([#192](https://github.com/biface/oxiflow/issues/192)). For a `ScalarField`, results are
 //! bit-identical to the former `DVector` arithmetic.
 //!
 //! ## Scope
@@ -50,11 +50,11 @@
 //! - Single-domain scenarios only (`n_domains() == 1`) — same restriction
 //!   as `ForwardEulerSolver`. Multi-domain `CouplingOperator` scenarios go
 //!   through `MultiDomainOrchestrator`, which drives this solver per domain
-//!   as a `SteppableSolver` (DA-031).
+//!   as a `SteppableSolver` ([DA-031](https://github.com/biface/oxiflow/issues/82)).
 //! - No spatial scheme inside the integrator (INV-2): the model returns
 //!   `du/dt`, spatial operators included.
 //! - `StepControl::Fixed { dt }` only — adaptive step control is DoPri45's
-//!   job (#42).
+//!   job ([#42](https://github.com/biface/oxiflow/issues/42)).
 //!
 //! ## Stability
 //!

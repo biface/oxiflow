@@ -1,6 +1,6 @@
 //! # Module `solver::methods::state_layout`
 //!
-//! Ordering of the unknowns of a state for the implicit integrators (#192).
+//! Ordering of the unknowns of a state for the implicit integrators ([#192](https://github.com/biface/oxiflow/issues/192)).
 //!
 //! Newton's method and the finite-difference Jacobians work on one flat
 //! vector of unknowns. A `ScalarField` already is one. A `VectorField`
@@ -19,12 +19,12 @@
 //! its storage order is not the flat order. [`StateLayout::values`] and
 //! [`StateLayout::storage_index`] read and write the unknowns of a state in
 //! place, without building the flat vector: the finite-difference Jacobians
-//! use them to perturb one work state per Jacobian (#197).
+//! use them to perturb one work state per Jacobian ([#197](https://github.com/biface/oxiflow/issues/197)).
 //!
 //! The ordering is internal to the solver (HOW, INV-8): models and
 //! calculators only ever see `ContextValue` states. The general numbering
-//! of degrees of freedom for the finite-element work stays with DA-049
-//! (#150), DT-055 (#157) and #133.
+//! of degrees of freedom for the finite-element work stays with [DA-049](https://github.com/biface/oxiflow/issues/150)
+//! ([#150](https://github.com/biface/oxiflow/issues/150)), [DT-055](https://github.com/biface/oxiflow/issues/157) and [#133](https://github.com/biface/oxiflow/issues/133).
 
 use std::borrow::Cow;
 

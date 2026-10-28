@@ -1,7 +1,7 @@
 //! # Module `model::composite`
 //!
 //! `CompositeModel` — sum of multiple [`PhysicalModel`] on the same state
-//! (DA-037, #45).
+//! ([DA-037](https://github.com/biface/oxiflow/issues/90), [#45](https://github.com/biface/oxiflow/issues/45)).
 //!
 //! ## Why
 //!
@@ -14,14 +14,14 @@
 //!
 //! 1. **Bookkeeping** for [`crate::solver::methods::imex::OperatorSplittingSolver`]:
 //!    the outer `Domain` required by [`crate::solver::Solver::solve`]
-//!    (DA-037) carries a `CompositeModel` whose `required_variables()`/
+//!    ([DA-037](https://github.com/biface/oxiflow/issues/90)) carries a `CompositeModel` whose `required_variables()`/
 //!    `initial_state()` correctly cover the union of the sub-models —
 //!    otherwise `build_calculator_chain` would miss a variable required by
 //!    a single operator.
 //! 2. **Monolithic reference**: run through any ordinary solver
 //!    (`ForwardEulerSolver`, `RK4Solver`, …), it computes the *same*
 //!    complete equation as the split version — exactly what acceptance
-//!    criterion 1 of #45 needs to compare the split solution against a
+//!    criterion 1 of [#45](https://github.com/biface/oxiflow/issues/45) needs to compare the split solution against a
 //!    combined reference solution.
 //!
 //! `CompositeModel` knows nothing about Strang splitting, half-steps, or
@@ -38,7 +38,7 @@ use crate::model::traits::{PhysicalModel, RequiresContext};
 
 /// Sum of multiple [`PhysicalModel`] evaluated on the same state.
 ///
-/// See the module documentation for context (DA-037).
+/// See the module documentation for context ([DA-037](https://github.com/biface/oxiflow/issues/90)).
 pub struct CompositeModel {
     operators: Vec<Box<dyn PhysicalModel>>,
     name: String,

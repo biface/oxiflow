@@ -1,4 +1,4 @@
-//! # Reference example: binary frontal analysis with competitive adsorption (#174)
+//! # Reference example: binary frontal analysis with competitive adsorption ([#174](https://github.com/biface/oxiflow/issues/174))
 //!
 //! A clean chromatographic column is fed, from t = 0 on, with a constant
 //! mixture of two solutes that compete for the same adsorption sites. Each

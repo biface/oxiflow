@@ -1,13 +1,13 @@
 //! # Module `coupling`
 //!
-//! Multi-physics inter-domain coupling — INV-3 invariant (DA-011).
+//! Multi-physics inter-domain coupling — INV-3 invariant ([DA-011](https://github.com/biface/oxiflow/issues/11)).
 //!
 //! ## Core principle (INV-3)
 //!
 //! All interactions between distinct physical domains (lahar/lake, fluid/solid,
 //! column/reservoir) must go through the [`CouplingOperator`] trait with
 //! [`DomainId`] and [`Interface`]. No coupling logic is coded directly in the
-//! [`Solver`](crate::solver::Solver) (DA-011, J3).
+//! [`Solver`](crate::solver::Solver) ([DA-011](https://github.com/biface/oxiflow/issues/11), J3).
 //!
 //! ## Types
 //!
@@ -18,7 +18,7 @@
 //!
 //! ## Object safety
 //!
-//! `CouplingOperator` is object-safe to support INV-4 (plugin-safe API, v0.30.0 / J30, DA-017).
+//! `CouplingOperator` is object-safe to support INV-4 (plugin-safe API, v0.30.0 / J30, [DA-017](https://github.com/biface/oxiflow/issues/17)).
 //! It can be stored as `Box<dyn CouplingOperator>` in `Scenario` at J3.
 
 use crate::context::compute::ComputeContext;

@@ -1,10 +1,10 @@
-//! # Example: viscous Burgers benchmark model (#137, feeds #53)
+//! # Example: viscous Burgers benchmark model ([#137](https://github.com/biface/oxiflow/issues/137), feeds [#53](https://github.com/biface/oxiflow/issues/53))
 //!
 //! `du/dt + u*du/dx = nu*d2u/dx2` on `UniformGrid1D`, via `FDGradientCalculator`
 //! (centered, for the nonlinear advective term) and `FDLaplacianCalculator`
 //! (for the diffusive term) -- one nonlinear term heavier per node than
 //! diffusion_1d's bare stencil, chosen for the middle weight class of the
-//! #53 benchmark family.
+//! [#53](https://github.com/biface/oxiflow/issues/53) benchmark family.
 //!
 //! Run with: `cargo run --example viscous_burgers`
 //!

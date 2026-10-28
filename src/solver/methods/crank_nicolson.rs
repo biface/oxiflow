@@ -1,13 +1,13 @@
 //! # Module `solver::methods::crank_nicolson`
 //!
-//! Crank-Nicolson integrator — semi-implicit, 2nd order (issue #43).
+//! Crank-Nicolson integrator — semi-implicit, 2nd order (issue [#43](https://github.com/biface/oxiflow/issues/43)).
 //!
 //! ## Algorithm
 //!
 //! $$u^{n+1} = u^n + \frac{\Delta t}{2}\left[f(u^n, t^n) + f(u^{n+1}, t^{n+1})\right]$$
 //!
 //! A thin wrapper around the shared generalised theta method, θ=0.5, of
-//! [`super::implicit`] (DD-044,
+//! [`super::implicit`] ([DD-044](https://github.com/biface/oxiflow/issues/109),
 //! [#111](https://github.com/biface/oxiflow/issues/111)) — see that
 //! module's docs for the frozen-Jacobian default and the iterated Newton
 //! path configurable via [`CrankNicolsonSolver`]'s builders. Identical structure to
@@ -25,7 +25,7 @@
 //!
 //! Same restrictions as `BackwardEulerSolver`: single-domain,
 //! `StepControl::Fixed` only. BC interaction with the perturbed Jacobian
-//! is covered by a dedicated test since #113 (see [`super::implicit`]).
+//! is covered by a dedicated test since [#113](https://github.com/biface/oxiflow/issues/113) (see [`super::implicit`]).
 
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
@@ -42,12 +42,12 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// Crank-Nicolson solver — semi-implicit, 2nd order.
 #[derive(Default)]
 pub struct CrankNicolsonSolver {
-    /// Linear-system backends (DT-013, DA-043): the dense solver and,
+    /// Linear-system backends ([DT-013](https://github.com/biface/oxiflow/issues/13), [DA-043](https://github.com/biface/oxiflow/issues/103)): the dense solver and,
     /// with the `sparse` feature, the banded-path configuration, set by
     /// `with_linear_solver` and the `with_sparse_*`/`with_jacobian_bandwidth`
     /// builders.
     backend: ImplicitBackend,
-    /// Newton configuration (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
+    /// Newton configuration ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111)): convergence criterion,
     /// Jacobian refresh strategy and iteration budget, set by the
     /// `with_newton_convergence`/`with_jacobian_strategy`/
     /// `with_max_newton_iterations` builders. Default
@@ -58,7 +58,7 @@ pub struct CrankNicolsonSolver {
     /// nonlinear model.
     newton: NewtonParams,
     /// Dispatch configuration of the finite-difference Jacobian assembly
-    /// (DT-069, #198). Its threshold exists only with the `parallel`
+    /// ([DT-069](https://github.com/biface/oxiflow/issues/198)). Its threshold exists only with the `parallel`
     /// feature — see `with_parallel_threshold`.
     jacobian_dispatch: JacobianDispatch,
 }
@@ -69,25 +69,25 @@ impl CrankNicolsonSolver {
         Self::default()
     }
 
-    /// Substitutes the linear solver backend (DT-013).
+    /// Substitutes the linear solver backend ([DT-013](https://github.com/biface/oxiflow/issues/13)).
     pub fn with_linear_solver(mut self, linear_solver: Box<dyn LinearSolver>) -> Self {
         self.backend.linear_solver = linear_solver;
         self
     }
 
-    /// Configures the Newton convergence criterion (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
+    /// Configures the Newton convergence criterion ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_newton_convergence(mut self, newton_convergence: NewtonConvergence) -> Self {
         self.newton.convergence = newton_convergence;
         self
     }
 
-    /// Configures the Jacobian refresh strategy (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)).
+    /// Configures the Jacobian refresh strategy ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111)).
     pub fn with_jacobian_strategy(mut self, jacobian_strategy: JacobianStrategy) -> Self {
         self.newton.jacobian_strategy = jacobian_strategy;
         self
     }
 
-    /// Configures the Newton iteration budget (DD-044, [#111](https://github.com/biface/oxiflow/issues/111)) — see
+    /// Configures the Newton iteration budget ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111)) — see
     /// [`BackwardEulerSolver::with_max_newton_iterations`](super::backward_euler::BackwardEulerSolver::with_max_newton_iterations).
     pub fn with_max_newton_iterations(mut self, max_newton_iterations: usize) -> Self {
         self.newton.max_iterations = max_newton_iterations;
@@ -95,7 +95,7 @@ impl CrankNicolsonSolver {
     }
 
     /// Overrides the Rayon dispatch threshold of the finite-difference
-    /// Jacobian assembly at construction time (DT-069, #198), in unknowns
+    /// Jacobian assembly at construction time ([DT-069](https://github.com/biface/oxiflow/issues/198)), in unknowns
     /// (nodes × components). The Jacobian's columns (dense path) or colors
     /// (banded path) are dispatched through Rayon once the system has at
     /// least this many unknowns; the Jacobian is bit-for-bit identical
@@ -133,7 +133,7 @@ impl CrankNicolsonSolver {
         self.jacobian_dispatch.threshold()
     }
 
-    /// Configures the sparse backend (DA-043) — see
+    /// Configures the sparse backend ([DA-043](https://github.com/biface/oxiflow/issues/103)) — see
     /// [`BackwardEulerSolver::with_sparse_solver`](super::backward_euler::BackwardEulerSolver::with_sparse_solver).
     #[cfg(feature = "sparse")]
     pub fn with_sparse_solver(mut self, sparse_solver: Box<dyn SparseLinearSolver>) -> Self {
@@ -150,11 +150,11 @@ impl CrankNicolsonSolver {
     }
 
     /// Declares the Jacobian's half-bandwidth (e.g.
-    /// `scheme.stencil_radius()`, DA-039).
+    /// `scheme.stencil_radius()`, [DA-039](https://github.com/biface/oxiflow/issues/95)).
     ///
     /// Counted in flat unknowns. For a `ScalarField` state this is the
     /// stencil half-width `s`; for a `VectorField` state of `d` components,
-    /// whose unknowns are interleaved by node, it is `d·(s + 1) − 1` (#192).
+    /// whose unknowns are interleaved by node, it is `d·(s + 1) − 1` ([#192](https://github.com/biface/oxiflow/issues/192)).
     #[cfg(feature = "sparse")]
     pub fn with_jacobian_bandwidth(mut self, jacobian_bandwidth: usize) -> Self {
         self.backend.jacobian_bandwidth = Some(jacobian_bandwidth);

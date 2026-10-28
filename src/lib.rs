@@ -25,7 +25,7 @@
 //! propagation) are reduced to this form by introducing `v = ∂u/∂t` as a
 //! second field component: the state `(u, v)` evolves as a first-order
 //! system. No dedicated second-order integrator (RKN, Newmark-β, HHT-α) is
-//! planned: order reduction is the retained approach (DD-030, #81).
+//! planned: order reduction is the retained approach ([DD-030](https://github.com/biface/oxiflow/issues/81)).
 //!
 //! ## Physical domains
 //!
@@ -33,18 +33,18 @@
 //!
 //! | Domain | Primary field `u` | Reference example (J10) |
 //! |---|---|---|
-//! | Chromatographic transport | concentrations `cᵢ(z,t)` | `competitive_frontal_analysis` (#174) |
-//! | Transient heat conduction | temperature `T(x,t)` | `heat_transfer_1d` (#175) |
-//! | Reaction-diffusion | species `(u,v)` | `gray_scott_1d` (#176) |
-//! | Viscous flow (Burgers) | velocity `u(x,t)` | `burgers_boundary_layer` (#177) |
-//! | Porous media consolidation (Terzaghi) | excess pore pressure `u(z,t)` | `consolidation_1d` (#178) |
-//! | Resistive magnetic diffusion | flux density `B` | `magnetic_diffusion_1d` (prototype, #179) |
-//! | Shallow water (Saint-Venant) | depth `h`, momentum `hv` | `lahar_lake_wave` (#180) |
+//! | Chromatographic transport | concentrations `cᵢ(z,t)` | `competitive_frontal_analysis` ([#174](https://github.com/biface/oxiflow/issues/174)) |
+//! | Transient heat conduction | temperature `T(x,t)` | `heat_transfer_1d` ([#175](https://github.com/biface/oxiflow/issues/175)) |
+//! | Reaction-diffusion | species `(u,v)` | `gray_scott_1d` ([#176](https://github.com/biface/oxiflow/issues/176)) |
+//! | Viscous flow (Burgers) | velocity `u(x,t)` | `burgers_boundary_layer` ([#177](https://github.com/biface/oxiflow/issues/177)) |
+//! | Porous media consolidation (Terzaghi) | excess pore pressure `u(z,t)` | `consolidation_1d` ([#178](https://github.com/biface/oxiflow/issues/178)) |
+//! | Resistive magnetic diffusion | flux density `B` | `magnetic_diffusion_1d` (prototype, [#179](https://github.com/biface/oxiflow/issues/179)) |
+//! | Shallow water (Saint-Venant) | depth `h`, momentum `hv` | `lahar_lake_wave` ([#180](https://github.com/biface/oxiflow/issues/180)) |
 //!
 //! Other problems of the canonical form are candidates without a reference
 //! example yet: Darcy flow (water content `θ`), Nernst-Planck (ionic
 //! concentrations `cᵢ`), structural dynamics (displacement `u`, velocity `v`,
-//! through order reduction, DD-030).
+//! through order reduction, [DD-030](https://github.com/biface/oxiflow/issues/81)).
 //!
 //! For full equations, physical derivations, and numerical details,
 //! see the **[project wiki](https://github.com/biface/oxiflow/wiki)**.
@@ -104,7 +104,7 @@
 //! | INV-1 | No `dx`/`nx` in public API — all spatial access via [`mesh::Mesh`] | v0.1.0 |
 //! | INV-2 | Integrators decoupled from spatial scheme via `DiscreteOperator<M>` | v0.5.0 |
 //! | INV-3 | Inter-domain coupling only via `CouplingOperator` | v0.3.0 |
-//! | INV-4 | All public traits object-safe — external crates can implement them | v0.30.0 (DA-017) |
+//! | INV-4 | All public traits object-safe — external crates can implement them | v0.30.0 ([DA-017](https://github.com/biface/oxiflow/issues/17)) |
 //!
 //! ## Getting started (J1)
 //!

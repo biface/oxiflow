@@ -1,4 +1,4 @@
-//! Criterion benchmarks for the lahar multi-field model (#139, feeds #53).
+//! Criterion benchmarks for the lahar multi-field model ([#139](https://github.com/biface/oxiflow/issues/139), feeds [#53](https://github.com/biface/oxiflow/issues/53)).
 //!
 //! The model comes from `rsc/models/lahar_physics.rs`, `lahar_flux.rs`
 //! and `lahar_source.rs`, shared with the examples and the analytical
@@ -6,7 +6,7 @@
 //!
 //! Two dispatch sites were added for this model (session-confirmed:
 //! unlike diffusion_1d/viscous_burgers/langmuir_multi, this model needed
-//! two independent calibrations, not one -- DA-048 P1/P2/P3, granularity
+//! two independent calibrations, not one -- [DA-048](https://github.com/biface/oxiflow/issues/140) P1/P2/P3, granularity
 //! is a per-site decision):
 //!
 //! - [`full_run`] -- fixed-size performance on the Chezy-drag-dominated
@@ -75,7 +75,7 @@ use std::hint::black_box;
 use criterion::BenchmarkId;
 use criterion::Criterion;
 
-/// #53's fixed-size target for this model: the Chezy-drag-dominated
+/// [#53](https://github.com/biface/oxiflow/issues/53)'s fixed-size target for this model: the Chezy-drag-dominated
 /// scenario already confirmed against the analytical scaling law
 /// (`tests/lahar_multifield_analytical.rs`, 7.7% at t=10s) -- same
 /// wiring as that test's `run_regime`, minus the trajectory recording.

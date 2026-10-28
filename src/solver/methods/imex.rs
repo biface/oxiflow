@@ -1,13 +1,13 @@
 //! # Module `solver::methods::imex`
 //!
-//! Temporal operator splitting — `OperatorSplittingSolver` (DA-037, #45).
+//! Temporal operator splitting — `OperatorSplittingSolver` ([DA-037](https://github.com/biface/oxiflow/issues/90), [#45](https://github.com/biface/oxiflow/issues/45)).
 //!
 //! ## Temporal coupling, not spatial
 //!
 //! This module composes **n ≥ 2** [`PhysicalModel`](crate::model::PhysicalModel)
 //! evaluated in sequence on the **same state**, the **same mesh** — as
 //! opposed to INV-3's spatial coupling (`CouplingOperator`, cross-domain,
-//! asymmetric source → target at an `Interface`). See DA-037 for the full
+//! asymmetric source → target at an `Interface`). See [DA-037](https://github.com/biface/oxiflow/issues/90) for the full
 //! distinction between the two families.
 //!
 //! oxiflow's canonical form already names two separate terms:
@@ -20,24 +20,24 @@
 //! contribution carry its own `Domain` is enough to isolate it correctly,
 //! without touching `SteppableSolver` or any existing solver.
 //!
-//! ## v1 scope (#45)
+//! ## v1 scope ([#45](https://github.com/biface/oxiflow/issues/45))
 //!
 //! Only **one-step** sub-solvers (`history_depth() == 0`) are supported —
 //! validated at construction. [`SplittingScheme::Strang`] is the only
 //! implemented and tested variant; [`SplittingScheme::LieTrotter`] is
-//! reserved (DA-037) and rejected at construction until a concrete case
+//! reserved ([DA-037](https://github.com/biface/oxiflow/issues/90)) and rejected at construction until a concrete case
 //! requires it.
 //!
 //! ## The outer `Scenario`/`Domain`
 //!
 //! [`Solver::solve`] requires a `Scenario` — hence an outer `Domain` — even
 //! though `OperatorSplittingSolver` doesn't need one to compute (it has
-//! everything in its own operators). DA-037 settles this for
+//! everything in its own operators). [DA-037](https://github.com/biface/oxiflow/issues/90) settles this for
 //! [`crate::model::CompositeModel`]: the outer `Domain` carries the sum of
 //! the contributions, which makes `scenario.context_requirements()` and
 //! `domain.model.initial_state()` correct without dedicated logic here —
 //! and also serves as a testable monolithic reference run through an
-//! ordinary solver (acceptance criterion 1 of #45).
+//! ordinary solver (acceptance criterion 1 of [#45](https://github.com/biface/oxiflow/issues/45)).
 
 use std::collections::HashMap;
 
@@ -60,7 +60,7 @@ pub struct SplitOperator {
     /// Mesh, BCs, and model specific to this contribution.
     pub domain: Domain,
     /// Sub-solver integrating this contribution. Must have
-    /// `history_depth() == 0` (v1 scope, DA-037).
+    /// `history_depth() == 0` (v1 scope, [DA-037](https://github.com/biface/oxiflow/issues/90)).
     pub solver: Box<dyn SteppableSolver>,
 }
 
@@ -71,19 +71,19 @@ pub struct SplitOperator {
 pub enum SplittingScheme {
     /// Full step of each operator, in sequence — order 1.
     ///
-    /// Reserved (DA-037): same structure as `Strang`, but not implemented
+    /// Reserved ([DA-037](https://github.com/biface/oxiflow/issues/90)): same structure as `Strang`, but not implemented
     /// or tested here — `OperatorSplittingSolver::new` rejects it until a
     /// concrete case requires it.
     LieTrotter,
     /// Half-step on every operator but the last (full step), then passes
     /// back in reverse order — symmetric/palindromic composition, order 2.
-    /// For n=2, this is exactly the scheme from #45: explicit half-step →
+    /// For n=2, this is exactly the scheme from [#45](https://github.com/biface/oxiflow/issues/45): explicit half-step →
     /// full implicit step → explicit half-step.
     Strang,
 }
 
 /// Generic composite: n ≥ 2 operators sharing the same state, composed
-/// according to a [`SplittingScheme`] (DA-037, #45).
+/// according to a [`SplittingScheme`] ([DA-037](https://github.com/biface/oxiflow/issues/90), [#45](https://github.com/biface/oxiflow/issues/45)).
 pub struct OperatorSplittingSolver {
     operators: Vec<SplitOperator>,
     scheme: SplittingScheme,
@@ -117,9 +117,9 @@ impl OperatorSplittingSolver {
     ///
     /// `OxiflowError::PreconditionFailed` if:
     /// - fewer than two operators are provided;
-    /// - a sub-solver has `history_depth() != 0` (v1 scope, DA-037);
+    /// - a sub-solver has `history_depth() != 0` (v1 scope, [DA-037](https://github.com/biface/oxiflow/issues/90));
     /// - `scheme` is `SplittingScheme::LieTrotter` (reserved, not
-    ///   implemented — DA-037).
+    ///   implemented — [DA-037](https://github.com/biface/oxiflow/issues/90)).
     pub fn new(
         operators: Vec<SplitOperator>,
         scheme: SplittingScheme,
@@ -161,7 +161,7 @@ impl OperatorSplittingSolver {
         Ok(Self { operators, scheme })
     }
 
-    /// Ergonomic constructor for the n=2 case requested by #45: explicit
+    /// Ergonomic constructor for the n=2 case requested by [#45](https://github.com/biface/oxiflow/issues/45): explicit
     /// half-step → full implicit step → explicit half-step.
     pub fn strang(
         domain_explicit: Domain,
@@ -202,12 +202,12 @@ impl OperatorSplittingSolver {
         }
     }
 
-    /// Symmetric/palindromic composition, generalised to n ≥ 2 (DA-037).
+    /// Symmetric/palindromic composition, generalised to n ≥ 2 ([DA-037](https://github.com/biface/oxiflow/issues/90)).
     ///
     /// Φ₁(dt/2) ∘ Φ₂(dt/2) ∘ … ∘ Φₙ₋₁(dt/2) ∘ Φₙ(dt) ∘ Φₙ₋₁(dt/2) ∘ … ∘ Φ₁(dt/2)
     ///
     /// For n=2: Φ₁ half-step (explicit) → Φ₂ full step (implicit) → Φ₁
-    /// half-step — exactly the scheme from #45.
+    /// half-step — exactly the scheme from [#45](https://github.com/biface/oxiflow/issues/45).
     fn apply_strang(
         &self,
         chain: &[&dyn ContextCalculator],
@@ -250,14 +250,14 @@ impl OperatorSplittingSolver {
 
 impl Solver for OperatorSplittingSolver {
     /// Fixed-step loop — does not reuse
-    /// [`SteppableSolver::solve_fixed_step`] (DD-035): this composite is not
-    /// a `SteppableSolver` (same posture as DD-036 for DoPri45 — avoiding
-    /// reopening multi-domain orchestration for a need #45 doesn't raise).
+    /// [`SteppableSolver::solve_fixed_step`] ([DD-035](https://github.com/biface/oxiflow/issues/88)): this composite is not
+    /// a `SteppableSolver` (same posture as [DD-036](https://github.com/biface/oxiflow/issues/89) for DoPri45 — avoiding
+    /// reopening multi-domain orchestration for a need [#45](https://github.com/biface/oxiflow/issues/45) doesn't raise).
     /// The loop below deliberately mirrors `solve_fixed_step`'s shape to
     /// stay consistent with the other fixed-step solvers, divergence
     /// included: a non-finite state hands a `SimulationSnapshot` to
     /// [`Solver::on_divergence`] before `SolverDivergence` is returned
-    /// (DT-025, #134).
+    /// ([DT-025](https://github.com/biface/oxiflow/issues/66), [#134](https://github.com/biface/oxiflow/issues/134)).
     fn solve(
         &self,
         scenario: &Scenario,

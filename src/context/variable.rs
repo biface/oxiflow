@@ -4,7 +4,7 @@
 //!
 //! `ContextVariable` is the key type of the context map
 //! (`HashMap<ContextVariable, ContextValue>`). It must satisfy `Hash + Eq`
-//! to serve as a map key — which rules out `f64` fields (DD-003).
+//! to serve as a map key — which rules out `f64` fields ([DD-003](https://github.com/biface/oxiflow/issues/3)).
 //!
 //! ## Design note — no `position: f64`
 //!
@@ -55,11 +55,11 @@ pub enum ContextVariable {
     /// `dimension = 0` → ∂u/∂x, `dimension = 1` → ∂u/∂y, etc.
     ///
     /// `component = None` — mono-component field (J1/J2 default).
-    /// `component = Some(k)` — gradient of component k (J3, DD-010).
+    /// `component = Some(k)` — gradient of component k (J3, [DD-010](https://github.com/biface/oxiflow/issues/10)).
     SpatialGradient {
         /// Spatial dimension index (0-based).
         dimension: usize,
-        /// Species/component index for multi-component fields (J3, DD-010).
+        /// Species/component index for multi-component fields (J3, [DD-010](https://github.com/biface/oxiflow/issues/10)).
         ///
         /// `None` for a single-component field. The field exists since J1,
         /// so that multi-component support (J3) came without a breaking change.
@@ -77,7 +77,7 @@ pub enum ContextVariable {
     },
 
     /// Coefficient field c(x) or c(x, t) evaluated on the mesh nodes
-    /// (DD-066): a `ScalarField` with one value per node, provided by
+    /// ([DD-066](https://github.com/biface/oxiflow/issues/181)): a `ScalarField` with one value per node, provided by
     /// [`CoefficientField`](crate::context::calculators::CoefficientField).
     ///
     /// Distinct from `External` with the same name. The `name` participates

@@ -1,8 +1,8 @@
 //! # Module `operators::weno`
 //!
 //! WENO (Weighted Essentially Non-Oscillatory) reconstruction schemes for
-//! [`UniformGrid1D`] — `WENO3` (3rd order), `WENO5` (5th order) (#49,
-//! DA-039).
+//! [`UniformGrid1D`] — `WENO3` (3rd order), `WENO5` (5th order) ([#49](https://github.com/biface/oxiflow/issues/49),
+//! [DA-039](https://github.com/biface/oxiflow/issues/95)).
 //!
 //! ## Why WENO
 //!
@@ -23,11 +23,11 @@
 //! diffusive term is always the direct centered difference between the two
 //! nodes adjacent to the face, exactly as in `operators::fv`.
 //!
-//! ## Cell-average semantics — shared with `operators::fv` (DD-041)
+//! ## Cell-average semantics — shared with `operators::fv` ([DD-041](https://github.com/biface/oxiflow/issues/98))
 //!
 //! `u[i]` here is the average of `u` over the cell whose faces sit at nodes
 //! `i` and `i+1` — the *same* cell-average interpretation `operators::fv`
-//! uses (DD-040), not a nodal point-value interpretation. This module
+//! uses ([DD-040](https://github.com/biface/oxiflow/issues/96)), not a nodal point-value interpretation. This module
 //! originally claimed the opposite ("no cell/node question here"), reasoning
 //! that WENO reconstructs directly from `UniformGrid1D`'s nodal array
 //! without a separate cell-center computation, unlike FV. That reasoning
@@ -41,13 +41,13 @@
 //! reconstruction is — this was caught empirically (order-verification
 //! tests measured order ≈2 instead of the expected 3/5) and confirmed by
 //! direct Taylor expansion of the resulting stencil. See the correction
-//! history above `weno3_left` for the full account. This is DD-041 — a new
-//! decision extending DD-040's cell-average convention to a second
-//! consumer, not an amendment rewriting what DD-040 itself decided.
+//! history above `weno3_left` for the full account. This is [DD-041](https://github.com/biface/oxiflow/issues/98) — a new
+//! decision extending [DD-040](https://github.com/biface/oxiflow/issues/96)'s cell-average convention to a second
+//! consumer, not an amendment rewriting what [DD-040](https://github.com/biface/oxiflow/issues/96) itself decided.
 //!
 //! ## Upwind-direction selection
 //!
-//! `velocity` is a constant scalar (the "simple case" of DA-039 — space/time
+//! `velocity` is a constant scalar (the "simple case" of [DA-039](https://github.com/biface/oxiflow/issues/95) — space/time
 //! varying parameters would be declared via `required_variables()` instead,
 //! not needed by `#49`'s scope). Because the sign of `velocity` never
 //! changes across the domain, the upwind bias is chosen once from
@@ -254,7 +254,7 @@ impl WENO3 {
     /// Local smoothness indicator at face `i`, in `[0, 1)` — `0` for a
     /// perfectly smooth (locally linear) window, approaching `1` near a
     /// discontinuity or kink. Used by `operators::adaptive::AdaptiveFlux`
-    /// (#99) to blend WENO with a limiter per face, not by `WENO3` itself.
+    /// ([#99](https://github.com/biface/oxiflow/issues/99)) to blend WENO with a limiter per face, not by `WENO3` itself.
     ///
     /// `τ = |β0 − β1|` — the same WENO-Z smoothness contrast [`weno_combine2`]
     /// uses internally — normalized by `β0 + β1` so the result stays bounded

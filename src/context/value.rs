@@ -1,6 +1,6 @@
 //! # Module `context::value`
 //!
-//! Typed values carried by the compute context (DD-003, issue #27).
+//! Typed values carried by the compute context ([DD-003](https://github.com/biface/oxiflow/issues/3), issue [#27](https://github.com/biface/oxiflow/issues/27)).
 //!
 //! ## Two orthogonal axes
 //!
@@ -9,11 +9,11 @@
 //! - **Rank** (algebraic): scalar (rank 0), vector (rank 1), matrix (rank 2 tensor).
 //! - **Distribution**: pointwise algebraic object vs. nodal field (one value per mesh node).
 //!
-//! ## Reserved variants (v0.14.0 (J14), DD-057 #159)
+//! ## Reserved variants (v0.14.0 (J14), [DD-057](https://github.com/biface/oxiflow/issues/159))
 //!
 //! `Tensor4` (rank-4 tensor C_ijkl) and `TensorField` (rank-2 tensor per node) are
 //! deliberately absent. They require `DiscreteOperator` (INV-2, J5) for covariant
-//! transformation semantics and will be added at v0.14.0 (J14) (DD-057, #159). Tensors of rank > 4 are out of
+//! transformation semantics and will be added at v0.14.0 (J14) ([DD-057](https://github.com/biface/oxiflow/issues/159)). Tensors of rank > 4 are out of
 //! scope for all target physics; extension for third-party frameworks follows INV-4.
 //!
 //! ## Distinction from `PhysicalData`
@@ -46,7 +46,7 @@ use crate::context::error::OxiflowError;
 /// | `ScalarField` | `DVector` — one scalar per node | porosity(x), T(x) |
 /// | `VectorField` | `DMatrix` — n_nodes × d | velocity field u(x,y), d species per node |
 ///
-/// # Reserved (v0.14.0 (J14), DD-057 — requires INV-2 / DiscreteOperator)
+/// # Reserved (v0.14.0 (J14), [DD-057](https://github.com/biface/oxiflow/issues/159) — requires INV-2 / DiscreteOperator)
 ///
 /// ```text
 /// // Tensor4(Array4<f64>)  — rank-4 tensor C_ijkl (elastic stiffness)
@@ -89,14 +89,14 @@ pub enum ContextValue {
     /// Rank-2 tensor: diffusion tensor D_ij, stress σ_ij, permeability K_ij.
     ///
     /// Covariant transformation is the caller's responsibility
-    /// via `DiscreteOperator` (INV-2, v0.14.0 (J14), DD-057):
+    /// via `DiscreteOperator` (INV-2, v0.14.0 (J14), [DD-057](https://github.com/biface/oxiflow/issues/159)):
     ///
     /// $$D'_{ij} = J_{ik}\,D_{kl}\,J_{jl}^{\top}$$
     ///
     /// This variant stores components in the current reference frame only.
     ///
     /// Memory layout: `DMatrix<f64>` is **column-major** (nalgebra default,
-    /// Fortran order) — DA-026 INV-GPU-4. WGSL (the `wgpu` shader language)
+    /// Fortran order) — [DA-026](https://github.com/biface/oxiflow/issues/73) INV-GPU-4. WGSL (the `wgpu` shader language)
     /// is row-major; any transposition is resolved at the future GPU upload
     /// boundary, never in this type.
     Matrix(DMatrix<f64>),
@@ -113,11 +113,11 @@ pub enum ContextValue {
     /// the components of a vector quantity (`d` is then the spatial
     /// dimension, as for a velocity field) or `d` unknowns carried by each
     /// node, unrelated to the mesh dimension: two species on a 1D mesh give
-    /// `d = 2` (#192). Dimensions (`n_nodes`, `d`) are available via
-    /// `DMatrix::nrows()`/`ncols()` (DA-026 INV-GPU-2).
+    /// `d = 2` ([#192](https://github.com/biface/oxiflow/issues/192)). Dimensions (`n_nodes`, `d`) are available via
+    /// `DMatrix::nrows()`/`ncols()` ([DA-026](https://github.com/biface/oxiflow/issues/73) INV-GPU-2).
     ///
     /// Memory layout: `DMatrix<f64>` is **column-major** (nalgebra default,
-    /// Fortran order) — DA-026 INV-GPU-4. WGSL (the `wgpu` shader language)
+    /// Fortran order) — [DA-026](https://github.com/biface/oxiflow/issues/73) INV-GPU-4. WGSL (the `wgpu` shader language)
     /// is row-major; any transposition is resolved at the future GPU upload
     /// boundary, never in this type.
     VectorField(DMatrix<f64>),
@@ -275,12 +275,12 @@ impl ContextValue {
     ///
     /// Returns `Cow` rather than an owned `DVector`: the `ScalarField`
     /// case borrows for free (this is the path every existing caller
-    /// before #138 uses -- an unconditional clone here would have added a
+    /// before [#138](https://github.com/biface/oxiflow/issues/138) uses -- an unconditional clone here would have added a
     /// full-length copy to every calculator call, on top of the stencil
     /// computation itself. Measured directly: at n=1,000,000, cloning a
     /// buffer this size costs ~650µs, comparable to the ~950µs the
     /// Laplacian stencil itself took at that size in the v0.9.0
-    /// measurements (#53) -- close to doubling each of them). Only the
+    /// measurements ([#53](https://github.com/biface/oxiflow/issues/53)) -- close to doubling each of them). Only the
     /// `VectorField` column-extraction case actually copies, since
     /// `compute_from_dx` and friends take `&DVector<f64>` specifically,
     /// not a generic matrix view, and a matrix column isn't stored the
@@ -339,7 +339,7 @@ impl ContextValue {
     /// same way [`Self::scalar_component`] did for calculator input
     /// extraction, but for the solver's own state-update arithmetic. It is
     /// the one-term case of the crate's internal linear combination of
-    /// states, which the multi-stage integrators use (#192).
+    /// states, which the multi-stage integrators use ([#192](https://github.com/biface/oxiflow/issues/192)).
     ///
     /// # Errors
     ///
@@ -354,14 +354,14 @@ impl ContextValue {
     /// Computes `self + Σ cᵢ · termᵢ` for `ScalarField` and `VectorField`
     /// states — the state algebra of every time integrator (Runge–Kutta
     /// stages, θ-method and BDF2 predictors), kept in one place instead of
-    /// repeated per method (#192).
+    /// repeated per method ([#192](https://github.com/biface/oxiflow/issues/192)).
     ///
     /// Terms are accumulated in order, each as `acc ← acc + cᵢ·termᵢ`, so
     /// `u.linear_combination(&[(dt, du)])` is bit-identical to `u + du * dt`.
     /// An empty `terms` returns a copy of `self`.
     ///
     /// Crate-internal for now: it may become public once the state algebra
-    /// is settled by the finite-element work (#150).
+    /// is settled by the finite-element work ([#150](https://github.com/biface/oxiflow/issues/150)).
     ///
     /// # Errors
     ///
@@ -384,7 +384,7 @@ impl ContextValue {
 
     /// Computes `Σ cᵢ · termᵢ` for `ScalarField` and `VectorField` terms,
     /// without a base state: the error estimate of an embedded Runge–Kutta
-    /// pair is the typical use (#192).
+    /// pair is the typical use ([#192](https://github.com/biface/oxiflow/issues/192)).
     ///
     /// The first term is scaled, then the others are accumulated in order
     /// as in [`Self::linear_combination`], so the result is bit-identical

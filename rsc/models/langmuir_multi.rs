@@ -43,11 +43,11 @@ pub(crate) struct LangmuirMulti {
     /// Rayon dispatch threshold for the per-node loop (jacobian assembly
     /// plus an n_species x n_species LU solve, plus a fresh heap
     /// allocation for the jacobian on every row) -- the real cost site
-    /// for this model, unlike #136/#137 where a single calculator call
+    /// for this model, unlike [#136](https://github.com/biface/oxiflow/issues/136)/[#137](https://github.com/biface/oxiflow/issues/137) where a single calculator call
     /// dominated. Measured: `benches/langmuir_multi.rs`'s
     /// `row_dispatch_diagnostic` puts the real crossover between n=100
     /// and n=1,000 -- see [`default_parallel_threshold`]'s own docs for
-    /// the numbers (measured at v0.9.0, #53).
+    /// the numbers (measured at v0.9.0, [#53](https://github.com/biface/oxiflow/issues/53)).
     #[cfg(feature = "parallel")]
     pub(crate) parallel_threshold: usize,
 }
@@ -55,7 +55,7 @@ pub(crate) struct LangmuirMulti {
 /// Measured: `benches/langmuir_multi.rs`'s `row_dispatch_diagnostic`
 /// shows the real crossover between n=100 (1.36x slower) and n=1,000
 /// (1.53x faster) on the design machine (12 logical cores), measured at
-/// v0.9.0 (#53). `1_000` sits right at that crossover rather than
+/// v0.9.0 ([#53](https://github.com/biface/oxiflow/issues/53)). `1_000` sits right at that crossover rather than
 /// waiting for a larger safety margin, since the win grows quickly past
 /// it (2.6x faster by n=10,000). Originally a back-of-envelope `2_000`
 /// (picked from between fd.rs's 49_999 and the orchestrator's 5_000, see

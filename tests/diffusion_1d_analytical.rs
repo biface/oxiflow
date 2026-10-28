@@ -1,8 +1,8 @@
-//! # Integration test: 1D diffusion model vs. analytical solution (#136)
+//! # Integration test: 1D diffusion model vs. analytical solution ([#136](https://github.com/biface/oxiflow/issues/136))
 //!
 //! Companion to `examples/diffusion_1d.rs`, on the same model
 //! (`rsc/models/diffusion_1d.rs`): this file asserts the acceptance
-//! criteria from #136 as a regression gate, which a `fn main()` example
+//! criteria from [#136](https://github.com/biface/oxiflow/issues/136) as a regression gate, which a `fn main()` example
 //! alone cannot enforce:
 //!
 //! - The model matches the analytical Gaussian solution within a

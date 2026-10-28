@@ -1,4 +1,4 @@
-//! # Reference example: transient heat transfer in a 1D bar (#175)
+//! # Reference example: transient heat transfer in a 1D bar ([#175](https://github.com/biface/oxiflow/issues/175))
 //!
 //! Heat conduction in a steel bar, in physical units, checked against two
 //! exact solutions:
@@ -45,7 +45,7 @@
 //! The coefficient fields are calculators, attached to the
 //! `SolverConfiguration` like every context calculator, although lambda(x)
 //! is a material property. This follows from where coefficient fields were
-//! placed (DD-066), next to `ExternalTabulated`.
+//! placed ([DD-066](https://github.com/biface/oxiflow/issues/181)), next to `ExternalTabulated`.
 //!
 //! Both ends are held by `boundary::Dirichlet` conditions on the two faces
 //! of the grid. The solvers hold the constrained nodes exactly, and the

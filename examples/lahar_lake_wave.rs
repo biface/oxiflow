@@ -1,4 +1,4 @@
-//! # Reference example: lahar–lake wave generation on coupled grids (#180)
+//! # Reference example: lahar–lake wave generation on coupled grids ([#180](https://github.com/biface/oxiflow/issues/180))
 //!
 //! A lahar runs down a 4 km channel and pours over a lip into a 15 m deep
 //! lake. The inflow raises a bore that runs across the lake. Channel and
@@ -14,7 +14,7 @@
 //!
 //! ## Physics
 //!
-//! Both domains use the 1D multi-field lahar model of DQ-032 (Woodhouse,
+//! Both domains use the 1D multi-field lahar model of [DQ-032](https://github.com/biface/oxiflow/issues/85) (Woodhouse,
 //! Hogg & Phillips), shared with `lahar_multifield` in `rsc/models/`: a
 //! depth-averaged layer of water and solids with conserved state
 //! `(m, p, s, b)`, mass depth, momentum depth, solid volume depth and bed

@@ -1,10 +1,10 @@
 //! # Module `solver::snapshot`
 //!
 //! Serialisable snapshot of a simulation's physical state, for post-mortem
-//! divergence analysis and normal pause/resume (DT-025 Option B, issue #71 ;
-//! generalised by DD-029, issue #77).
+//! divergence analysis and normal pause/resume ([DT-025](https://github.com/biface/oxiflow/issues/66) Option B, issue [#71](https://github.com/biface/oxiflow/issues/71) ;
+//! generalised by [DD-029](https://github.com/biface/oxiflow/issues/77)).
 //!
-//! ## Two-phase restore contract (DT-025)
+//! ## Two-phase restore contract ([DT-025](https://github.com/biface/oxiflow/issues/66))
 //!
 //! `SimulationSnapshot` captures only the **physical state** (`ContextValue`,
 //! the temporal configuration in effect, and the integration method used) —
@@ -14,7 +14,7 @@
 //! `Domain`/`Scenario`/`SolverConfiguration` themselves and re-injects the
 //! state as the initial condition.
 //!
-//! ## Two triggers, one type (DD-029)
+//! ## Two triggers, one type ([DD-029](https://github.com/biface/oxiflow/issues/77))
 //!
 //! - **Automatic** — [`Solver::on_divergence`](super::Solver::on_divergence)
 //!   is called with a snapshot right before a

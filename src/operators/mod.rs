@@ -12,17 +12,17 @@
 //!   never need physical parameters or context access; `dx` comes from the mesh
 //!   alone. Consumed transparently through [`crate::context::ContextCalculator`]
 //!   (e.g. `FDGradientCalculator`) — a model declares a required context
-//!   variable and never knows which scheme produced it (DA-012).
+//!   variable and never knows which scheme produced it ([DA-012](https://github.com/biface/oxiflow/issues/12)).
 //! - [`FluxDivergenceOperator`] — the complete `∇·F(u, ∇u)` term, which does need
 //!   physical parameters (advection velocity, diffusion coefficient) that may be
 //!   space/time-varying. Carries `ctx: &ComputeContext` and `RequiresContext`
-//!   directly on `apply()`. Consumed by `DiscretizedModel<Op>` (DA-038, DA-039).
+//!   directly on `apply()`. Consumed by `DiscretizedModel<Op>` ([DA-038](https://github.com/biface/oxiflow/issues/92), [DA-039](https://github.com/biface/oxiflow/issues/95)).
 //!
 //! `FluxDivergenceOperator` is a **sibling** trait, not a sub-trait of
 //! `DiscreteOperator`: their `apply()` signatures diverge (with/without `ctx`),
 //! so a sub-trait relationship could not cleanly reuse the parent method.
 //! Forcing `ctx`/`RequiresContext` onto `DiscreteOperator` for every scheme was
-//! considered and rejected (DA-012, amendment 2) — it would have imposed that
+//! considered and rejected ([DA-012](https://github.com/biface/oxiflow/issues/12), amendment 2) — it would have imposed that
 //! capability on FD, which never needs it.
 //!
 //! **Selection criterion for future schemes** (FEM from v0.12.0 (J12), spectral methods at v0.19.0 (J19)):
@@ -34,11 +34,11 @@
 //!
 //! | Type | Scheme | Trait | Milestone |
 //! |---|---|---|---|
-//! | [`fd::UpwindGradient`], [`fd::CenteredGradient`], [`fd::CenteredLaplacian`] | FD | `DiscreteOperator` | v0.5.0 (#47) ✅ |
-//! | [`fv::FVCenteredFlux`], [`fv::FVUpwindFlux`] | FV | `FluxDivergenceOperator` | v0.5.0 (#48) ✅ |
-//! | [`weno::WENO3`], [`weno::WENO5`] | WENO | `FluxDivergenceOperator` | v0.5.0 (#49) ✅ |
-//! | [`limiters::LimitedFlux`] (`MinMod`/`VanLeer`/`Superbee`) | MUSCL | `FluxDivergenceOperator` | v0.5.0 (#99) ✅ |
-//! | [`adaptive::AdaptiveFlux`] (WENO3/limiter blend, Péclet-gated) | — | `FluxDivergenceOperator` | v0.5.0 (#99) ✅ |
+//! | [`fd::UpwindGradient`], [`fd::CenteredGradient`], [`fd::CenteredLaplacian`] | FD | `DiscreteOperator` | v0.5.0 ([#47](https://github.com/biface/oxiflow/issues/47)) ✅ |
+//! | [`fv::FVCenteredFlux`], [`fv::FVUpwindFlux`] | FV | `FluxDivergenceOperator` | v0.5.0 ([#48](https://github.com/biface/oxiflow/issues/48)) ✅ |
+//! | [`weno::WENO3`], [`weno::WENO5`] | WENO | `FluxDivergenceOperator` | v0.5.0 ([#49](https://github.com/biface/oxiflow/issues/49)) ✅ |
+//! | [`limiters::LimitedFlux`] (`MinMod`/`VanLeer`/`Superbee`) | MUSCL | `FluxDivergenceOperator` | v0.5.0 ([#99](https://github.com/biface/oxiflow/issues/99)) ✅ |
+//! | [`adaptive::AdaptiveFlux`] (WENO3/limiter blend, Péclet-gated) | — | `FluxDivergenceOperator` | v0.5.0 ([#99](https://github.com/biface/oxiflow/issues/99)) ✅ |
 //! | `FiniteElement` | FEM P1/P2 | TBD | J12 — v0.12.0 |
 
 pub mod adaptive;
@@ -62,15 +62,15 @@ use rayon::prelude::*;
 /// Computes a single differential quantity (`∂u/∂x`, `∂²u/∂x²`, ...) from a
 /// field and a mesh, with no dependency on physical parameters or runtime
 /// context: `dx` comes entirely from `mesh`. Consumed transparently through
-/// [`crate::context::ContextCalculator`] (DA-012) — never called directly by a
+/// [`crate::context::ContextCalculator`] ([DA-012](https://github.com/biface/oxiflow/issues/12)) — never called directly by a
 /// temporal integrator.
 ///
-/// Uses an associated type `MeshType`, not a generic parameter, per DA-012
+/// Uses an associated type `MeshType`, not a generic parameter, per [DA-012](https://github.com/biface/oxiflow/issues/12)
 /// amendment 1: each scheme implementation targets exactly one mesh family, so
 /// a generic `DiscreteOperator<M: Mesh>` would add flexibility no consumer
 /// needs, at the cost of object-safety (INV-4).
 ///
-/// Distinct from [`FluxDivergenceOperator`] (DA-039), which computes the
+/// Distinct from [`FluxDivergenceOperator`] ([DA-039](https://github.com/biface/oxiflow/issues/95)), which computes the
 /// complete `∇·F(u, ∇u)` term and does need context access — see the module
 /// documentation above for the selection criterion between the two.
 pub trait DiscreteOperator: Send + Sync {
@@ -86,7 +86,7 @@ pub trait DiscreteOperator: Send + Sync {
     ) -> Result<ContextValue, OxiflowError>;
 }
 
-/// Complete flux-divergence spatial operator (FV/WENO family) — DA-039.
+/// Complete flux-divergence spatial operator (FV/WENO family) — [DA-039](https://github.com/biface/oxiflow/issues/95).
 ///
 /// Computes the full `∇·F(u, ∇u)` term of the canonical PDE form, which —
 /// unlike [`DiscreteOperator`] — requires knowledge of the physics of `F`
@@ -96,9 +96,9 @@ pub trait DiscreteOperator: Send + Sync {
 ///
 /// A **sibling** trait to `DiscreteOperator`, not a sub-trait: the two
 /// `apply()` signatures diverge (with/without `ctx`), so a sub-trait
-/// relationship could not reuse the parent method cleanly (DA-039, option B
+/// relationship could not reuse the parent method cleanly ([DA-039](https://github.com/biface/oxiflow/issues/95), option B
 /// rejected). Adding `ctx`/`RequiresContext` to `DiscreteOperator` itself was
-/// also rejected (DA-012, amendment 2; DA-039, option A) — it would force
+/// also rejected ([DA-012](https://github.com/biface/oxiflow/issues/12), amendment 2; [DA-039](https://github.com/biface/oxiflow/issues/95), option A) — it would force
 /// that capability onto FD schemes, which never need it.
 ///
 /// Two consumption modes fall out of `RequiresContext` for free, with no new
@@ -106,10 +106,10 @@ pub trait DiscreteOperator: Send + Sync {
 /// `required_variables() -> vec![]` and reads its own fields directly in
 /// `apply()`; a scheme with space/time-varying parameters declares them as
 /// [`crate::context::ContextVariable`]s in `required_variables()` and reads
-/// them from `ctx`, resolved and ordered beforehand by `chain.rs` (DD-009)
+/// them from `ctx`, resolved and ordered beforehand by `chain.rs` ([DD-009](https://github.com/biface/oxiflow/issues/9))
 /// exactly as for any `PhysicalModel`/`BoundaryCondition`.
 ///
-/// Consumed by `DiscretizedModel<Op>` (DA-038), which binds `Op:
+/// Consumed by `DiscretizedModel<Op>` ([DA-038](https://github.com/biface/oxiflow/issues/92)), which binds `Op:
 /// FluxDivergenceOperator` — an FD scheme cannot be plugged in there; that
 /// becomes a compile error, not a silent runtime bug.
 pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
@@ -128,7 +128,7 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
 
     /// Half-width of the stencil this scheme reads on each side of a cell —
     /// a property of the numerical scheme itself (HOW), never of the
-    /// physical model it backs (DA-043, amendment 1). No default: every
+    /// physical model it backs ([DA-043](https://github.com/biface/oxiflow/issues/103), amendment 1). No default: every
     /// implementation must state its own value explicitly, the same
     /// posture as [`crate::model::traits::RequiresContext::required_variables`].
     ///
@@ -136,9 +136,9 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
     /// boxed into a `Box<dyn PhysicalModel>` — and handed explicitly to a
     /// solver's own configuration (e.g.
     /// `BackwardEulerSolver::with_jacobian_bandwidth(scheme.stencil_radius())`,
-    /// v0.6.0/#50). Never read back from a `PhysicalModel`: bandwidth is a
+    /// v0.6.0/[#50](https://github.com/biface/oxiflow/issues/50)). Never read back from a `PhysicalModel`: bandwidth is a
     /// solver-side assertion (HOW), not a model declaration (WHAT) — see
-    /// DA-043, amendment 1, for the rejected alternative
+    /// [DA-043](https://github.com/biface/oxiflow/issues/103), amendment 1, for the rejected alternative
     /// (`PhysicalModel::jacobian_bandwidth`) and why it was rejected.
     fn stencil_radius(&self) -> usize;
 }
@@ -158,7 +158,7 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
 /// one-sided truncation at the boundary (breaks FV's conservation property).
 /// Rather than picking one silently, `FluxBoundary` makes the choice an
 /// explicit constructor parameter on every operator that needs it.
-/// `#[non_exhaustive]` (DQ-022) signals this is an extension point, not a
+/// `#[non_exhaustive]` ([DQ-022](https://github.com/biface/oxiflow/issues/59)) signals this is an extension point, not a
 /// closed set — only [`FluxBoundary::Periodic`] exists today.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
@@ -177,11 +177,11 @@ pub enum FluxBoundary {
     /// computed for the nearest cell that has a full interior stencil,
     /// rather than reconstructing a face flux across the domain edge — the
     /// same posture `operators::fd`'s `CenteredLaplacian`/`UpwindGradient`
-    /// already take at their own boundary nodes (DA-012): reuse an
+    /// already take at their own boundary nodes ([DA-012](https://github.com/biface/oxiflow/issues/12)): reuse an
     /// available one-sided formula instead of inventing an exterior point.
     /// Breaks FV's exact conservation property (`Periodic`'s telescoping
     /// sum no longer holds, since the outermost face fluxes are each
-    /// counted only once, not twice) — a documented compromise (DD-042),
+    /// counted only once, not twice) — a documented compromise ([DD-042](https://github.com/biface/oxiflow/issues/100)),
     /// not an oversight.
     ///
     /// Requires enough cells for at least one cell with a full stencil to
@@ -191,7 +191,7 @@ pub enum FluxBoundary {
     /// by each operator, not silently producing a degenerate result.
     Truncation,
 
-    /// Ghost-cell fallback (DD-042): the two boundary cells' missing
+    /// Ghost-cell fallback ([DD-042](https://github.com/biface/oxiflow/issues/100)): the two boundary cells' missing
     /// neighbors are supplied by the real [`crate::boundary::BoundaryCondition`]
     /// already registered on the `Domain` for that edge, via
     /// [`crate::boundary::BoundaryCondition::ghost_value`] — the one variant
@@ -206,7 +206,7 @@ pub enum FluxBoundary {
     /// If the referenced BC does not override `ghost_value()` (still
     /// returns `None`), `apply()` fails explicitly via
     /// [`OxiflowError::PreconditionFailed`] rather than silently
-    /// substituting an approximation — see DD-042 for why no generic
+    /// substituting an approximation — see [DD-042](https://github.com/biface/oxiflow/issues/100) for why no generic
     /// per-`BoundaryType` fallback is attempted here.
     GhostCell(
         std::sync::Arc<dyn crate::boundary::BoundaryCondition>,
@@ -456,7 +456,7 @@ pub(crate) fn truncated_wide_divergence(
 ///
 /// Each ghost value comes from [`BoundaryCondition::ghost_value`] at the
 /// depth matching its distance from the domain edge, paired with the real
-/// interior value at the *symmetric* depth (method of images — DD-042,
+/// interior value at the *symmetric* depth (method of images — [DD-042](https://github.com/biface/oxiflow/issues/100),
 /// amendment 1): depth `k` pairs with interior index `k−1` from that edge.
 /// Every layer is derived directly from a real interior value, never from a
 /// previously computed ghost layer, so a Robin condition's exactness does

@@ -6,13 +6,13 @@
 //!
 //! | Method | Type | Issue |
 //! |---|---|---|
-//! | [`euler::ForwardEulerSolver`] | Explicit, 1st order | #33, #41 |
-//! | [`rk4::RK4Solver`] | Explicit, 4th order | #41 |
-//! | [`backward_euler::BackwardEulerSolver`] | Implicit, 1st order | #43, DT-013, DD-033 |
-//! | [`crank_nicolson::CrankNicolsonSolver`] | Semi-implicit, 2nd order | #43, DT-013, DD-033 |
-//! | [`bdf2::BDF2Solver`] | Implicit multi-step, 2nd order | #44, DD-034 |
-//! | [`dopri45::DoPri45Solver`] | Adaptive explicit, order 5 | #42, DD-036 |
-//! | [`imex::OperatorSplittingSolver`] | Operator splitting (Strang), n ≥ 2 | #45, DA-037 |
+//! | [`euler::ForwardEulerSolver`] | Explicit, 1st order | [#33](https://github.com/biface/oxiflow/issues/33), [#41](https://github.com/biface/oxiflow/issues/41) |
+//! | [`rk4::RK4Solver`] | Explicit, 4th order | [#41](https://github.com/biface/oxiflow/issues/41) |
+//! | [`backward_euler::BackwardEulerSolver`] | Implicit, 1st order | [#43](https://github.com/biface/oxiflow/issues/43), [DT-013](https://github.com/biface/oxiflow/issues/13), [DD-033](https://github.com/biface/oxiflow/issues/86) |
+//! | [`crank_nicolson::CrankNicolsonSolver`] | Semi-implicit, 2nd order | [#43](https://github.com/biface/oxiflow/issues/43), [DT-013](https://github.com/biface/oxiflow/issues/13), [DD-033](https://github.com/biface/oxiflow/issues/86) |
+//! | [`bdf2::BDF2Solver`] | Implicit multi-step, 2nd order | [#44](https://github.com/biface/oxiflow/issues/44), [DD-034](https://github.com/biface/oxiflow/issues/87) |
+//! | [`dopri45::DoPri45Solver`] | Adaptive explicit, order 5 | [#42](https://github.com/biface/oxiflow/issues/42), [DD-036](https://github.com/biface/oxiflow/issues/89) |
+//! | [`imex::OperatorSplittingSolver`] | Operator splitting (Strang), n ≥ 2 | [#45](https://github.com/biface/oxiflow/issues/45), [DA-037](https://github.com/biface/oxiflow/issues/90) |
 //!
 //! All integrators are decoupled from the spatial scheme via
 //! `DiscreteOperator<M: Mesh>` (INV-2, J5) — no FD/FV/FEM
@@ -24,7 +24,7 @@
 //! follows the same per-evaluation order documented in
 //! [`crate::solver`]: the calculators the boundary conditions need, the
 //! boundary conditions, the other calculators, `compute_physics`, then a
-//! zero derivative at the nodes the conditions declare (DD-070, #200).
+//! zero derivative at the nodes the conditions declare ([DD-070](https://github.com/biface/oxiflow/issues/200)).
 //! `evaluate_derivative` implements this contract once so each solver
 //! doesn't reimplement it per stage.
 //!
@@ -38,12 +38,12 @@
 //! Implicit methods ([`backward_euler`], [`crank_nicolson`], [`bdf2`]) build
 //! on the same `evaluate_derivative` for their explicit-derivative
 //! evaluation, plus the shared machinery in [`implicit`] for the implicit
-//! part. [`newton`] provides the iterated Newton alternative DD-033
-//! anticipated (DD-044, v0.7.0), wired into [`backward_euler`]/
-//! [`crank_nicolson`] (#111) and [`bdf2`] (#112), the Backward Euler
+//! part. [`newton`] provides the iterated Newton alternative [DD-033](https://github.com/biface/oxiflow/issues/86)
+//! anticipated ([DD-044](https://github.com/biface/oxiflow/issues/109), v0.7.0), wired into [`backward_euler`]/
+//! [`crank_nicolson`] ([#111](https://github.com/biface/oxiflow/issues/111)) and [`bdf2`] ([#112](https://github.com/biface/oxiflow/issues/112)), the Backward Euler
 //! bootstrap step of [`bdf2`] included (see that module's docs).
 //!
-//! ## Per-step primitive, with history (DA-031, DD-034)
+//! ## Per-step primitive, with history ([DA-031](https://github.com/biface/oxiflow/issues/82), [DD-034](https://github.com/biface/oxiflow/issues/87))
 //!
 //! [`SteppableSolver`] exposes a single-step primitive on top of `Solver`'s
 //! full-time-range `solve()`. [`crate::solver::orchestrator::MultiDomainOrchestrator`]
@@ -52,23 +52,23 @@
 //! ([`bdf2::BDF2Solver`], needing `u^{n-1}`) declare
 //! [`SteppableSolver::history_depth`] — callers maintain a buffer of that
 //! many past states and pass it to [`SteppableSolver::step`]. One-step
-//! methods use the default (`0`) and ignore the parameter (DD-034).
+//! methods use the default (`0`) and ignore the parameter ([DD-034](https://github.com/biface/oxiflow/issues/87)).
 //!
-//! [`SteppableSolver::solve_fixed_step`] (DD-035) factors out the common
+//! [`SteppableSolver::solve_fixed_step`] ([DD-035](https://github.com/biface/oxiflow/issues/88)) factors out the common
 //! `solve()` body every fixed-step solver above used to duplicate
 //! near-verbatim — each one's `Solver::solve()` is now a single call to
 //! it. [`dopri45::DoPri45Solver`] does **not** use this: variable-step
 //! methods need their own loop (`dt` changes every iteration, no fixed
 //! total step count) and implement `Solver` directly instead — see
-//! [`step_control`] (DD-036) for the shared piece adaptive methods *do*
+//! [`step_control`] ([DD-036](https://github.com/biface/oxiflow/issues/89)) for the shared piece adaptive methods *do*
 //! get: the step-size controller itself, decoupled from any specific
 //! integrator's error source.
 //!
-//! [`imex::OperatorSplittingSolver`] (DA-037, #45) also implements `Solver`
+//! [`imex::OperatorSplittingSolver`] ([DA-037](https://github.com/biface/oxiflow/issues/90), [#45](https://github.com/biface/oxiflow/issues/45)) also implements `Solver`
 //! directly rather than `SteppableSolver` — same posture as DoPri45: each
 //! of its sub-operators already carries its own `Domain`, so fitting it
 //! into the single-`Domain`-per-step shape of `SteppableSolver::step`
-//! would reopen the multi-domain orchestration question for a need #45
+//! would reopen the multi-domain orchestration question for a need [#45](https://github.com/biface/oxiflow/issues/45)
 //! never asked for.
 
 pub mod backward_euler;
@@ -130,7 +130,7 @@ fn apply_boundary_conditions(
 /// Runs one calculator of the chain on `state` and stores its value in
 /// `ctx`, through [`ContextCalculator::compute_shared`]: a calculator that
 /// keeps its value hands over the same allocation at every evaluation,
-/// without a copy (DT-068, #195).
+/// without a copy ([DT-068](https://github.com/biface/oxiflow/issues/195)).
 fn run_calculator(
     calc: &dyn ContextCalculator,
     state: &ContextValue,
@@ -147,7 +147,7 @@ fn run_calculator(
 }
 
 /// Marks the calculators of `chain` that run before the boundary conditions
-/// of `domain` (DD-070, #200): those providing a variable a condition
+/// of `domain` ([DD-070](https://github.com/biface/oxiflow/issues/200)): those providing a variable a condition
 /// requires, and, through `depends_on()`, the calculators these depend on.
 ///
 /// `chain` is in execution order, so a calculator's dependencies come
@@ -174,7 +174,7 @@ fn boundary_calculators(domain: &Domain, chain: &[&dyn ContextCalculator]) -> Ve
 /// the boundary conditions of `domain` to `state`, at time `t`.
 ///
 /// The solver drivers call it on the initial state and at the end of each
-/// step (DD-070, #200), so that every saved state satisfies the conditions,
+/// step ([DD-070](https://github.com/biface/oxiflow/issues/200)), so that every saved state satisfies the conditions,
 /// including a value that depends on time or on neighbouring nodes. No-op
 /// if `domain` has no boundary conditions attached.
 pub(crate) fn enforce_boundary_conditions(
@@ -196,7 +196,7 @@ pub(crate) fn enforce_boundary_conditions(
 }
 
 /// Sets `derivative` to zero at the nodes the boundary conditions of
-/// `domain` declare (DD-070, #200), so that no integrator or Newton
+/// `domain` declare ([DD-070](https://github.com/biface/oxiflow/issues/200)), so that no integrator or Newton
 /// iteration moves them.
 ///
 /// # Errors
@@ -234,7 +234,7 @@ fn hold_constrained_nodes(
 }
 
 /// Evaluates `du/dt` for `domain` at time `t`, following the contractual
-/// order (DD-070, #200):
+/// order ([DD-070](https://github.com/biface/oxiflow/issues/200)):
 ///
 /// 1. the calculators providing the variables the boundary conditions
 ///    require (with their dependencies);
@@ -248,7 +248,7 @@ fn hold_constrained_nodes(
 ///
 /// Each calculator runs through [`ContextCalculator::compute_shared`]: a
 /// calculator that keeps its value hands over the same allocation at every
-/// evaluation, without a copy (DT-068, #195).
+/// evaluation, without a copy ([DT-068](https://github.com/biface/oxiflow/issues/195)).
 ///
 /// `state` is mutated in-place by boundary condition application — this is
 /// intentional and mirrors the contract documented on
@@ -293,7 +293,7 @@ pub(crate) fn evaluate_derivative(
 /// Shared between integrators — returns `OxiflowError::SolverDivergence`
 /// when a NaN or an infinity is found, whatever the numeric variant of the
 /// state: a `VectorField` is checked component by component, like a
-/// `ScalarField` (#192). A `Boolean` state has nothing to check.
+/// `ScalarField` ([#192](https://github.com/biface/oxiflow/issues/192)). A `Boolean` state has nothing to check.
 pub(crate) fn check_finite(state: &ContextValue, t: f64) -> Result<(), OxiflowError> {
     let finite = match state {
         ContextValue::Scalar(x) => x.is_finite(),
@@ -317,7 +317,7 @@ pub(crate) fn check_finite(state: &ContextValue, t: f64) -> Result<(), OxiflowEr
 /// result.
 ///
 /// Shared by every solver loop (fixed-step, DoPri45, operator splitting) so
-/// that the snapshot contract stays the same everywhere (DT-025, #134).
+/// that the snapshot contract stays the same everywhere ([DT-025](https://github.com/biface/oxiflow/issues/66), [#134](https://github.com/biface/oxiflow/issues/134)).
 pub(crate) fn divergence_snapshot(
     config: &SolverConfiguration,
     state: &ContextValue,
@@ -345,7 +345,7 @@ pub(crate) fn divergence_snapshot(
 
 // ── SteppableSolver ───────────────────────────────────────────────────────────
 
-/// Single-domain solvers that expose a per-step primitive (DA-031, DD-034).
+/// Single-domain solvers that expose a per-step primitive ([DA-031](https://github.com/biface/oxiflow/issues/82), [DD-034](https://github.com/biface/oxiflow/issues/87)).
 ///
 /// `Solver::solve()` drives a full time range for one domain; `step()`
 /// advances a single domain by exactly one `dt`, given its current state
@@ -384,7 +384,7 @@ pub trait SteppableSolver: Solver {
     /// `state` may be mutated in-place by boundary condition application
     /// (see `evaluate_derivative`); the returned value is the state at
     /// `t + dt`. The boundary conditions are not re-applied to it: the
-    /// drivers calling `step` do it (DD-070, #200), so a caller using `step`
+    /// drivers calling `step` do it ([DD-070](https://github.com/biface/oxiflow/issues/200)), so a caller using `step`
     /// directly applies them itself if it needs a state that satisfies a
     /// condition whose nodes are not declared, or whose value depends on
     /// time.
@@ -408,8 +408,8 @@ pub trait SteppableSolver: Solver {
     /// expected to be a single call to this: `self.solve_fixed_step(scenario, config)`.
     ///
     /// The boundary conditions are applied to the initial state and to the
-    /// state returned by each step, before it is checked and saved (DD-070,
-    /// #200).
+    /// state returned by each step, before it is checked and saved ([DD-070](https://github.com/biface/oxiflow/issues/200),
+    /// [#200](https://github.com/biface/oxiflow/issues/200)).
     ///
     /// Variable-step methods (DoPri45) do **not** use this — they need
     /// their own loop (`dt` changes every iteration, total step count
@@ -760,7 +760,7 @@ mod boundary_condition_tests {
         vec![Box::new(bc)]
     }
 
-    /// The two ways of holding both ends checked here (#202).
+    /// The two ways of holding both ends checked here ([#202](https://github.com/biface/oxiflow/issues/202)).
     #[derive(Debug, Clone, Copy)]
     enum HeldEnds {
         /// One test condition declaring both nodes.

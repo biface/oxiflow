@@ -1,5 +1,5 @@
-//! Criterion benchmarks for the Langmuir multi-species model (#138, feeds
-//! #53). The model comes from `rsc/models/langmuir_multi.rs`, shared with
+//! Criterion benchmarks for the Langmuir multi-species model ([#138](https://github.com/biface/oxiflow/issues/138), feeds
+//! [#53](https://github.com/biface/oxiflow/issues/53)). The model comes from `rsc/models/langmuir_multi.rs`, shared with
 //! the examples and the reference test.
 //!
 //! Same two-measurement split as the other three models, but the second
@@ -15,7 +15,7 @@
 //!   here, so calibrating a calculator's own dispatch (as those two did)
 //!   would not measure anything representative of this model.
 //! - [`implicit_jacobian_dispatch`] — dispatch of the implicit solvers'
-//!   finite-difference Jacobian assembly (#199) on a `VectorField` state,
+//!   finite-difference Jacobian assembly ([#199](https://github.com/biface/oxiflow/issues/199)) on a `VectorField` state,
 //!   sequential vs. parallel, through one Backward Euler step: dense path,
 //!   and banded path with the `sparse` feature.
 
@@ -53,7 +53,7 @@ mod langmuir_multi_model;
 
 use langmuir_multi_model::make_model;
 
-/// #53's fixed-size target for this model: the `ascorbic_erythorbic`
+/// [#53](https://github.com/biface/oxiflow/issues/53)'s fixed-size target for this model: the `ascorbic_erythorbic`
 /// reference scenario (100 points, 4000 steps).
 pub fn full_run(c: &mut Criterion) {
     c.bench_function("langmuir_multi_full_run", |b| {
@@ -145,7 +145,7 @@ pub fn row_dispatch_diagnostic(c: &mut Criterion) {
 }
 
 /// Dispatch of the finite-difference Jacobian assembly of the implicit
-/// solvers (#199, DT-069) on a `VectorField` state, sequential vs.
+/// solvers ([#199](https://github.com/biface/oxiflow/issues/199), [DT-069](https://github.com/biface/oxiflow/issues/198)) on a `VectorField` state, sequential vs.
 /// parallel, through the public `BackwardEulerSolver::with_parallel_threshold`.
 /// Same principle as `diffusion_1d::implicit_jacobian_dispatch`: one full
 /// Backward Euler step is timed, and the model's row loop and the gradient

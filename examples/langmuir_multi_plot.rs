@@ -1,4 +1,4 @@
-//! # Example: langmuir_multi reference plot (#145)
+//! # Example: langmuir_multi reference plot ([#145](https://github.com/biface/oxiflow/issues/145))
 //!
 //! Chromatogram: outlet concentration `C_i(t)` vs. time, one curve per
 //! species -- the standard chrom-rs output this model was ported from

@@ -1,7 +1,7 @@
 //! # Module `context::calculators::coefficient`
 //!
-//! Coefficient fields c(x) and c(x, t) evaluated on the mesh nodes (DD-066,
-//! #182).
+//! Coefficient fields c(x) and c(x, t) evaluated on the mesh nodes ([DD-066](https://github.com/biface/oxiflow/issues/181),
+//! [#182](https://github.com/biface/oxiflow/issues/182)).
 //!
 //! [`CoefficientField`] evaluates a user function on `Mesh::coordinates(i)`
 //! for every node `i` and publishes the result as a `ScalarField` under
@@ -9,7 +9,7 @@
 //! of `ExternalTabulated`, which stays a function of time only and publishes
 //! a `Scalar`.
 //!
-//! ## Sharing without copy (DT-068, #195)
+//! ## Sharing without copy ([DT-068](https://github.com/biface/oxiflow/issues/195))
 //!
 //! The calculator overrides `ContextCalculator::compute_shared`, so the
 //! solver receives the field it keeps instead of a copy:
@@ -22,22 +22,22 @@
 //!
 //! Both caches assume the mesh does not change after construction. This is
 //! an implementation detail, not a public contract: invalidation on a moving
-//! or adapted mesh is for v0.11.0 and later (DD-066).
+//! or adapted mesh is for v0.11.0 and later ([DD-066](https://github.com/biface/oxiflow/issues/181)).
 //!
 //! The cache of c(x, t) is never locked while the field is computed. The
-//! solver may evaluate derivatives inside Rayon tasks (DT-069, #198), and a
+//! solver may evaluate derivatives inside Rayon tasks ([DT-069](https://github.com/biface/oxiflow/issues/198)), and a
 //! worker waiting for its own parallel loop can run another such task: if
 //! that task blocked on a lock held by the same worker, it would never be
 //! released. Concurrent misses at the same time therefore compute the same
 //! field independently; the finite-difference Jacobians do not cause them,
 //! since they evaluate the unperturbed state before dispatching columns.
 //!
-//! ## Parallel dispatch (DA-048, #140)
+//! ## Parallel dispatch ([DA-048](https://github.com/biface/oxiflow/issues/140))
 //!
 //! With the `parallel` feature, the nodes are evaluated through Rayon once
 //! the mesh has at least as many nodes as the calculator's threshold, and
 //! each value is written directly into the output vector (no intermediate
-//! collection, see #144). The threshold governs c(x, t); c(x) is evaluated
+//! collection, see [#144](https://github.com/biface/oxiflow/issues/144)). The threshold governs c(x, t); c(x) is evaluated
 //! once, at construction, with the default threshold. Each node is
 //! evaluated by the same function with the same arguments in both modes, so
 //! the sequential and parallel fields are bit-for-bit identical.
@@ -83,7 +83,7 @@ enum Source {
     },
 }
 
-/// Coefficient field c(x) or c(x, t), evaluated on every mesh node (DD-066).
+/// Coefficient field c(x) or c(x, t), evaluated on every mesh node ([DD-066](https://github.com/biface/oxiflow/issues/181)).
 ///
 /// The function receives `Mesh::coordinates(i)`, a slice of length
 /// `spatial_dimension()`, so a coefficient written for a 1D grid keeps its
@@ -116,7 +116,7 @@ enum Source {
 /// `GPU-READY: no` for the source: a user closure does not translate into a
 /// shader. The output is a contiguous `ScalarField`, computed on the CPU and
 /// handed over like any other context value (INV-GPU-1 to INV-GPU-5 review
-/// under DD-066).
+/// under [DD-066](https://github.com/biface/oxiflow/issues/181)).
 ///
 /// # Examples
 ///
@@ -154,7 +154,7 @@ pub struct CoefficientField {
     mesh: Arc<dyn Mesh>,
     name: Cow<'static, str>,
     source: Source,
-    /// Rayon dispatch threshold (DT-014, DA-048) — see `ParallelThreshold`.
+    /// Rayon dispatch threshold ([DT-014](https://github.com/biface/oxiflow/issues/14), [DA-048](https://github.com/biface/oxiflow/issues/140)) — see `ParallelThreshold`.
     #[cfg(feature = "parallel")]
     parallel_threshold: ParallelThreshold,
 }
@@ -164,7 +164,7 @@ impl CoefficientField {
     ///
     /// `f` receives the coordinates of a node. It is not kept today; the
     /// `Send + Sync + 'static` bounds leave room for re-evaluating it on a
-    /// changed mesh (DD-066) without a breaking change.
+    /// changed mesh ([DD-066](https://github.com/biface/oxiflow/issues/181)) without a breaking change.
     ///
     /// # Errors
     ///
@@ -215,8 +215,8 @@ impl CoefficientField {
         }
     }
 
-    /// Overrides the Rayon dispatch threshold at construction time (DT-014,
-    /// DA-048). It governs c(x, t); c(x) has already been evaluated. Only
+    /// Overrides the Rayon dispatch threshold at construction time ([DT-014](https://github.com/biface/oxiflow/issues/14),
+    /// [DA-048](https://github.com/biface/oxiflow/issues/140)). It governs c(x, t); c(x) has already been evaluated. Only
     /// exists when the crate is built with the `parallel` feature.
     ///
     /// # Panics

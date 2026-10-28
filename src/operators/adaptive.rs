@@ -1,6 +1,6 @@
 //! # Module `operators::adaptive`
 //!
-//! Adaptive WENO/limiter selection — [`AdaptiveFlux`] (#99, second half; the
+//! Adaptive WENO/limiter selection — [`AdaptiveFlux`] ([#99](https://github.com/biface/oxiflow/issues/99), second half; the
 //! mechanical half — `operators::limiters` — landed separately).
 //!
 //! ## What "local Péclet" actually means here

@@ -1,6 +1,6 @@
 //! # Module `solver::methods::euler`
 //!
-//! Forward Euler integrator — explicit, 1st order (issues #33, #41).
+//! Forward Euler integrator — explicit, 1st order (issues [#33](https://github.com/biface/oxiflow/issues/33), [#41](https://github.com/biface/oxiflow/issues/41)).
 //!
 //! ## Algorithm
 //!
@@ -16,15 +16,15 @@
 //!
 //! - Single-domain scenarios only (`n_domains() == 1`). Multi-domain
 //!   scenarios with `CouplingOperator` go through `MultiDomainOrchestrator`,
-//!   which drives this solver per domain as a `SteppableSolver` (DA-031).
+//!   which drives this solver per domain as a `SteppableSolver` ([DA-031](https://github.com/biface/oxiflow/issues/82)).
 //! - No spatial scheme inside the integrator (INV-2): the model computes
 //!   `du/dt` from the field state and context, spatial operators included.
-//! - Boundary conditions ARE applied (since v0.2.0 / DA-008) — fixed in #41;
+//! - Boundary conditions ARE applied (since v0.2.0 / [DA-008](https://github.com/biface/oxiflow/issues/8)) — fixed in [#41](https://github.com/biface/oxiflow/issues/41);
 //!   the original J1 implementation predated `BoundaryCondition` and never
 //!   called it, silently violating the contractual order documented in
 //!   [`crate::solver`].
 //! - `StepControl::Fixed { dt }` only — adaptive step control is
-//!   DoPri45's job (#42).
+//!   DoPri45's job ([#42](https://github.com/biface/oxiflow/issues/42)).
 //!
 //! ## Stability
 //!
@@ -123,7 +123,7 @@ impl SteppableSolver for ForwardEulerSolver {
 }
 
 /// Computes `u + dt * du_dt`, for `ScalarField` or `VectorField` states
-/// alike (#138 consequence: `LangmuirMulti`'s `VectorField` state hit this
+/// alike ([#138](https://github.com/biface/oxiflow/issues/138) consequence: `LangmuirMulti`'s `VectorField` state hit this
 /// function's earlier `ScalarField`-only version, hard-coded before the
 /// generic combination existed).
 ///

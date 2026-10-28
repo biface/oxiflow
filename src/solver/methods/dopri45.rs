@@ -1,7 +1,7 @@
 //! # Module `solver::methods::dopri45`
 //!
 //! Dormand-Prince DoPri45 — explicit, adaptive step, order 5 (local
-//! extrapolation) with embedded order-4 error estimate (issue #42).
+//! extrapolation) with embedded order-4 error estimate (issue [#42](https://github.com/biface/oxiflow/issues/42)).
 //!
 //! ## Algorithm
 //!
@@ -21,7 +21,7 @@
 //! published source (Hairer/Nørsett/Wanner, or Dormand & Prince 1980)
 //! before trusting this in production.
 //!
-//! ## Step-size control (DD-036)
+//! ## Step-size control ([DD-036](https://github.com/biface/oxiflow/issues/89))
 //!
 //! Delegates entirely to [`StepSizeController`]
 //! for the accept/reject decision and the next `dt` — this file only
@@ -33,23 +33,23 @@
 //! Stage states and the error estimate are built with the crate's linear
 //! combination of states, and the error norm reads every value of the
 //! state, so a `VectorField` (n nodes × d components) is advanced like a
-//! `ScalarField`: all components weigh the same in the RMS norm (#192).
+//! `ScalarField`: all components weigh the same in the RMS norm ([#192](https://github.com/biface/oxiflow/issues/192)).
 //! For a `ScalarField`, results are bit-identical to the former `DVector`
 //! arithmetic.
 //!
 //! ## Scope — `Solver` only, not `SteppableSolver` (see discussion)
 //!
-//! Unlike BDF2 (DD-034), this solver does **not** implement
+//! Unlike BDF2 ([DD-034](https://github.com/biface/oxiflow/issues/87)), this solver does **not** implement
 //! `SteppableSolver`. BDF2's gap (needing `u^{n-1}`) was orthogonal to
 //! `dt` itself; this solver's defining feature is choosing its *own*
 //! `dt` across calls, which is in direct tension with
-//! `MultiDomainOrchestrator`'s v1 scope (DA-031: `dt` synchronised across
+//! `MultiDomainOrchestrator`'s v1 scope ([DA-031](https://github.com/biface/oxiflow/issues/82): `dt` synchronised across
 //! domains). Making this orchestrator-compatible would mean re-opening
-//! the multirate question DA-031 already deferred — not a gap orthogonal
+//! the multirate question [DA-031](https://github.com/biface/oxiflow/issues/82) already deferred — not a gap orthogonal
 //! to an existing limitation, but the same one. Revisit together if
 //! multirate coupling is ever tackled.
 //!
-//! ## Acceptance criteria mapping (#42)
+//! ## Acceptance criteria mapping ([#42](https://github.com/biface/oxiflow/issues/42))
 //!
 //! - Step-size control within `rtol`/`atol`: enforced by
 //!   `StepSizeController::accept`.
@@ -125,13 +125,13 @@ const E6: f64 = 22.0 / 525.0;
 const E7: f64 = -1.0 / 40.0;
 
 /// Order of the embedded (lower-order) error estimator -- used by the
-/// step-size controller's exponents (DD-036).
+/// step-size controller's exponents ([DD-036](https://github.com/biface/oxiflow/issues/89)).
 const ERROR_ESTIMATOR_ORDER: f64 = 4.0;
 
 /// Safety guard against an infinite rejection loop on a single step --
 /// the controller-driven `dt`-shrink should converge well before this in
 /// any well-posed problem; hitting it means tolerance genuinely cannot be
-/// satisfied (acceptance criterion, #42).
+/// satisfied (acceptance criterion, [#42](https://github.com/biface/oxiflow/issues/42)).
 const MAX_REJECTIONS_PER_STEP: usize = 50;
 
 /// Dormand-Prince DoPri45 solver — explicit, adaptive step.
@@ -290,7 +290,7 @@ impl Solver for DoPri45Solver {
 
 /// Computes the 7 Dormand-Prince stages and returns `(y_5th_order,
 /// error_estimate)`, both of the same variant as `state` (`ScalarField` or
-/// `VectorField`, #192).
+/// `VectorField`, [#192](https://github.com/biface/oxiflow/issues/192)).
 ///
 /// `state` (`u^n`) is mutated in-place by boundary condition application
 /// at stage 1, same contract as every other solver in this crate (see

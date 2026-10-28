@@ -1,7 +1,7 @@
-//! # Example: multi-field lahar benchmark model (#139, feeds #53)
+//! # Example: multi-field lahar benchmark model ([#139](https://github.com/biface/oxiflow/issues/139), feeds [#53](https://github.com/biface/oxiflow/issues/53))
 //!
-//! Implements DQ-032 (#85): a physically representative lahar model per
-//! Woodhouse, Hogg & Phillips (LaharFlowPaper.pdf, cited in DQ-032),
+//! Implements [DQ-032](https://github.com/biface/oxiflow/issues/85): a physically representative lahar model per
+//! Woodhouse, Hogg & Phillips (LaharFlowPaper.pdf, cited in [DQ-032](https://github.com/biface/oxiflow/issues/85)),
 //! reduced to one spatial dimension. Four coupled conservation quantities,
 //! not three -- see the state layout note below.
 //!
@@ -16,18 +16,18 @@
 //!
 //! Conserved state per node: `(m, p, s, b)` where `m = rho_bar*h` (mass
 //! depth), `p = rho_bar*h*u_bar` (momentum depth), `s = h*psi_bar` (solid
-//! volume depth), `b` = bed elevation. This departs from #139's literal
+//! volume depth), `b` = bed elevation. This departs from [#139](https://github.com/biface/oxiflow/issues/139)'s literal
 //! `(h, h*u_bar, c_bar)` listing in two ways, both discussed and confirmed
 //! in session:
 //!
 //! - `b(x,t)` is tracked as a fourth evolving quantity, not held fixed --
 //!   the published model is genuinely four coupled equations (mass,
-//!   momentum, solids, bed evolution), not three; #139's three-field
-//!   description omits the bed because DQ-032's own summary did too.
+//!   momentum, solids, bed evolution), not three; [#139](https://github.com/biface/oxiflow/issues/139)'s three-field
+//!   description omits the bed because [DQ-032](https://github.com/biface/oxiflow/issues/85)'s own summary did too.
 //! - The conserved momentum-equation variables carry the bulk density
 //!   `rho_bar = rho_f*(1-psi_bar) + rho_s*psi_bar`, not raw `h`/`h*u_bar`.
 //!   With `rho_s/rho_f = 2`, dropping this weight would misrepresent the
-//!   bulking behaviour DQ-032 explicitly cites as the model's signature
+//!   bulking behaviour [DQ-032](https://github.com/biface/oxiflow/issues/85) explicitly cites as the model's signature
 //!   effect. `h`, `u_bar`, `psi_bar`, `c_bar` are recovered by diagnostic
 //!   (see [`LaharPhysics::primitives`]) wherever needed.
 //!
@@ -88,7 +88,7 @@
 //! new trait -- confirmed in session that the existing
 //! `FluxDivergenceOperator`/`DiscretizedModel`/`CompositeModel` stack
 //! already carries `ContextValue::VectorField` end to end, a side effect
-//! of #138's `ContextValue` generalization): local Lax-Friedrichs
+//! of [#138](https://github.com/biface/oxiflow/issues/138)'s `ContextValue` generalization): local Lax-Friedrichs
 //! (Rusanov) numerical flux on `(m, p, s)`, `b`'s own flux held at zero
 //! (no spatial flux term for bed elevation). Face states come from a
 //! MinMod-limited MUSCL reconstruction, reusing
@@ -111,7 +111,7 @@
 //! computes friction, erosion/deposition, bed evolution, and the top-hat
 //! source for all four columns, requiring `d(b)/dx` via an ordinary
 //! [`FDGradientCalculator`] on component 3 -- no new machinery, the same
-//! per-component gradient mechanism #138 generalized.
+//! per-component gradient mechanism [#138](https://github.com/biface/oxiflow/issues/138) generalized.
 //!
 //! Composed as `CompositeModel::new(vec![LaharSource, DiscretizedModel<ShallowLayerFlux>])`
 //! -- `LaharSource` first, so `CompositeModel::initial_state` (which uses
@@ -121,7 +121,7 @@
 //!
 //! `ForwardEulerSolver` -- the only integrator wired to
 //! `ContextValue::add_scaled` for `VectorField` state (still true after
-//! #136-#138).
+//! [#136](https://github.com/biface/oxiflow/issues/136)-[#138](https://github.com/biface/oxiflow/issues/138)).
 //!
 //! ## Parameter grouping
 //!

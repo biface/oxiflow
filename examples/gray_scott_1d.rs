@@ -1,4 +1,4 @@
-//! # Reference example: Gray–Scott in 1D, Turing instability and self-replicating pulses (#176)
+//! # Reference example: Gray–Scott in 1D, Turing instability and self-replicating pulses ([#176](https://github.com/biface/oxiflow/issues/176))
 //!
 //! Two reacting and diffusing species on a ring. The example runs two cases
 //! of the same model:

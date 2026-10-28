@@ -1,8 +1,8 @@
-//! # Example: multi-compound Langmuir benchmark model (#138, feeds #53)
+//! # Example: multi-compound Langmuir benchmark model ([#138](https://github.com/biface/oxiflow/issues/138), feeds [#53](https://github.com/biface/oxiflow/issues/53))
 //!
 //! Competitive adsorption in liquid chromatography, ported from chrom-rs's
 //! `LangmuirMulti` (session reference: `ascorbic_erythorbic` config case).
-//! The heaviest of the four #53 benchmark models: each spatial node needs
+//! The heaviest of the four [#53](https://github.com/biface/oxiflow/issues/53) benchmark models: each spatial node needs
 //! its own `n_species x n_species` linear solve, not just a stencil
 //! evaluation.
 //!
@@ -41,7 +41,7 @@
 //! gradient
 //!
 //! Interior nodes use it directly (`component: Some(i)`, one calculator
-//! per species -- the #138 prerequisite that generalized
+//! per species -- the [#138](https://github.com/biface/oxiflow/issues/138) prerequisite that generalized
 //! `ContextValue`/`FDGradientCalculator` for `VectorField` state). The
 //! inlet node (row 0) is overridden manually: its upstream neighbor isn't
 //! a real domain value, it's `injection.evaluate(t)` -- a genuinely

@@ -1,4 +1,4 @@
-//! # Example: lahar_multifield reference plots (#145)
+//! # Example: lahar_multifield reference plots ([#145](https://github.com/biface/oxiflow/issues/145))
 //!
 //! Two views, matching the paper's own Fig. 4 (Woodhouse, Hogg &
 //! Phillips, LaharFlowPaper.pdf):

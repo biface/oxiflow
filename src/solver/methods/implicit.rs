@@ -1,15 +1,15 @@
 //! # Module `solver::methods::implicit`
 //!
-//! Shared machinery for implicit (theta-method) integrators — DD-033
+//! Shared machinery for implicit (theta-method) integrators — [DD-033](https://github.com/biface/oxiflow/issues/86)
 //! ([#86](https://github.com/biface/oxiflow/issues/86)).
 //!
 //! [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver) (θ=1),
 //! [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver)
 //! (θ=0.5) and [`BDF2Solver`](super::bdf2::BDF2Solver) are thin wrappers
-//! around `implicit_step_newton` (DD-044,
+//! around `implicit_step_newton` ([DD-044](https://github.com/biface/oxiflow/issues/109),
 //! [#111](https://github.com/biface/oxiflow/issues/111),
 //! [#112](https://github.com/biface/oxiflow/issues/112)) and, with the
-//! `sparse` feature, `implicit_step_adaptive` (DA-043). Each solver names
+//! `sparse` feature, `implicit_step_adaptive` ([DA-043](https://github.com/biface/oxiflow/issues/103)). Each solver names
 //! its implicit equation with an `ImplicitFormula` — the theta method or
 //! BDF2 — and every formula runs the shared [`super::newton`] loop; the
 //! two paths differ only in the storage format of the linear system, dense
@@ -27,12 +27,12 @@
 //! depend on θ at all. Only the system matrix does
 //! ($I - \theta \Delta t J_f$). One function, one parameter.
 //!
-//! ## Iterated Newton, single correction by default (DD-033, DD-044)
+//! ## Iterated Newton, single correction by default ([DD-033](https://github.com/biface/oxiflow/issues/86), [DD-044](https://github.com/biface/oxiflow/issues/109))
 //!
-//! DD-033 ([#86](https://github.com/biface/oxiflow/issues/86)) started with
+//! [DD-033](https://github.com/biface/oxiflow/issues/86) ([#86](https://github.com/biface/oxiflow/issues/86)) started with
 //! exactly **one** Newton-style correction, with the Jacobian frozen at
 //! $u^n$ — exact when `compute_physics` is affine in `u`, a first-order
-//! approximation otherwise. DD-044
+//! approximation otherwise. [DD-044](https://github.com/biface/oxiflow/issues/109)
 //! ([#111](https://github.com/biface/oxiflow/issues/111)) replaced it with
 //! the iterated [`super::newton`] loop, configured by the solver's
 //! `with_newton_convergence`/`with_jacobian_strategy`/
@@ -54,7 +54,7 @@
 //! Newton and both finite-difference Jacobians work on the flat vector of
 //! unknowns given by `StateLayout` (`super::state_layout`): a `ScalarField`
 //! as is, a `VectorField` interleaved by node, so a `VectorField` state is
-//! advanced like a `ScalarField` (#192). The banded path therefore takes a
+//! advanced like a `ScalarField` ([#192](https://github.com/biface/oxiflow/issues/192)). The banded path therefore takes a
 //! half-bandwidth counted in flat unknowns, `d·(s + 1) − 1` for `d`
 //! components and a stencil of half-width `s`.
 //!
@@ -69,10 +69,10 @@
 //! its *row* still reflects genuine physics-based coupling to
 //! unconstrained neighbours. Verified by
 //! `tests::dirichlet_constrained_column_is_exactly_zero_row_keeps_real_coupling`
-//! (#113) — previously documented as a known untested limitation (DD-033,
+//! ([#113](https://github.com/biface/oxiflow/issues/113)) — previously documented as a known untested limitation ([DD-033](https://github.com/biface/oxiflow/issues/86),
 //! [#86](https://github.com/biface/oxiflow/issues/86), v0.4.0).
 //!
-//! ## Parallel assembly (DT-069, #198)
+//! ## Parallel assembly ([DT-069](https://github.com/biface/oxiflow/issues/198))
 //!
 //! With the `parallel` feature, both finite-difference Jacobians dispatch
 //! their independent evaluations through Rayon — one per column for the
@@ -110,7 +110,7 @@ use faer::sparse::{SparseColMat, SymbolicSparseColMat};
 const FD_EPSILON: f64 = 1e-7;
 
 /// Default Rayon dispatch threshold of the Jacobian assembly, in unknowns
-/// (DT-069, #198) — an indicative value, shared by the three implicit
+/// ([DT-069](https://github.com/biface/oxiflow/issues/198)) — an indicative value, shared by the three implicit
 /// solvers since they share this assembly. Each dispatched task is a full
 /// derivative evaluation, much heavier than one stencil point, so the
 /// crossover is expected far below
@@ -124,7 +124,7 @@ pub(crate) fn default_parallel_threshold() -> usize {
 
 /// Dispatch configuration of the Jacobian assembly, held by each implicit
 /// solver and passed down to [`finite_difference_jacobian`] and, with the
-/// `sparse` feature, `banded_finite_difference_jacobian` (DT-069, #198).
+/// `sparse` feature, `banded_finite_difference_jacobian` ([DT-069](https://github.com/biface/oxiflow/issues/198)).
 ///
 /// Holds a `ParallelThreshold` only with the `parallel` feature: without
 /// it the type is empty, no threshold is representable, and the assembly
@@ -215,10 +215,10 @@ where
 /// truncation error from the linear approximation itself.
 ///
 /// Rows and columns follow the flat ordering of [`StateLayout`]: for a
-/// `VectorField` state, unknowns are interleaved by node (#192).
+/// `VectorField` state, unknowns are interleaved by node ([#192](https://github.com/biface/oxiflow/issues/192)).
 ///
 /// A work state, cloned from `state`, is refilled before each column and
-/// perturbed in place (#197): the boundary conditions modify the evaluated
+/// perturbed in place ([#197](https://github.com/biface/oxiflow/issues/197)): the boundary conditions modify the evaluated
 /// state in place and do not report which nodes they changed, so a full
 /// refill per column is needed, but no allocation is. Columns are
 /// dispatched according to `dispatch` — see
@@ -304,7 +304,7 @@ pub(crate) fn stiff_jacobian_convergence() -> NewtonConvergence {
 /// ([`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
 /// [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver),
 /// [`BDF2Solver`](super::bdf2::BDF2Solver)): [`stiff_jacobian_convergence`],
-/// [`JacobianStrategy::ModifiedFrozen`] and one iteration, the pre-DD-044
+/// [`JacobianStrategy::ModifiedFrozen`] and one iteration, the pre-[DD-044](https://github.com/biface/oxiflow/issues/109)
 /// single frozen-Jacobian correction. It is exact on affine problems (see
 /// [`newton::solve`]'s docs); a genuinely nonlinear model needs a larger
 /// budget, typically with [`JacobianStrategy::FullNewton`].
@@ -379,14 +379,14 @@ impl ImplicitFormula<'_> {
 
 /// Performs one implicit step of `formula` through the iterated Newton
 /// loop ([`newton::solve`]) with the dense linear system, under the
-/// caller's Newton parameters (DD-044, #111, #112).
+/// caller's Newton parameters ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111), [#112](https://github.com/biface/oxiflow/issues/112)).
 ///
 /// Every implicit solver calls this
 /// ([`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
 /// [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver),
 /// [`BDF2Solver`](super::bdf2::BDF2Solver) and its bootstrap step) when
 /// no banded path is configured, with the solver's own configuration and
-/// Jacobian dispatch (DT-069, #198).
+/// Jacobian dispatch ([DT-069](https://github.com/biface/oxiflow/issues/198)).
 ///
 /// `state` is mutated in-place by boundary condition application — same
 /// contract as the explicit solvers (see
@@ -491,7 +491,7 @@ fn implicit_newton<S: NewtonSystem>(
 
 /// Assembles $\partial f/\partial u$ within a band of half-width
 /// `bandwidth` around the diagonal, directly in compressed-column form, in
-/// the flat ordering of [`StateLayout`] (#192): for a `VectorField` of d
+/// the flat ordering of [`StateLayout`] ([#192](https://github.com/biface/oxiflow/issues/192)): for a `VectorField` of d
 /// components and a stencil of half-width `s`, the band half-width is
 /// `d·(s + 1) − 1`.
 ///
@@ -501,10 +501,10 @@ fn implicit_newton<S: NewtonSystem>(
 /// **simultaneously** in a single [`evaluate_derivative`] call —
 /// `2*bandwidth + 1` evaluations, instead of [`finite_difference_jacobian`]'s
 /// `n`. As there, a work state is refilled and perturbed in place for each
-/// color (#197), and colors are dispatched according to `dispatch` — the
+/// color ([#197](https://github.com/biface/oxiflow/issues/197)), and colors are dispatched according to `dispatch` — the
 /// threshold is compared with the number of unknowns `n`, not of colors.
 ///
-/// The structure is known in advance (DT-069, #198): column `j` holds rows
+/// The structure is known in advance ([DT-069](https://github.com/biface/oxiflow/issues/198)): column `j` holds rows
 /// `max(0, j − bandwidth)` to `min(n, j + bandwidth + 1)`, in increasing
 /// order, diagonal included. `col_ptr` and `row_idx` are built from `n` and
 /// `bandwidth`; each column of `values` is written once, in place, with the
@@ -575,7 +575,7 @@ pub(crate) fn banded_finite_difference_jacobian(
     Ok(SparseColMat::new(symbolic, values))
 }
 
-/// Banded [`NewtonSystem`] (DA-043): `jacobian` evaluates $J_f$ within the
+/// Banded [`NewtonSystem`] ([DA-043](https://github.com/biface/oxiflow/issues/103)): `jacobian` evaluates $J_f$ within the
 /// band of half-width `bandwidth`, in compressed columns (in production,
 /// [`banded_finite_difference_jacobian`]); $\alpha I - c J_f$ is folded in
 /// place into its values, and `sparse_solver` solves the system.
@@ -631,8 +631,8 @@ where
 /// format of the linear system.
 ///
 /// `jacobian_bandwidth`/`sparse_threshold`/`sparse_solver`/`dispatch` are
-/// supplied by the caller's own HOW-side configuration (DA-043, amendment
-/// 1; DT-069) — never read from `Domain` or `PhysicalModel`. `dispatch`
+/// supplied by the caller's own HOW-side configuration ([DA-043](https://github.com/biface/oxiflow/issues/103), amendment
+/// 1; [DT-069](https://github.com/biface/oxiflow/issues/198)) — never read from `Domain` or `PhysicalModel`. `dispatch`
 /// applies to both paths.
 #[cfg(feature = "sparse")]
 #[allow(clippy::too_many_arguments)]
@@ -696,13 +696,13 @@ pub(crate) fn implicit_step_adaptive(
 // ── Linear-system backends of the implicit solvers ─────────────────────────
 
 /// Number of unknowns above which the banded path is taken by default,
-/// once a sparse solver and a Jacobian bandwidth are configured (DA-043).
+/// once a sparse solver and a Jacobian bandwidth are configured ([DA-043](https://github.com/biface/oxiflow/issues/103)).
 /// Shared by the implicit solvers and by
 /// [`IntegratorSpec`](crate::solver::spec::IntegratorSpec)'s defaults.
 #[cfg(feature = "sparse")]
 pub(crate) const DEFAULT_SPARSE_THRESHOLD: usize = 100;
 
-/// Linear-system backends of an implicit solver (DT-013, DA-043): the
+/// Linear-system backends of an implicit solver ([DT-013](https://github.com/biface/oxiflow/issues/13), [DA-043](https://github.com/biface/oxiflow/issues/103)): the
 /// dense [`LinearSolver`] and, with the `sparse` feature, the banded-path
 /// configuration. Held once for
 /// [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
@@ -710,9 +710,9 @@ pub(crate) const DEFAULT_SPARSE_THRESHOLD: usize = 100;
 /// [`BDF2Solver`](super::bdf2::BDF2Solver), which set it through their
 /// own builders and step through [`ImplicitBackend::step`].
 pub(crate) struct ImplicitBackend {
-    /// Dense backend (DT-013), [`NalgebraDenseSolver`] by default.
+    /// Dense backend ([DT-013](https://github.com/biface/oxiflow/issues/13)), [`NalgebraDenseSolver`] by default.
     pub(crate) linear_solver: Box<dyn LinearSolver>,
-    /// Sparse backend (DA-043) — `None` by default: the dense path
+    /// Sparse backend ([DA-043](https://github.com/biface/oxiflow/issues/103)) — `None` by default: the dense path
     /// (`implicit_step_newton`) is used unless this is configured
     /// explicitly. The banded path runs the same iterated Newton loop as
     /// the dense one, with the solver's Newton parameters.
@@ -726,8 +726,8 @@ pub(crate) struct ImplicitBackend {
     pub(crate) sparse_threshold: usize,
     /// Half-bandwidth of the Jacobian, in flat unknowns — a HOW-side
     /// assertion supplied by the caller (e.g. `scheme.stencil_radius()`,
-    /// DA-039, or `d·(s + 1) − 1` for `d` interleaved components), never
-    /// read from `Domain`/`PhysicalModel` (DA-043, amendment 1). `None` by
+    /// [DA-039](https://github.com/biface/oxiflow/issues/95), or `d·(s + 1) − 1` for `d` interleaved components), never
+    /// read from `Domain`/`PhysicalModel` ([DA-043](https://github.com/biface/oxiflow/issues/103), amendment 1). `None` by
     /// default: no assumption about locality, dense path only.
     #[cfg(feature = "sparse")]
     pub(crate) jacobian_bandwidth: Option<usize>,

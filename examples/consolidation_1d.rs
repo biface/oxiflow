@@ -1,4 +1,4 @@
-//! # Reference example: Terzaghi 1D consolidation of a clay layer (#178)
+//! # Reference example: Terzaghi 1D consolidation of a clay layer ([#178](https://github.com/biface/oxiflow/issues/178))
 //!
 //! A saturated clay layer is loaded at t = 0. The load is first carried by
 //! the pore water, as an excess pore pressure, which then dissipates as the

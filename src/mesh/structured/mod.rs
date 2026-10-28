@@ -1,6 +1,6 @@
 //! # Module `mesh::structured`
 //!
-//! Structured mesh implementations — uniform grids for FD/FV schemes (DA-019).
+//! Structured mesh implementations — uniform grids for FD/FV schemes ([DA-019](https://github.com/biface/oxiflow/issues/56)).
 //!
 //! ## J1 (v0.1.0)
 //!
@@ -8,7 +8,7 @@
 //!
 //! ## Future (v0.11.5 (J11))
 //!
-//! - Generalisation of `UniformGrid1D` to nD (DD-051, #152).
+//! - Generalisation of `UniformGrid1D` to nD ([DD-051](https://github.com/biface/oxiflow/issues/152)).
 
 use crate::context::error::OxiflowError;
 use crate::mesh::Mesh;

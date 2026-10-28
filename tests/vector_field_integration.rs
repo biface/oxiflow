@@ -1,4 +1,4 @@
-//! # Integration test: time integration of multi-component states (#192)
+//! # Integration test: time integration of multi-component states ([#192](https://github.com/biface/oxiflow/issues/192))
 //!
 //! Every integrator (Forward Euler, RK4, DoPri45, Backward Euler,
 //! Crank–Nicolson, BDF2, Strang splitting) advances a `VectorField` state

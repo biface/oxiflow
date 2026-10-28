@@ -1,6 +1,6 @@
 //! # Module `solver`
 //!
-//! Numerical solving orchestration — WHAT/HOW separation (issue #32).
+//! Numerical solving orchestration — WHAT/HOW separation (issue [#32](https://github.com/biface/oxiflow/issues/32)).
 //!
 //! ## Responsibilities
 //!
@@ -13,7 +13,7 @@
 //! ## Contractual execution order
 //!
 //! `Solver::solve()` implementations must follow this order at each derivative
-//! evaluation (DD-070, #200):
+//! evaluation ([DD-070](https://github.com/biface/oxiflow/issues/200)):
 //!
 //! 1. **Calculators required by the boundary conditions** — populate
 //!    `ComputeContext` with the variables the conditions require (with their
@@ -138,7 +138,7 @@ impl SimulationResult {
     }
 
     /// Writes the **final** saved state to an XML VTK unstructured grid
-    /// (`.vtu`), for visualisation in ParaView/VisIt (DT-027, issue #78).
+    /// (`.vtu`), for visualisation in ParaView/VisIt ([DT-027](https://github.com/biface/oxiflow/issues/75), issue [#78](https://github.com/biface/oxiflow/issues/78)).
     ///
     /// Node coordinates come from `mesh`; nodes are connected by `Line`
     /// cells in `Mesh` node order (`n_dof() - 1` segments), matching the
@@ -167,11 +167,11 @@ impl SimulationResult {
     /// (little-endian bytes, base64-encoded, `UInt64` size header), so every
     /// `f64` is stored bit for bit — NaN and infinities included, which lets
     /// a diverged state be inspected in ParaView. It is written by the crate
-    /// itself, with no third-party VTK dependency (#191).
+    /// itself, with no third-party VTK dependency ([#191](https://github.com/biface/oxiflow/issues/191)).
     ///
     /// Exports the last entry of `states` only — not the full time series.
     /// A `.pvd` time-series collection is future work, not part of this
-    /// increment (see #78's acceptance criteria, scoped to a single file).
+    /// increment (see [#78](https://github.com/biface/oxiflow/issues/78)'s acceptance criteria, scoped to a single file).
     ///
     /// Requires the `vtk` feature.
     ///
@@ -386,7 +386,7 @@ fn base64_encode(bytes: &[u8]) -> String {
 /// - Build the calculator chain via `chain::build_calculator_chain()`
 /// - Follow the contractual execution order
 ///
-/// `Solver` is deliberately kept single-domain (DA-031) — coupled
+/// `Solver` is deliberately kept single-domain ([DA-031](https://github.com/biface/oxiflow/issues/82)) — coupled
 /// multi-domain scenarios go through [`orchestrator::MultiDomainOrchestrator`]
 /// instead, which drives one [`methods::SteppableSolver`] per domain and
 /// invokes `CouplingOperator`s between steps. This keeps each domain free
@@ -395,7 +395,7 @@ fn base64_encode(bytes: &[u8]) -> String {
 ///
 /// # Object safety
 ///
-/// This trait is object-safe to support INV-4 (plugin-safe API, v0.30.0 / J30, DA-017).
+/// This trait is object-safe to support INV-4 (plugin-safe API, v0.30.0 / J30, [DA-017](https://github.com/biface/oxiflow/issues/17)).
 pub trait Solver: Send + Sync {
     /// Runs the simulation and returns the collected states.
     fn solve(
@@ -406,7 +406,7 @@ pub trait Solver: Send + Sync {
 
     /// Called automatically right before a divergence-class error is
     /// returned, with a [`SimulationSnapshot`] capturing the state at the
-    /// point of failure (DT-025 Option B, issue #71). Two distinct
+    /// point of failure ([DT-025](https://github.com/biface/oxiflow/issues/66) Option B, issue [#71](https://github.com/biface/oxiflow/issues/71)). Two distinct
     /// failure modes are routed through this hook:
     ///
     /// - [`OxiflowError::SolverDivergence`] — a non-finite value appeared
@@ -414,7 +414,7 @@ pub trait Solver: Send + Sync {
     ///   [`methods`]'s internal finiteness check).
     /// - [`OxiflowError::NewtonNotConverged`] — the iterated Newton
     ///   solver ([`methods::newton`]) exhausted its iteration budget
-    ///   without satisfying its convergence criterion (DD-044, v0.7.0).
+    ///   without satisfying its convergence criterion ([DD-044](https://github.com/biface/oxiflow/issues/109), v0.7.0).
     ///   This is a failure of the *nonlinear correction* to converge, not
     ///   necessarily a non-finite state — the last iterate may still be
     ///   finite, just not accepted as converged.

@@ -3,14 +3,14 @@
 //! Finite-volume [`FluxDivergenceOperator`] implementations for
 //! [`UniformGrid1D`] — `FVCenteredFlux` (2nd-order centered advection),
 //! `FVUpwindFlux` (1st-order upwind advection, robust for strong advection)
-//! (#48, DA-039, DD-040).
+//! ([#48](https://github.com/biface/oxiflow/issues/48), [DA-039](https://github.com/biface/oxiflow/issues/95), [DD-040](https://github.com/biface/oxiflow/issues/96)).
 //!
 //! Both compute the full flux `F(u, ∇u) = v·u − D·∂u/∂x` (advection, Fick's
 //! law diffusion) — the diffusive term is always centered in both schemes;
 //! only the advective term differs (centered vs upwind). Only advection
 //! needs directional bias for stability; diffusion is symmetric.
 //!
-//! ## Cell semantics (DD-040)
+//! ## Cell semantics ([DD-040](https://github.com/biface/oxiflow/issues/96))
 //!
 //! `UniformGrid1D`/`Mesh` stay purely nodal (INV-1) — no cell-center API was
 //! added. `u[i]` is interpreted as the average of the cell whose faces sit
@@ -220,7 +220,7 @@ pub(crate) fn truncated_divergence(
 /// [`FluxBoundary::GhostCell`]'s documentation for why only this variant
 /// references real boundary physics. Fails explicitly if either BC does not
 /// override `ghost_value()` (still returns `None`) — no generic fallback is
-/// substituted (DD-042).
+/// substituted ([DD-042](https://github.com/biface/oxiflow/issues/100)).
 ///
 /// Only the interior loop (`1..n-1`) is a dispatch candidate — the two
 /// boundary formulas are O(1) each (one `ghost_value` lookup plus one

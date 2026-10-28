@@ -1,8 +1,8 @@
-//! # Integration test: lahar–lake mass conservation (#40, DA-031)
+//! # Integration test: lahar–lake mass conservation ([#40](https://github.com/biface/oxiflow/issues/40), [DA-031](https://github.com/biface/oxiflow/issues/82))
 //!
 //! Companion to `examples/lahar_lake_proto.rs`, on the same models and
 //! coupling operator (`rsc/models/lahar_lake.rs`), run through
-//! `MultiDomainOrchestrator`, asserting the acceptance criteria from #40
+//! `MultiDomainOrchestrator`, asserting the acceptance criteria from [#40](https://github.com/biface/oxiflow/issues/40)
 //! that an example alone cannot enforce as a regression gate:
 //! - Mass conservation within the expected splitting-error tolerance
 //! - `CouplingOperator` invoked at every synchronised step (not zero,
@@ -11,7 +11,7 @@
 //! Structural-only validation (`Scenario::multi`, `with_coupling`, INV-3
 //! composite keying) is already covered by `tests/coupling_proto.rs`
 //! (v0.3.0) — this file specifically exercises the *time-stepping* path
-//! that DA-031 added on top of it. Kept as a separate file rather than
+//! that [DA-031](https://github.com/biface/oxiflow/issues/82) added on top of it. Kept as a separate file rather than
 //! extending `coupling_proto.rs`: its existing `MassTransferCoupling`
 //! stub uses overwrite semantics tailored to its own structural-only
 //! assertions, not mass conservation — changing it would risk breaking

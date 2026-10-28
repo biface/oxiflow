@@ -1,10 +1,10 @@
 //! # Module `context::calculator`
 //!
-//! Trait `ContextCalculator` — computes a single context variable (issue #32, DD-020).
+//! Trait `ContextCalculator` — computes a single context variable (issue [#32](https://github.com/biface/oxiflow/issues/32), [DD-020](https://github.com/biface/oxiflow/issues/57)).
 //!
 //! A calculator is the symmetric counterpart of `RequiresContext`: where a model
 //! *declares* what it needs, a calculator *provides* what it computes.
-//! The solver chains calculators in topological order (DD-009, J2) and feeds
+//! The solver chains calculators in topological order ([DD-009](https://github.com/biface/oxiflow/issues/9), J2) and feeds
 //! results into `ComputeContext` before each time step.
 //!
 //! ## Placement
@@ -37,7 +37,7 @@ use crate::model::traits::RequiresContext;
 /// - `compute()` must not modify `ctx` directly — the solver inserts the result.
 /// - The solver calls [`compute_shared()`](Self::compute_shared), which defaults
 ///   to `compute()`. A calculator that keeps its value between evaluations
-///   overrides it to hand that value over without a copy (DT-068, #195).
+///   overrides it to hand that value over without a copy ([DT-068](https://github.com/biface/oxiflow/issues/195)).
 ///
 /// # DiscreteOperator (INV-2, J5)
 ///
@@ -112,7 +112,7 @@ pub trait ContextCalculator: RequiresContext + Send + Sync + std::fmt::Debug {
     /// outside the solver.
     ///
     /// This method is not a parallel-dispatch capability and carries no
-    /// configuration, so it is consistent with P3 of DA-048 (#140): an
+    /// configuration, so it is consistent with P3 of [DA-048](https://github.com/biface/oxiflow/issues/140): an
     /// implementer that ignores it is unaffected.
     ///
     /// # Examples
@@ -181,7 +181,7 @@ pub trait ContextCalculator: RequiresContext + Send + Sync + std::fmt::Debug {
 // ── Test fixture shared across the crate ──────────────────────────────────────
 
 /// Calculator that keeps one value and hands over the same allocation at every
-/// call of `compute_shared` — the case DT-068 (#195) is about.
+/// call of `compute_shared` — the case [DT-068](https://github.com/biface/oxiflow/issues/195) is about.
 ///
 /// Shared by the unit tests of this module and of `solver::methods`.
 #[cfg(test)]

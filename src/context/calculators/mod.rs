@@ -23,11 +23,11 @@
 //! Spatial calculators ([`FDGradientCalculator`], [`FDLaplacianCalculator`],
 //! [`TrapezoidalIntegral`], [`CoefficientField`]) hold an [`Arc<dyn Mesh>`]
 //! internally. This is an
-//! implementation detail consistent with INV-1 (DA-007): the mesh never appears
+//! implementation detail consistent with INV-1 ([DA-007](https://github.com/biface/oxiflow/issues/7)): the mesh never appears
 //! in the public `ContextCalculator` API. `FDGradientCalculator` and
 //! `FDLaplacianCalculator` delegate their stencil math to a concrete
 //! [`DiscreteOperator`] implementation from [`crate::operators::fd`] (INV-2,
-//! DA-012, #47) with zero change to the `ContextCalculator` trait signature.
+//! [DA-012](https://github.com/biface/oxiflow/issues/12), [#47](https://github.com/biface/oxiflow/issues/47)) with zero change to the `ContextCalculator` trait signature.
 //!
 //! [`ContextCalculator`]: crate::context::calculator::ContextCalculator
 //! [`SolverConfiguration`]: crate::solver::config::SolverConfiguration

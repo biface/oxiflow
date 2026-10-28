@@ -1,10 +1,10 @@
-//! Criterion benchmarks for the 1D diffusion model (#136, feeds #53).
+//! Criterion benchmarks for the 1D diffusion model ([#136](https://github.com/biface/oxiflow/issues/136), feeds [#53](https://github.com/biface/oxiflow/issues/53)).
 //! The model comes from `rsc/models/diffusion_1d.rs`, shared with the
 //! example and the analytical test.
 //!
 //! Distinct measurements, not one:
 //!
-//! - [`full_run`] — the fixed-size performance target from #53's original
+//! - [`full_run`] — the fixed-size performance target from [#53](https://github.com/biface/oxiflow/issues/53)'s original
 //!   acceptance table ("1D diffusion, 1000 points, 10 000 steps, < 100
 //!   ms"). Criterion itself does not assert against that target -- compare
 //!   the reported mean against it by hand once results are in.
@@ -19,11 +19,11 @@
 //!   outlier detection -- a single `Instant::now()` pair does not have
 //!   that).
 //! - [`implicit_jacobian_dispatch`] — dispatch of the implicit solvers'
-//!   finite-difference Jacobian assembly (#199), sequential vs. parallel,
+//!   finite-difference Jacobian assembly ([#199](https://github.com/biface/oxiflow/issues/199)), sequential vs. parallel,
 //!   through one Backward Euler step: dense path, and banded path with the
 //!   `sparse` feature.
 //! - [`boundary_condition_overhead`] — what boundary conditions cost a
-//!   solve (#202): the same model without conditions, with the two
+//!   solve ([#202](https://github.com/biface/oxiflow/issues/202)): the same model without conditions, with the two
 //!   Danckwerts conditions and with two `Dirichlet` conditions, under RK4
 //!   and Backward Euler. Independent of the `parallel` feature.
 
@@ -56,7 +56,7 @@ mod diffusion_1d_model;
 
 use diffusion_1d_model::{laplacian_variable, Diffusion1D};
 
-/// #53's original fixed-size target: 1000 points, 10 000 steps, < 100 ms.
+/// [#53](https://github.com/biface/oxiflow/issues/53)'s original fixed-size target: 1000 points, 10 000 steps, < 100 ms.
 ///
 /// `dt` chosen only for numerical stability at this `N` (alpha*dt/dx^2 <=
 /// 0.5) -- this is a performance benchmark, not an accuracy one, so it
@@ -192,7 +192,7 @@ pub fn raw_rayon_dispatch_diagnostic(c: &mut Criterion) {
 }
 
 /// Dispatch of the finite-difference Jacobian assembly of the implicit
-/// solvers (#199, DT-069), sequential vs. parallel, through the public
+/// solvers ([#199](https://github.com/biface/oxiflow/issues/199), [DT-069](https://github.com/biface/oxiflow/issues/198)), sequential vs. parallel, through the public
 /// `BackwardEulerSolver::with_parallel_threshold`. What is timed is one
 /// full Backward Euler step: the threshold changes only the Jacobian
 /// assembly, so the difference between the two timings is the assembly's,
@@ -369,13 +369,13 @@ fn bounded_run(
     (Scenario::multi(vec![domain]).unwrap(), config)
 }
 
-/// What boundary conditions cost a solve (#202): the model without
+/// What boundary conditions cost a solve ([#202](https://github.com/biface/oxiflow/issues/202)): the model without
 /// conditions, with the two Danckwerts conditions and with two `Dirichlet`
 /// conditions, reported as `<integrator>/<conditions>` for each size.
 ///
 /// - RK4, 200 steps at a fifth of the diffusion limit `dx^2 / alpha`, on
 ///   101 and 1001 nodes: four derivative evaluations per step, each
-///   applying the conditions and holding their nodes (DD-070).
+///   applying the conditions and holding their nodes ([DD-070](https://github.com/biface/oxiflow/issues/200)).
 /// - Backward Euler, 5 steps of `1e-3`, on 101 and 401 nodes: every
 ///   column of the finite-difference Jacobian is one more derivative
 ///   evaluation, so the per-evaluation cost is multiplied by `n`.
@@ -385,7 +385,7 @@ fn bounded_run(
 /// of derivative evaluations, not with the number of nodes: the conditions
 /// set two nodes, and the solver's bookkeeping (which calculators the
 /// conditions need, which nodes they declare) runs at each evaluation
-/// whatever `n` (#201). Not tied to the `parallel` feature: the Laplacian
+/// whatever `n` ([#201](https://github.com/biface/oxiflow/issues/201)). Not tied to the `parallel` feature: the Laplacian
 /// stays below its dispatch threshold at these sizes.
 pub fn boundary_condition_overhead(c: &mut Criterion) {
     let mut group = c.benchmark_group("diffusion_1d_boundary_condition_overhead");
