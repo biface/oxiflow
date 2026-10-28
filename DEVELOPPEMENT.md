@@ -207,31 +207,31 @@ Proto lahar–lac sur grilles régulières — base de régression pour la voie 
 
 | Intégrateur | Type | Statut | Issue / DD |
 |---|---|---|---|
-| Forward Euler | Explicite, 1er ordre | ✅ Clos | #33, #41 |
-| RK4 | Explicite, 4e ordre | ✅ Clos | #41 |
-| Backward Euler | Implicite, 1er ordre | ✅ Clos | #43, DT-013, DD-033 |
-| Crank-Nicolson | Semi-implicite, 2e ordre | ✅ Clos | #43, DT-013, DD-033 |
-| BDF2 | Implicite multi-pas, 2e ordre | ✅ Clos | #44, DD-034 |
-| DoPri45 | Explicite adaptatif, ordre 5 | ✅ Clos | #42, DD-036 |
-| IMEX (splitting de Strang) | Transport-réaction | ✅ Clos | #45, DA-037 |
+| Forward Euler | Explicite, 1er ordre | ✅ Clos | [#33](https://github.com/biface/oxiflow/issues/33), [#41](https://github.com/biface/oxiflow/issues/41) |
+| RK4 | Explicite, 4e ordre | ✅ Clos | [#41](https://github.com/biface/oxiflow/issues/41) |
+| Backward Euler | Implicite, 1er ordre | ✅ Clos | [#43](https://github.com/biface/oxiflow/issues/43), [DT-013](https://github.com/biface/oxiflow/issues/13), [DD-033](https://github.com/biface/oxiflow/issues/86) |
+| Crank-Nicolson | Semi-implicite, 2e ordre | ✅ Clos | [#43](https://github.com/biface/oxiflow/issues/43), [DT-013](https://github.com/biface/oxiflow/issues/13), [DD-033](https://github.com/biface/oxiflow/issues/86) |
+| BDF2 | Implicite multi-pas, 2e ordre | ✅ Clos | [#44](https://github.com/biface/oxiflow/issues/44), [DD-034](https://github.com/biface/oxiflow/issues/87) |
+| DoPri45 | Explicite adaptatif, ordre 5 | ✅ Clos | [#42](https://github.com/biface/oxiflow/issues/42), [DD-036](https://github.com/biface/oxiflow/issues/89) |
+| IMEX (splitting de Strang) | Transport-réaction | ✅ Clos | [#45](https://github.com/biface/oxiflow/issues/45), [DA-037](https://github.com/biface/oxiflow/issues/90) |
 
-J4 est intégralement livré : les sept intégrateurs sont clos, y compris IMEX (#45) et les
-annotations serde `cfg_attr` sur les types J4 (#70).
+J4 est intégralement livré : les sept intégrateurs sont clos, y compris IMEX ([#45](https://github.com/biface/oxiflow/issues/45)) et les
+annotations serde `cfg_attr` sur les types J4 ([#70](https://github.com/biface/oxiflow/issues/70)).
 
 Architecture posée en chemin, réutilisable au-delà de J4 :
 
-- **`SteppableSolver`** (DA-031, DD-034) — primitive de pas (`step()`), historique borné via
+- **`SteppableSolver`** ([DA-031](https://github.com/biface/oxiflow/issues/82), [DD-034](https://github.com/biface/oxiflow/issues/87)) — primitive de pas (`step()`), historique borné via
   `history_depth()` pour les méthodes multi-pas (BDF2). Corps `solve_fixed_step()` par défaut
-  (DD-035) partagé par tous les intégrateurs à pas fixe — chaque `Solver::solve()` ci-dessus est
+  ([DD-035](https://github.com/biface/oxiflow/issues/88)) partagé par tous les intégrateurs à pas fixe — chaque `Solver::solve()` ci-dessus est
   un appel unique à cette méthode.
-- **`MultiDomainOrchestrator`** (DA-031) — pilote plusieurs domaines couplés, chacun avec son
+- **`MultiDomainOrchestrator`** ([DA-031](https://github.com/biface/oxiflow/issues/82)) — pilote plusieurs domaines couplés, chacun avec son
   propre `SteppableSolver` ; `dt` synchronisé entre domaines (multi-rate explicitement reporté).
-- **`LinearSolver`** (DT-013, `solver::linear`) — `Ax=b` indépendant du backend ; `nalgebra` dense
-  livré à J4, `faer` creux prévu à J6 (v0.6.0, #50) derrière le même trait.
-- **`StepSizeController`** (DD-036, `solver::methods::step_control`) — contrôle de pas adaptatif
+- **`LinearSolver`** ([DT-013](https://github.com/biface/oxiflow/issues/13), `solver::linear`) — `Ax=b` indépendant du backend ; `nalgebra` dense
+  livré à J4, `faer` creux prévu à J6 (v0.6.0, [#50](https://github.com/biface/oxiflow/issues/50)) derrière le même trait.
+- **`StepSizeController`** ([DD-036](https://github.com/biface/oxiflow/issues/89), `solver::methods::step_control`) — contrôle de pas adaptatif
   indépendant de la source d'erreur (contrôleur PI) ; DoPri45 en est le premier consommateur, un
-  futur solveur implicite adaptatif (Newton itéré, DD-033, J7) en est le second anticipé.
-- **`CompositeModel`** (DA-037, `model::composite`) — somme de plusieurs `PhysicalModel` sur un
+  futur solveur implicite adaptatif (Newton itéré, [DD-033](https://github.com/biface/oxiflow/issues/86), J7) en est le second anticipé.
+- **`CompositeModel`** ([DA-037](https://github.com/biface/oxiflow/issues/90), `model::composite`) — somme de plusieurs `PhysicalModel` sur un
   même état ; sert de référence monolithique testable pour `OperatorSplittingSolver`
   (`solver::methods::imex`).
 - DoPri45 implémente `Solver` seul, pas `SteppableSolver` — choisir son propre `dt` d'un appel à
@@ -243,7 +243,7 @@ Architecture posée en chemin, réutilisable au-delà de J4 :
 ## 7. J5 — Discrétisation (v0.5)
 
 Deux traits frères, chacun ne portant que ce dont sa famille a
-réellement besoin (DA-012, DA-039) :
+réellement besoin ([DA-012](https://github.com/biface/oxiflow/issues/12), [DA-039](https://github.com/biface/oxiflow/issues/95)) :
 
 ```rust
 /// Quantité différentielle brute — jamais besoin du contexte (dx vient du maillage).
@@ -263,55 +263,55 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
 }
 ```
 
-Schémas spatiaux : FD décentrées/centrées (#47, `DiscreteOperator`), FV conservatifs (#48),
+Schémas spatiaux : FD décentrées/centrées ([#47](https://github.com/biface/oxiflow/issues/47), `DiscreteOperator`), FV conservatifs ([#48](https://github.com/biface/oxiflow/issues/48)),
 WENO3/5 + limiteurs de flux MinMod/Van Leer/Superbee avec sélection adaptative selon le
-Péclet local (#49, tous deux `FluxDivergenceOperator`).
+Péclet local ([#49](https://github.com/biface/oxiflow/issues/49), tous deux `FluxDivergenceOperator`).
 
 Deux points de branchement distincts, chacun cohérent avec le trait de sa famille :
 - **FD** — consommé via le pipeline de `ContextCalculator` existant ; `FDGradientCalculator`/
   `FDLaplacianCalculator` délèguent leur stencil à `operators::fd` sans changement d'API
-  publique (issue de refactorisation dédiée, dépend de #47).
+  publique (issue de refactorisation dédiée, dépend de [#47](https://github.com/biface/oxiflow/issues/47)).
 - **FV/WENO** — consommés directement dans `compute_physics()` via le nouveau composite
-  `DiscretizedModel<Op: FluxDivergenceOperator>` (DA-038 amendée, DA-039), qui enveloppe le
+  `DiscretizedModel<Op: FluxDivergenceOperator>` ([DA-038](https://github.com/biface/oxiflow/issues/92) amendée, [DA-039](https://github.com/biface/oxiflow/issues/95)), qui enveloppe le
   schéma spatial comme un `PhysicalModel` ordinaire ne renvoyant que `-∇·F`. La borne de type
   garantit à la compilation qu'un opérateur FD ne peut pas y être branché par erreur. Le
-  terme source S, quand il existe, se compose via `CompositeModel` (DA-037, déjà livré) —
+  terme source S, quand il existe, se compose via `CompositeModel` ([DA-037](https://github.com/biface/oxiflow/issues/90), déjà livré) —
   aucun nouveau trait `SourceTerm` n'est introduit ce sprint. Les paramètres physiques de F
   (vitesse, diffusion) sont soit des champs constants à la construction (cas simple,
   `required_variables() -> vec![]`), soit référencés par `ContextVariable` et fournis par un
-  `ContextCalculator` ordinaire déjà ordonnancé par `chain.rs` (DD-009) — aucun mécanisme
+  `ContextCalculator` ordinaire déjà ordonnancé par `chain.rs` ([DD-009](https://github.com/biface/oxiflow/issues/9)) — aucun mécanisme
   nouveau. Le calculateur interne (`FluxDivergenceCalculator`) reste privé ce sprint — champ
   `instance_id` réservé pour une publication dans `ComputeContext` au moment de l'export
-  VTK/HDF5 (J6, DT-027).
+  VTK/HDF5 (J6, [DT-027](https://github.com/biface/oxiflow/issues/75)).
 
 Algèbre linéaire déléguée à `nalgebra` (dense, livré J4) et `faer` (creux, prévu J6) —
-l'intégration de `faer` prolonge le trait `LinearSolver` déjà posé à J4 (DT-013), pas une
+l'intégration de `faer` prolonge le trait `LinearSolver` déjà posé à J4 ([DT-013](https://github.com/biface/oxiflow/issues/13)), pas une
 nouvelle abstraction.
 
-**Critère de sortie :** #46–#49 clos, DA-012, DA-038 et DA-039 fermées, refactorisation FD
+**Critère de sortie :** [#46](https://github.com/biface/oxiflow/issues/46)–[#49](https://github.com/biface/oxiflow/issues/49) clos, [DA-012](https://github.com/biface/oxiflow/issues/12), [DA-038](https://github.com/biface/oxiflow/issues/92) et [DA-039](https://github.com/biface/oxiflow/issues/95) fermées, refactorisation FD
 livrée.
 
 ---
 
 ## 8. J6 — Algèbre linéaire creuse & persistance (v0.6)
 
-Solveur linéaire creux `faer-sparse` pour les systèmes implicites (#50, DT-013 phase 2).
-Export des résultats : VTK (`vtkio` à l'époque, remplacé par une écriture `.vtu` interne en v0.10.0, #191) comme pivot interop pour `SimulationResult` (#78,
-DT-027), HDF5 (`hdf5-metno`, migration de dépendance #79) pour les données volumineuses,
-incluant le chargement HDF5 pour `ExternalTabulated` (#105, scindée de #75).
+Solveur linéaire creux `faer-sparse` pour les systèmes implicites ([#50](https://github.com/biface/oxiflow/issues/50), [DT-013](https://github.com/biface/oxiflow/issues/13) phase 2).
+Export des résultats : VTK (`vtkio` à l'époque, remplacé par une écriture `.vtu` interne en v0.10.0, [#191](https://github.com/biface/oxiflow/issues/191)) comme pivot interop pour `SimulationResult` ([#78](https://github.com/biface/oxiflow/issues/78),
+[DT-027](https://github.com/biface/oxiflow/issues/75)), HDF5 (`hdf5-metno`, migration de dépendance [#79](https://github.com/biface/oxiflow/issues/79)) pour les données volumineuses,
+incluant le chargement HDF5 pour `ExternalTabulated` ([#105](https://github.com/biface/oxiflow/issues/105), scindée de [#75](https://github.com/biface/oxiflow/issues/75)).
 `SimulationSnapshot` généralisé au-delà de la reprise sur crash vers un checkpoint/reprise
-normal (DD-029, étend #71, #77) — pas de méthode `Solver::checkpoint()` : l'appelant
+normal ([DD-029](https://github.com/biface/oxiflow/issues/77), étend [#71](https://github.com/biface/oxiflow/issues/71), [#77](https://github.com/biface/oxiflow/issues/77)) — pas de méthode `Solver::checkpoint()` : l'appelant
 construit le snapshot directement, voir la documentation de module de `snapshot.rs`.
 
-L'amendement 1 de DT-027 ajoute le premier DTO de configuration côté HOW,
-`IntegratorSpec` (#104) — `TryFrom<IntegratorSpec> for Box<dyn Solver>`, seule la
-variante `BackwardEuler` pour cet incrément (le chemin de dispatch creux, #50). Les
+L'amendement 1 de [DT-027](https://github.com/biface/oxiflow/issues/75) ajoute le premier DTO de configuration côté HOW,
+`IntegratorSpec` ([#104](https://github.com/biface/oxiflow/issues/104)) — `TryFrom<IntegratorSpec> for Box<dyn Solver>`, seule la
+variante `BackwardEuler` pour cet incrément (le chemin de dispatch creux, [#50](https://github.com/biface/oxiflow/issues/50)). Les
 autres intégrateurs et l'axe WHAT (`ModelConfig`/`MeshConfig`/`BoundaryConditionConfig`)
 restent à faire, hors périmètre de J6.
 
 C'est également au moment de cette étape que le calculateur privé `FluxDivergenceCalculator`
-(DA-038, J5) est candidat à un branchement dans le pipeline de `ContextCalculator`, si l'export
-générique de champs de flux se révèle nécessaire — décision à reprendre avec le détail de DT-027,
+([DA-038](https://github.com/biface/oxiflow/issues/92), J5) est candidat à un branchement dans le pipeline de `ContextCalculator`, si l'export
+générique de champs de flux se révèle nécessaire — décision à reprendre avec le détail de [DT-027](https://github.com/biface/oxiflow/issues/75),
 pas figée à J5.
 
 Feature flags : `sparse`, `hdf5`, `vtk`.
@@ -320,11 +320,11 @@ Feature flags : `sparse`, `hdf5`, `vtk`.
 
 ## 9. J7 — Intégration temporelle non linéaire (v0.7)
 
-DD-033 gèle la méthode theta des intégrateurs implicites (Backward Euler, Crank-Nicolson,
+[DD-033](https://github.com/biface/oxiflow/issues/86) gèle la méthode theta des intégrateurs implicites (Backward Euler, Crank-Nicolson,
 BDF2) à une correction de type Newton non itérée pour J4 — exact pour les problèmes affines
 en `u`, approximation de premier ordre sinon. J7 lève cette limitation : solveur non linéaire
 (Newton itéré à convergence, ou méthode apparentée) branché derrière le même point d'extension
-que DD-033 anticipait déjà, sans réécriture des solveurs J4.
+que [DD-033](https://github.com/biface/oxiflow/issues/86) anticipait déjà, sans réécriture des solveurs J4.
 
 ### Pourquoi c'est nécessaire : le résidu discrétisé n'est pas toujours linéaire
 
@@ -340,7 +340,7 @@ g(u^{n+1}) = u^{n+1} - u^n - Δt · [(1-θ)·f(u^n) + θ·f(u^{n+1})] = 0
 (BDF2 a son propre résidu, `g(u) = (3/2)u - 2u^n + (1/2)u^{n-1} - Δt·f(u)`, mais le
 raisonnement est identique.) `g` est **linéaire** en `u^{n+1}` exactement lorsque `f` est
 affine en `u` — c'est-à-dire lorsque `F` et `S` sont tous deux affines. C'est précisément le
-cas que la correction unique à Jacobien gelé de J4 (DD-033, Option B) résout déjà de façon
+cas que la correction unique à Jacobien gelé de J4 ([DD-033](https://github.com/biface/oxiflow/issues/86), Option B) résout déjà de façon
 exacte : pour `f` affine, le Jacobien `∂g/∂u` est constant, indépendant de `u^{n+1}` — un
 unique pas de Newton depuis `u^n` tombe donc exactement sur la racine, sans itération
 nécessaire. Ce n'est pas un choix d'approximation, c'est une propriété d'algèbre linéaire.
@@ -365,24 +365,24 @@ J^k · Δu^k = -g(u^k),    J^k = ∂g/∂u |_{u=u^k} = I - Δt·θ · ∂f/∂u 
 u^{k+1} = u^k + Δu^k
 ```
 
-`∂f/∂u` est exactement ce que `finite_difference_jacobian` (DT-013, déjà en place depuis J4)
-approxime par différences finies — Newton la réutilise inchangée. Ce que DD-044 change, c'est
+`∂f/∂u` est exactement ce que `finite_difference_jacobian` ([DT-013](https://github.com/biface/oxiflow/issues/13), déjà en place depuis J4)
+approxime par différences finies — Newton la réutilise inchangée. Ce que [DD-044](https://github.com/biface/oxiflow/issues/109) change, c'est
 *combien de fois* ce Jacobien est réévalué par pas de temps et *quand la boucle s'arrête* —
 voir ci-dessous — pas le résidu, l'assemblage du Jacobien, ni la forme canonique elle-même.
 
-### DD-044 — activer cela correctement
+### [DD-044](https://github.com/biface/oxiflow/issues/109) — activer cela correctement
 
-DD-044 formalise cette activation : `NewtonConvergence` (basé résidu, par défaut) et
+[DD-044](https://github.com/biface/oxiflow/issues/109) formalise cette activation : `NewtonConvergence` (basé résidu, par défaut) et
 `JacobianStrategy` (Newton modifié/gelé, par défaut) comme énumérations HOW configurables ;
 `OxiflowError::NewtonNotConverged` routée via `Solver::on_divergence()` élargi ; une boucle
 Newton générique unique partagée par la méthode theta (Backward Euler/Crank-Nicolson) et BDF2,
 au lieu de la duplication par famille que J4 utilisait quand Newton n'avait qu'un seul
 consommateur ; `IntegratorSpec` étendu à `BackwardEuler` (champs Newton ajoutés) plus nouveaux
 variants `CrankNicolson` et `BDF2` (ce dernier sans champs sparse — `BDF2Solver` n'avait pas de
-dispatch sparse, un écart DA-043 laissé ouvert ici, pas une préoccupation de J7 ; comblé en
-v0.10.0 par #133).
+dispatch sparse, un écart [DA-043](https://github.com/biface/oxiflow/issues/103) laissé ouvert ici, pas une préoccupation de J7 ; comblé en
+v0.10.0 par [#133](https://github.com/biface/oxiflow/issues/133)).
 
-Découpage opérationnel (DD-044, `oxiflow-issues-v0.7.0.yml`) :
+Découpage opérationnel ([DD-044](https://github.com/biface/oxiflow/issues/109), `oxiflow-issues-v0.7.0.yml`) :
 
 1. Cœur de la boucle Newton (`NewtonConvergence`, `JacobianStrategy`, `NewtonNotConverged`,
    `newton_residual`/`newton_linear_correction`, boucle générique) — prérequis pour 2–3.
@@ -390,7 +390,7 @@ Découpage opérationnel (DD-044, `oxiflow-issues-v0.7.0.yml`) :
 3. Branchement BDF2.
 4. `IntegratorSpec::BackwardEuler` étendu, variants `CrankNicolson` et `BDF2` ajoutés —
    dépendent respectivement de 2/3.
-5. Test de régression pour la limitation connue et non testée de DD-033 (interaction
+5. Test de régression pour la limitation connue et non testée de [DD-033](https://github.com/biface/oxiflow/issues/86) (interaction
    Jacobien perturbé × condition Dirichlet) — indépendant de 1–4.
 
 **Critère de sortie :** un problème non affine en `u` converge à l'ordre attendu sous
@@ -403,7 +403,7 @@ de J4 ne donnait qu'une approximation de premier ordre.
 
 Profilage du cœur de calcul (chaîne de calculateurs, opérateurs spatiaux J5, solveurs
 linéaires J6) et optimisation algorithmique/mémoire ciblée sur les points chauds mesurés.
-Formalisation du GPU-readiness (DA-026, cinq invariants structurels INV-GPU-1 à INV-GPU-5 :
+Formalisation du GPU-readiness ([DA-026](https://github.com/biface/oxiflow/issues/73), cinq invariants structurels INV-GPU-1 à INV-GPU-5 :
 mémoire contigüe, dimensions explicites, absence de trait objects dans le cœur numérique).
 Feature flag `gpu` (`wgpu`) introduite derrière ces invariants — pas avant qu'ils soient
 vérifiés sur la codebase existante. ROCm explicitement hors périmètre.
@@ -413,8 +413,8 @@ vérifiés sur la codebase existante. ROCm explicitement hors périmètre.
 ## 11. J9 — Parallélisme & benchmarking (v0.9)
 
 Parallélisme Rayon (feature `parallel` opt-in, seuil configurable via
-`set_parallel_threshold()`, DT-014). Cache dirty-flag + invalidation temporelle sur
-`ComputeContext` (DD-015). Benchmarks Criterion.
+`set_parallel_threshold()`, [DT-014](https://github.com/biface/oxiflow/issues/14)). Cache dirty-flag + invalidation temporelle sur
+`ComputeContext` ([DD-015](https://github.com/biface/oxiflow/issues/15)). Benchmarks Criterion.
 
 **Critère de sortie :** benchmark de référence (diffusion 1D, 1000 points, 10 000 pas)
 < 100 ms sur un CPU moderne, avec et sans `parallel`.
@@ -430,25 +430,25 @@ et graduée) ; Gray–Scott en 1D : instabilité de Turing, réplication ; couch
 magnétique 1D dans un conducteur (proto) ; génération d'une vague par un lahar dans un lac.
 Chacun se contrôle contre sa référence de validation et tourne aussi en CI.
 
-Coefficients dépendant de la position et du temps, `(x, t)`, via `CoefficientField` (DD-066,
-#181).
+Coefficients dépendant de la position et du temps, `(x, t)`, via `CoefficientField` ([DD-066](https://github.com/biface/oxiflow/issues/181),
+[#181](https://github.com/biface/oxiflow/issues/181)).
 
 Audit des invariants FEM avant publication (INV-1/2/3 vérifiés sur l'ensemble de la codebase).
 
 Stabilité API : SemVer strict, `cargo-semver-checks` dans le pipeline de release, MSRV documenté.
 
-`oxiflow-prelude` (DA-023, #62), crate d'entrée ergonomique (réexports + calculateurs built-in +
+`oxiflow-prelude` ([DA-023](https://github.com/biface/oxiflow/issues/62)), crate d'entrée ergonomique (réexports + calculateurs built-in +
 `quick_config()`/`run()` pour les cas simples) à dépendance strictement unidirectionnelle vers
 le moteur, ne fait pas partie de J10 : elle est reportée à J20 (v0.20.0) et en attente.
 
 ### 12.1 Exemples, tests, benchmarks et modèles partagés
 
 Chaque modèle de référence est défini une seule fois et utilisé par toutes les cibles qui en
-ont besoin (#194) :
+ont besoin ([#194](https://github.com/biface/oxiflow/issues/194)) :
 
 | Répertoire | Rôle | Exécution |
 |---|---|---|
-| `examples/` | Exemples complets et validés, qui montrent comment instancier les outils d'oxiflow | À la main ; les exemples de référence de #173 tournent aussi en CI, les autres sont seulement compilés par `clippy --all-targets` |
+| `examples/` | Exemples complets et validés, qui montrent comment instancier les outils d'oxiflow | À la main ; les exemples de référence de [#173](https://github.com/biface/oxiflow/issues/173) tournent aussi en CI, les autres sont seulement compilés par `clippy --all-targets` |
 | `tests/` | Tests d'intégration sur de vrais enchaînements de modèles ; les comparaisons à l'epsilon aux solutions analytiques et à la littérature (`*_analytical.rs`, `*_reference.rs`) y vivent | CI (`cargo test`) |
 | `benches/` | Parangonnage, comparaison à la littérature et abaques de dispatch : conditions d'emploi des solveurs, choix d'implémentation, reproductibilité | À la main, en local (configuration `7. Bench`), hors CI |
 | `rsc/models/` | Définitions de modèles partagées, incluses par les trois cibles ci-dessus avec `#[path]` | Par les cibles qui les incluent |
@@ -490,7 +490,7 @@ différences finies.
 
 ### 13.2 INV-4 — API plugin-safe
 
-**Introduit en v0.30.0 [J30]** (DA-017, #17). Tous les traits publics doivent être object-safe et entièrement
+**Introduit en v0.30.0 [J30]** ([DA-017](https://github.com/biface/oxiflow/issues/17)). Tous les traits publics doivent être object-safe et entièrement
 accessibles depuis une crate externe sans dépendre des internals du moteur.
 
 Vérification : une crate d'intégration dédiée `oxiflow-test-plugin` (externe, hors
@@ -511,11 +511,11 @@ qu'il soit en place et vérifié.
 ### 13.3 Périmètre de la voie FEM
 
 Réparti de J11 à J18 (voir §2). Maillage non structuré (parseur interne minimal pour `.msh` Gmsh
-— nœuds, connectivité, groupes physiques → `BoundaryLocation`, DT-028 ; triangles 2D, tétraèdres
+— nœuds, connectivité, groupes physiques → `BoundaryLocation`, [DT-028](https://github.com/biface/oxiflow/issues/76) ; triangles 2D, tétraèdres
 3D, raffinement h-adaptatif). Espaces fonctionnels (P1, P2 Lagrange, Raviart–Thomas, DG0).
 Assembleur FEM (matrices de rigidité et de masse, quadratures de Gauss, intégration sur faces).
 Solveurs linéaires creux (`faer-sparse`, préconditionneurs ILU/AMG). Formulation ALE pour
-l'exemple lahar–lac. Les méthodes spectrales (DA-024) viennent après cette voie, à J19 :
+l'exemple lahar–lac. Les méthodes spectrales ([DA-024](https://github.com/biface/oxiflow/issues/63)) viennent après cette voie, à J19 :
 l'expérience FEM sur `Mesh::coordinates()` en guidera la conception.
 
 ---
@@ -646,7 +646,7 @@ Conditions pour un framework tiers :
 | Accès contexte des opérateurs | `FluxDivergenceOperator` : trait frère de `DiscreteOperator`, porte `ctx`/`RequiresContext` | Ajout de `ctx` directement sur `DiscreteOperator` ; sous-trait de `DiscreteOperator` | J5 | INV-2 |
 | Solveurs linéaires (creux) | Délégation `faer-sparse` | Implémentation maison | J6 | |
 | Export de résultats | VTK pivot interop + HDF5 données volumineuses | Format maison | J6 | |
-| Intégration non linéaire | Newton itéré, point d'extension DD-033 activé par DD-044 (boucle générique, pas de duplication par famille) | Réécriture des solveurs J4 ; boucle dupliquée par famille | J7 | |
+| Intégration non linéaire | Newton itéré, point d'extension [DD-033](https://github.com/biface/oxiflow/issues/86) activé par [DD-044](https://github.com/biface/oxiflow/issues/109) (boucle générique, pas de duplication par famille) | Réécriture des solveurs J4 ; boucle dupliquée par famille | J7 | |
 | GPU-readiness | Invariants structurels formalisés avant feature `gpu` | `wgpu` sans contrainte préalable | J8 | |
 | Parallélisme | Rayon, opt-in feature flag | Obligatoire ou absent | J9 | |
 | Cache | Dirty flag + invalidation temporelle | Recalcul systématique | J9 | |
@@ -673,7 +673,7 @@ Conditions pour un framework tiers :
 | R9 | ALE incompatible avec CouplingOperator | Faible | Proto lahar–lac à J3 est le banc d'essai |
 | R10 | INV-4 violé — frameworks tiers cassés lors d'une mise à jour du moteur | Moyenne | Crate `oxiflow-test-plugin` externe en CI dès v0.30.0 ; `cargo-semver-checks` dans le pipeline |
 | R11 | Fragmentation — frameworks tiers incompatibles entre eux | Faible | INV-4 + API publique stable est le seul contrat de compatibilité ; les auteurs de frameworks sont responsables de leur propre SemVer |
-| R12 | Point de branchement FV/WENO (DA-038) mal choisi et coûteux à défaire | Faible | Calculateur interne gardé privé (champ `instance_id` réservé) — extension additive vers J6 sans restructuration |
+| R12 | Point de branchement FV/WENO ([DA-038](https://github.com/biface/oxiflow/issues/92)) mal choisi et coûteux à défaire | Faible | Calculateur interne gardé privé (champ `instance_id` réservé) — extension additive vers J6 sans restructuration |
 
 ---
 
