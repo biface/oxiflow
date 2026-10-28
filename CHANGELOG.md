@@ -135,7 +135,7 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by the mirror symmetry of the state. The example exits with an error
   beyond its tolerances and runs in CI with the reference examples (#176).
 - `examples/lahar_lake_wave`, the surface-geophysics reference example: a
-  lahar (the DD-032 multi-field model, 20 m²/s with a solids fraction of
+  lahar (the DQ-032 multi-field model, 20 m²/s with a solids fraction of
   0.2) runs down a 4 km channel and pours over a lip into a lake 15 m deep.
   Channel and lake are two domains on their own grids, advanced by
   `MultiDomainOrchestrator` and coupled by two `CouplingOperator`s that

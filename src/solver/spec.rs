@@ -2,7 +2,7 @@
 //!
 //! External, serialisable DTO describing *which* integration method to
 //! build and with what parameters — the HOW-axis config-loading increment
-//! of DD-027 amendment 1 (issue #104).
+//! of DT-027 amendment 1 (issue #104).
 //!
 //! ## Not `IntegratorKind`
 //!
@@ -23,7 +23,7 @@
 //!
 //! [`IntegratorSpec::BackwardEuler`], [`IntegratorSpec::CrankNicolson`]
 //! (#115), and [`IntegratorSpec::BDF2`] (#116, sparse fields since #133),
-//! covering the DD-043 (#50) sparse dispatch path — this whole module is
+//! covering the DA-043 (#50) sparse dispatch path — this whole module is
 //! gated behind the `sparse` feature:
 //! without it, a config DTO for these integrators adds nothing over the
 //! existing [`super::IntegratorKind`] labels, since the dense path takes
@@ -58,7 +58,7 @@ use crate::context::error::OxiflowError;
 #[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum IntegratorSpec {
     /// Backward Euler (DD-... implicit method), optionally dispatching to
-    /// the sparse linear solver path (DD-043, #50) above `sparse_threshold`
+    /// the sparse linear solver path (DA-043, #50) above `sparse_threshold`
     /// once `jacobian_bandwidth` is also supplied. The sparse backend
     /// itself is always [`FaerSparseSolver`] (see [module docs](self)).
     BackwardEuler {
@@ -67,7 +67,7 @@ pub enum IntegratorSpec {
         #[cfg_attr(feature = "serde", serde(default = "default_sparse_threshold"))]
         sparse_threshold: usize,
         /// Half-bandwidth of the Jacobian (e.g. `scheme.stencil_radius()`,
-        /// DD-039) — see [`BackwardEulerSolver::with_jacobian_bandwidth`].
+        /// DA-039) — see [`BackwardEulerSolver::with_jacobian_bandwidth`].
         /// `None` keeps the dense path regardless of `sparse_threshold`.
         #[cfg_attr(feature = "serde", serde(default))]
         jacobian_bandwidth: Option<usize>,
@@ -91,7 +91,7 @@ pub enum IntegratorSpec {
     },
     /// Crank-Nicolson (semi-implicit, 2nd order), symmetric to
     /// [`BackwardEuler`](Self::BackwardEuler) in every field — sparse
-    /// dispatch (DD-043) and Newton configuration (DD-044, [#115](https://github.com/biface/oxiflow/issues/115)) both
+    /// dispatch (DA-043) and Newton configuration (DD-044, [#115](https://github.com/biface/oxiflow/issues/115)) both
     /// apply identically. `theta = 0.5` is not exposed as a field —
     /// implicit to the variant, consistent with `BackwardEuler`'s
     /// `theta = 1.0` never being exposed either.
@@ -114,7 +114,7 @@ pub enum IntegratorSpec {
     },
     /// BDF2 (implicit multi-step, 2nd order), symmetric to
     /// [`BackwardEuler`](Self::BackwardEuler) in every field: sparse
-    /// dispatch (DD-043, [#133](https://github.com/biface/oxiflow/issues/133)), for the Backward Euler bootstrap
+    /// dispatch (DA-043, [#133](https://github.com/biface/oxiflow/issues/133)), for the Backward Euler bootstrap
     /// step and the BDF2 update alike, and Newton configuration (DD-044,
     /// [#116](https://github.com/biface/oxiflow/issues/116)).
     BDF2 {

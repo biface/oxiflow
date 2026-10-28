@@ -42,7 +42,7 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// Crank-Nicolson solver — semi-implicit, 2nd order.
 #[derive(Default)]
 pub struct CrankNicolsonSolver {
-    /// Linear-system backends (DD-013, DD-043): the dense solver and,
+    /// Linear-system backends (DT-013, DA-043): the dense solver and,
     /// with the `sparse` feature, the banded-path configuration, set by
     /// `with_linear_solver` and the `with_sparse_*`/`with_jacobian_bandwidth`
     /// builders.
@@ -69,7 +69,7 @@ impl CrankNicolsonSolver {
         Self::default()
     }
 
-    /// Substitutes the linear solver backend (DD-013).
+    /// Substitutes the linear solver backend (DT-013).
     pub fn with_linear_solver(mut self, linear_solver: Box<dyn LinearSolver>) -> Self {
         self.backend.linear_solver = linear_solver;
         self
@@ -133,7 +133,7 @@ impl CrankNicolsonSolver {
         self.jacobian_dispatch.threshold()
     }
 
-    /// Configures the sparse backend (DD-043) — see
+    /// Configures the sparse backend (DA-043) — see
     /// [`BackwardEulerSolver::with_sparse_solver`](super::backward_euler::BackwardEulerSolver::with_sparse_solver).
     #[cfg(feature = "sparse")]
     pub fn with_sparse_solver(mut self, sparse_solver: Box<dyn SparseLinearSolver>) -> Self {
@@ -150,7 +150,7 @@ impl CrankNicolsonSolver {
     }
 
     /// Declares the Jacobian's half-bandwidth (e.g.
-    /// `scheme.stencil_radius()`, DD-039).
+    /// `scheme.stencil_radius()`, DA-039).
     ///
     /// Counted in flat unknowns. For a `ScalarField` state this is the
     /// stencil half-width `s`; for a `VectorField` state of `d` components,

@@ -1,5 +1,5 @@
 //! Criterion benchmark entry point for parallel-dispatch calibration
-//! (#53, DD-048).
+//! (#53, DA-048).
 //!
 //! A single binary (`oxiflow_parallel`, matching the `[[bench]]` slot in
 //! `Cargo.toml` -- named for its object, since other `[[bench]]` targets

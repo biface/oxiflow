@@ -53,7 +53,7 @@
 //! Backward Euler startup step (#192). For a `ScalarField`, results are
 //! bit-identical to the former code.
 //!
-//! ## Banded path (feature `sparse`, DD-043)
+//! ## Banded path (feature `sparse`, DA-043)
 //!
 //! Like [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver)
 //! and [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver),
@@ -95,7 +95,7 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// // Dense path (default).
 /// let solver = BDF2Solver::new();
 ///
-/// // Banded path (feature `sparse`, DD-043): the dense path stays
+/// // Banded path (feature `sparse`, DA-043): the dense path stays
 /// // untouched unless a sparse solver and a bandwidth are both configured.
 /// # #[cfg(feature = "sparse")]
 /// # {
@@ -108,7 +108,7 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// ```
 #[derive(Default)]
 pub struct BDF2Solver {
-    /// Linear-system backends (DD-013, DD-043): the dense solver and,
+    /// Linear-system backends (DT-013, DA-043): the dense solver and,
     /// with the `sparse` feature, the banded-path configuration, set by
     /// `with_linear_solver` and the `with_sparse_*`/`with_jacobian_bandwidth`
     /// builders, for the startup step and the BDF2 update alike.
@@ -136,7 +136,7 @@ impl BDF2Solver {
         Self::default()
     }
 
-    /// Substitutes the linear solver backend (DD-013).
+    /// Substitutes the linear solver backend (DT-013).
     pub fn with_linear_solver(mut self, linear_solver: Box<dyn LinearSolver>) -> Self {
         self.backend.linear_solver = linear_solver;
         self
@@ -202,7 +202,7 @@ impl BDF2Solver {
         self.jacobian_dispatch.threshold()
     }
 
-    /// Configures the sparse backend (DD-043), for the startup step and
+    /// Configures the sparse backend (DA-043), for the startup step and
     /// the BDF2 update alike. Has no effect on its own — the banded path
     /// also requires [`Self::with_jacobian_bandwidth`] and a system larger
     /// than [`Self::with_sparse_threshold`] (default 100) at solve time;
@@ -222,7 +222,7 @@ impl BDF2Solver {
     }
 
     /// Declares the Jacobian's half-bandwidth (e.g.
-    /// `scheme.stencil_radius()`, DD-039) — see [`Self::with_sparse_solver`].
+    /// `scheme.stencil_radius()`, DA-039) — see [`Self::with_sparse_solver`].
     ///
     /// Counted in flat unknowns. For a `ScalarField` state this is the
     /// stencil half-width `s`; for a `VectorField` state of `d` components,
@@ -459,7 +459,7 @@ mod tests {
         }
     }
 
-    // ── LinearSolver substitution (DD-013) ────────────────────────────────────
+    // ── LinearSolver substitution (DT-013) ────────────────────────────────────
 
     #[test]
     fn with_linear_solver_substitutes_backend() {
@@ -688,7 +688,7 @@ mod tests {
         );
     }
 
-    // ── Banded path (DD-043, #133) ───────────────────────────────────────────
+    // ── Banded path (DA-043, #133) ───────────────────────────────────────────
 
     /// Takes the banded path on every system: half-bandwidth 0 (the
     /// Jacobians of these scalar models are diagonal), threshold 0, and a

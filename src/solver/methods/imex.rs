@@ -1,13 +1,13 @@
 //! # Module `solver::methods::imex`
 //!
-//! Temporal operator splitting — `OperatorSplittingSolver` (DD-037, #45).
+//! Temporal operator splitting — `OperatorSplittingSolver` (DA-037, #45).
 //!
 //! ## Temporal coupling, not spatial
 //!
 //! This module composes **n ≥ 2** [`PhysicalModel`](crate::model::PhysicalModel)
 //! evaluated in sequence on the **same state**, the **same mesh** — as
 //! opposed to INV-3's spatial coupling (`CouplingOperator`, cross-domain,
-//! asymmetric source → target at an `Interface`). See DD-037 for the full
+//! asymmetric source → target at an `Interface`). See DA-037 for the full
 //! distinction between the two families.
 //!
 //! oxiflow's canonical form already names two separate terms:
@@ -25,14 +25,14 @@
 //! Only **one-step** sub-solvers (`history_depth() == 0`) are supported —
 //! validated at construction. [`SplittingScheme::Strang`] is the only
 //! implemented and tested variant; [`SplittingScheme::LieTrotter`] is
-//! reserved (DD-037) and rejected at construction until a concrete case
+//! reserved (DA-037) and rejected at construction until a concrete case
 //! requires it.
 //!
 //! ## The outer `Scenario`/`Domain`
 //!
 //! [`Solver::solve`] requires a `Scenario` — hence an outer `Domain` — even
 //! though `OperatorSplittingSolver` doesn't need one to compute (it has
-//! everything in its own operators). DD-037 settles this for
+//! everything in its own operators). DA-037 settles this for
 //! [`crate::model::CompositeModel`]: the outer `Domain` carries the sum of
 //! the contributions, which makes `scenario.context_requirements()` and
 //! `domain.model.initial_state()` correct without dedicated logic here —
@@ -60,7 +60,7 @@ pub struct SplitOperator {
     /// Mesh, BCs, and model specific to this contribution.
     pub domain: Domain,
     /// Sub-solver integrating this contribution. Must have
-    /// `history_depth() == 0` (v1 scope, DD-037).
+    /// `history_depth() == 0` (v1 scope, DA-037).
     pub solver: Box<dyn SteppableSolver>,
 }
 
@@ -71,7 +71,7 @@ pub struct SplitOperator {
 pub enum SplittingScheme {
     /// Full step of each operator, in sequence — order 1.
     ///
-    /// Reserved (DD-037): same structure as `Strang`, but not implemented
+    /// Reserved (DA-037): same structure as `Strang`, but not implemented
     /// or tested here — `OperatorSplittingSolver::new` rejects it until a
     /// concrete case requires it.
     LieTrotter,
@@ -83,7 +83,7 @@ pub enum SplittingScheme {
 }
 
 /// Generic composite: n ≥ 2 operators sharing the same state, composed
-/// according to a [`SplittingScheme`] (DD-037, #45).
+/// according to a [`SplittingScheme`] (DA-037, #45).
 pub struct OperatorSplittingSolver {
     operators: Vec<SplitOperator>,
     scheme: SplittingScheme,
@@ -117,9 +117,9 @@ impl OperatorSplittingSolver {
     ///
     /// `OxiflowError::PreconditionFailed` if:
     /// - fewer than two operators are provided;
-    /// - a sub-solver has `history_depth() != 0` (v1 scope, DD-037);
+    /// - a sub-solver has `history_depth() != 0` (v1 scope, DA-037);
     /// - `scheme` is `SplittingScheme::LieTrotter` (reserved, not
-    ///   implemented — DD-037).
+    ///   implemented — DA-037).
     pub fn new(
         operators: Vec<SplitOperator>,
         scheme: SplittingScheme,
@@ -137,7 +137,7 @@ impl OperatorSplittingSolver {
         if scheme == SplittingScheme::LieTrotter {
             return Err(OxiflowError::PreconditionFailed {
                 context: "OperatorSplittingSolver::new",
-                message: "SplittingScheme::LieTrotter is reserved (DD-037) — not yet \
+                message: "SplittingScheme::LieTrotter is reserved (DA-037) — not yet \
                            implemented or tested; use SplittingScheme::Strang"
                     .into(),
             });
@@ -151,7 +151,7 @@ impl OperatorSplittingSolver {
                     message: format!(
                         "sub-solver for operator '{}' has history_depth() == {depth} — \
                          only one-step sub-solvers (history_depth() == 0) are supported \
-                         in v1 (DD-037)",
+                         in v1 (DA-037)",
                         op.domain.model.name()
                     ),
                 });
@@ -194,7 +194,7 @@ impl OperatorSplittingSolver {
     ) -> Result<ContextValue, OxiflowError> {
         match self.scheme {
             // Unreachable: rejected by `new` — kept for exhaustiveness in
-            // case `SplittingScheme` gains more variants later (DD-037).
+            // case `SplittingScheme` gains more variants later (DA-037).
             SplittingScheme::LieTrotter => unreachable!(
                 "SplittingScheme::LieTrotter is rejected by OperatorSplittingSolver::new"
             ),
@@ -202,7 +202,7 @@ impl OperatorSplittingSolver {
         }
     }
 
-    /// Symmetric/palindromic composition, generalised to n ≥ 2 (DD-037).
+    /// Symmetric/palindromic composition, generalised to n ≥ 2 (DA-037).
     ///
     /// Φ₁(dt/2) ∘ Φ₂(dt/2) ∘ … ∘ Φₙ₋₁(dt/2) ∘ Φₙ(dt) ∘ Φₙ₋₁(dt/2) ∘ … ∘ Φ₁(dt/2)
     ///
@@ -257,7 +257,7 @@ impl Solver for OperatorSplittingSolver {
     /// stay consistent with the other fixed-step solvers, divergence
     /// included: a non-finite state hands a `SimulationSnapshot` to
     /// [`Solver::on_divergence`] before `SolverDivergence` is returned
-    /// (DD-025, #134).
+    /// (DT-025, #134).
     fn solve(
         &self,
         scenario: &Scenario,

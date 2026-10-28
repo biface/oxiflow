@@ -10,7 +10,7 @@
 //! Single definition shared by `examples/lahar_multifield.rs`,
 //! `examples/lahar_multifield_plot.rs`, `examples/lahar_lake_wave.rs`,
 //! `tests/lahar_multifield_analytical.rs` and `benches/lahar_multifield.rs`,
-//! each of which includes this file as a module with `#[path]`. The model (DD-032, Woodhouse, Hogg & Phillips) is
+//! each of which includes this file as a module with `#[path]`. The model (DQ-032, Woodhouse, Hogg & Phillips) is
 //! documented in `examples/lahar_multifield.rs`.
 //!
 //! Requires `rsc/models/lahar_physics.rs` as a sibling module named
@@ -41,7 +41,7 @@ pub(crate) struct ShallowLayerFlux {
     /// [`ShallowLayerFlux::rusanov_face`] evaluations per node --
     /// primitives + physical flux each side) -- default measured at
     /// v0.9.0, see [`default_flux_parallel_threshold`]. Per-
-    /// instance, not global (DD-048 P1/P2/P3): this site's own coupling
+    /// instance, not global (DA-048 P1/P2/P3): this site's own coupling
     /// granularity (one node's flux touches only its immediate face
     /// neighbours) has nothing to do with `LaharSource`'s per-node cost
     /// profile, so each gets its own threshold rather than sharing one.
@@ -114,7 +114,7 @@ impl ShallowLayerFlux {
 impl RequiresContext for ShallowLayerFlux {
     fn required_variables(&self) -> Vec<ContextVariable> {
         // Constant rho_f/rho_s -- nothing to resolve from ComputeContext,
-        // the "simple case" of DD-039 (same posture as FV/WENO).
+        // the "simple case" of DA-039 (same posture as FV/WENO).
         vec![]
     }
 }

@@ -43,9 +43,9 @@
 //! `SteppableSolver`. BDF2's gap (needing `u^{n-1}`) was orthogonal to
 //! `dt` itself; this solver's defining feature is choosing its *own*
 //! `dt` across calls, which is in direct tension with
-//! `MultiDomainOrchestrator`'s v1 scope (DD-031: `dt` synchronised across
+//! `MultiDomainOrchestrator`'s v1 scope (DA-031: `dt` synchronised across
 //! domains). Making this orchestrator-compatible would mean re-opening
-//! the multirate question DD-031 already deferred — not a gap orthogonal
+//! the multirate question DA-031 already deferred — not a gap orthogonal
 //! to an existing limitation, but the same one. Revisit together if
 //! multirate coupling is ever tackled.
 //!

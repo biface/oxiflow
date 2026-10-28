@@ -1,6 +1,6 @@
 //! # Module `context::compute`
 //!
-//! Type-safe computation context (DD-006, issue #30).
+//! Type-safe computation context (DA-006, issue #30).
 //!
 //! ## `ComputeContext`
 //!
@@ -9,7 +9,7 @@
 //! `compute_physics_v2()` and access variables through typed accessors —
 //! no string keys, no `HashMap<String, f64>`, no runtime type guessing.
 //!
-//! ## Revised signatures (DD-006)
+//! ## Revised signatures (DA-006)
 //!
 //! - `gradient(dim)` returns `&DVector<f64>` — the full nodal field, consistent
 //!   with `ContextValue::ScalarField`. The model indexes the node it needs.

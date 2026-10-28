@@ -12,17 +12,17 @@
 //!   never need physical parameters or context access; `dx` comes from the mesh
 //!   alone. Consumed transparently through [`crate::context::ContextCalculator`]
 //!   (e.g. `FDGradientCalculator`) — a model declares a required context
-//!   variable and never knows which scheme produced it (DD-012).
+//!   variable and never knows which scheme produced it (DA-012).
 //! - [`FluxDivergenceOperator`] — the complete `∇·F(u, ∇u)` term, which does need
 //!   physical parameters (advection velocity, diffusion coefficient) that may be
 //!   space/time-varying. Carries `ctx: &ComputeContext` and `RequiresContext`
-//!   directly on `apply()`. Consumed by `DiscretizedModel<Op>` (DD-038, DD-039).
+//!   directly on `apply()`. Consumed by `DiscretizedModel<Op>` (DA-038, DA-039).
 //!
 //! `FluxDivergenceOperator` is a **sibling** trait, not a sub-trait of
 //! `DiscreteOperator`: their `apply()` signatures diverge (with/without `ctx`),
 //! so a sub-trait relationship could not cleanly reuse the parent method.
 //! Forcing `ctx`/`RequiresContext` onto `DiscreteOperator` for every scheme was
-//! considered and rejected (DD-012, amendment 2) — it would have imposed that
+//! considered and rejected (DA-012, amendment 2) — it would have imposed that
 //! capability on FD, which never needs it.
 //!
 //! **Selection criterion for future schemes** (FEM from v0.12.0 (J12), spectral methods at v0.19.0 (J19)):
@@ -62,15 +62,15 @@ use rayon::prelude::*;
 /// Computes a single differential quantity (`∂u/∂x`, `∂²u/∂x²`, ...) from a
 /// field and a mesh, with no dependency on physical parameters or runtime
 /// context: `dx` comes entirely from `mesh`. Consumed transparently through
-/// [`crate::context::ContextCalculator`] (DD-012) — never called directly by a
+/// [`crate::context::ContextCalculator`] (DA-012) — never called directly by a
 /// temporal integrator.
 ///
-/// Uses an associated type `MeshType`, not a generic parameter, per DD-012
+/// Uses an associated type `MeshType`, not a generic parameter, per DA-012
 /// amendment 1: each scheme implementation targets exactly one mesh family, so
 /// a generic `DiscreteOperator<M: Mesh>` would add flexibility no consumer
 /// needs, at the cost of object-safety (INV-4).
 ///
-/// Distinct from [`FluxDivergenceOperator`] (DD-039), which computes the
+/// Distinct from [`FluxDivergenceOperator`] (DA-039), which computes the
 /// complete `∇·F(u, ∇u)` term and does need context access — see the module
 /// documentation above for the selection criterion between the two.
 pub trait DiscreteOperator: Send + Sync {
@@ -86,7 +86,7 @@ pub trait DiscreteOperator: Send + Sync {
     ) -> Result<ContextValue, OxiflowError>;
 }
 
-/// Complete flux-divergence spatial operator (FV/WENO family) — DD-039.
+/// Complete flux-divergence spatial operator (FV/WENO family) — DA-039.
 ///
 /// Computes the full `∇·F(u, ∇u)` term of the canonical PDE form, which —
 /// unlike [`DiscreteOperator`] — requires knowledge of the physics of `F`
@@ -96,9 +96,9 @@ pub trait DiscreteOperator: Send + Sync {
 ///
 /// A **sibling** trait to `DiscreteOperator`, not a sub-trait: the two
 /// `apply()` signatures diverge (with/without `ctx`), so a sub-trait
-/// relationship could not reuse the parent method cleanly (DD-039, option B
+/// relationship could not reuse the parent method cleanly (DA-039, option B
 /// rejected). Adding `ctx`/`RequiresContext` to `DiscreteOperator` itself was
-/// also rejected (DD-012, amendment 2; DD-039, option A) — it would force
+/// also rejected (DA-012, amendment 2; DA-039, option A) — it would force
 /// that capability onto FD schemes, which never need it.
 ///
 /// Two consumption modes fall out of `RequiresContext` for free, with no new
@@ -109,7 +109,7 @@ pub trait DiscreteOperator: Send + Sync {
 /// them from `ctx`, resolved and ordered beforehand by `chain.rs` (DD-009)
 /// exactly as for any `PhysicalModel`/`BoundaryCondition`.
 ///
-/// Consumed by `DiscretizedModel<Op>` (DD-038), which binds `Op:
+/// Consumed by `DiscretizedModel<Op>` (DA-038), which binds `Op:
 /// FluxDivergenceOperator` — an FD scheme cannot be plugged in there; that
 /// becomes a compile error, not a silent runtime bug.
 pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
@@ -128,7 +128,7 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
 
     /// Half-width of the stencil this scheme reads on each side of a cell —
     /// a property of the numerical scheme itself (HOW), never of the
-    /// physical model it backs (DD-043, amendment 1). No default: every
+    /// physical model it backs (DA-043, amendment 1). No default: every
     /// implementation must state its own value explicitly, the same
     /// posture as [`crate::model::traits::RequiresContext::required_variables`].
     ///
@@ -138,7 +138,7 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
     /// `BackwardEulerSolver::with_jacobian_bandwidth(scheme.stencil_radius())`,
     /// v0.6.0/#50). Never read back from a `PhysicalModel`: bandwidth is a
     /// solver-side assertion (HOW), not a model declaration (WHAT) — see
-    /// DD-043, amendment 1, for the rejected alternative
+    /// DA-043, amendment 1, for the rejected alternative
     /// (`PhysicalModel::jacobian_bandwidth`) and why it was rejected.
     fn stencil_radius(&self) -> usize;
 }
@@ -158,7 +158,7 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
 /// one-sided truncation at the boundary (breaks FV's conservation property).
 /// Rather than picking one silently, `FluxBoundary` makes the choice an
 /// explicit constructor parameter on every operator that needs it.
-/// `#[non_exhaustive]` (DD-022) signals this is an extension point, not a
+/// `#[non_exhaustive]` (DQ-022) signals this is an extension point, not a
 /// closed set — only [`FluxBoundary::Periodic`] exists today.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
@@ -177,7 +177,7 @@ pub enum FluxBoundary {
     /// computed for the nearest cell that has a full interior stencil,
     /// rather than reconstructing a face flux across the domain edge — the
     /// same posture `operators::fd`'s `CenteredLaplacian`/`UpwindGradient`
-    /// already take at their own boundary nodes (DD-012): reuse an
+    /// already take at their own boundary nodes (DA-012): reuse an
     /// available one-sided formula instead of inventing an exterior point.
     /// Breaks FV's exact conservation property (`Periodic`'s telescoping
     /// sum no longer holds, since the outermost face fluxes are each

@@ -154,7 +154,7 @@ pub struct CoefficientField {
     mesh: Arc<dyn Mesh>,
     name: Cow<'static, str>,
     source: Source,
-    /// Rayon dispatch threshold (DD-014, DD-048) — see `ParallelThreshold`.
+    /// Rayon dispatch threshold (DT-014, DA-048) — see `ParallelThreshold`.
     #[cfg(feature = "parallel")]
     parallel_threshold: ParallelThreshold,
 }
@@ -215,8 +215,8 @@ impl CoefficientField {
         }
     }
 
-    /// Overrides the Rayon dispatch threshold at construction time (DD-014,
-    /// DD-048). It governs c(x, t); c(x) has already been evaluated. Only
+    /// Overrides the Rayon dispatch threshold at construction time (DT-014,
+    /// DA-048). It governs c(x, t); c(x) has already been evaluated. Only
     /// exists when the crate is built with the `parallel` feature.
     ///
     /// # Panics

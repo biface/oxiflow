@@ -1,6 +1,6 @@
 //! # Module `mesh::structured`
 //!
-//! Structured mesh implementations — uniform grids for FD/FV schemes (DD-019).
+//! Structured mesh implementations — uniform grids for FD/FV schemes (DA-019).
 //!
 //! ## J1 (v0.1.0)
 //!

@@ -9,7 +9,7 @@
 //! around `implicit_step_newton` (DD-044,
 //! [#111](https://github.com/biface/oxiflow/issues/111),
 //! [#112](https://github.com/biface/oxiflow/issues/112)) and, with the
-//! `sparse` feature, `implicit_step_adaptive` (DD-043). Each solver names
+//! `sparse` feature, `implicit_step_adaptive` (DA-043). Each solver names
 //! its implicit equation with an `ImplicitFormula` — the theta method or
 //! BDF2 — and every formula runs the shared [`super::newton`] loop; the
 //! two paths differ only in the storage format of the linear system, dense
@@ -480,12 +480,12 @@ fn implicit_newton<S: NewtonSystem>(
     layout.rebuild(u_next)
 }
 
-// ── Sparse / banded path (DD-013 second phase, DD-043) ─────────────────────────
+// ── Sparse / banded path (DT-013 second phase, DA-043) ─────────────────────────
 //
 // `#[cfg(feature = "sparse")]` only. Bandwidth is always an explicit
 // parameter here, supplied by the caller (the solver's own HOW-side
 // configuration, e.g. `BackwardEulerSolver::with_jacobian_bandwidth`) — it
-// is never read from `Domain`/`PhysicalModel`. See DD-043, amendment 1, for
+// is never read from `Domain`/`PhysicalModel`. See DA-043, amendment 1, for
 // why `PhysicalModel::jacobian_bandwidth` was rejected: bandwidth is a
 // property of the numerical scheme (HOW), not of the physical model (WHAT).
 
@@ -575,7 +575,7 @@ pub(crate) fn banded_finite_difference_jacobian(
     Ok(SparseColMat::new(symbolic, values))
 }
 
-/// Banded [`NewtonSystem`] (DD-043): `jacobian` evaluates $J_f$ within the
+/// Banded [`NewtonSystem`] (DA-043): `jacobian` evaluates $J_f$ within the
 /// band of half-width `bandwidth`, in compressed columns (in production,
 /// [`banded_finite_difference_jacobian`]); $\alpha I - c J_f$ is folded in
 /// place into its values, and `sparse_solver` solves the system.
@@ -631,7 +631,7 @@ where
 /// format of the linear system.
 ///
 /// `jacobian_bandwidth`/`sparse_threshold`/`sparse_solver`/`dispatch` are
-/// supplied by the caller's own HOW-side configuration (DD-043, amendment
+/// supplied by the caller's own HOW-side configuration (DA-043, amendment
 /// 1; DT-069) — never read from `Domain` or `PhysicalModel`. `dispatch`
 /// applies to both paths.
 #[cfg(feature = "sparse")]
@@ -696,13 +696,13 @@ pub(crate) fn implicit_step_adaptive(
 // ── Linear-system backends of the implicit solvers ─────────────────────────
 
 /// Number of unknowns above which the banded path is taken by default,
-/// once a sparse solver and a Jacobian bandwidth are configured (DD-043).
+/// once a sparse solver and a Jacobian bandwidth are configured (DA-043).
 /// Shared by the implicit solvers and by
 /// [`IntegratorSpec`](crate::solver::spec::IntegratorSpec)'s defaults.
 #[cfg(feature = "sparse")]
 pub(crate) const DEFAULT_SPARSE_THRESHOLD: usize = 100;
 
-/// Linear-system backends of an implicit solver (DD-013, DD-043): the
+/// Linear-system backends of an implicit solver (DT-013, DA-043): the
 /// dense [`LinearSolver`] and, with the `sparse` feature, the banded-path
 /// configuration. Held once for
 /// [`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
@@ -710,9 +710,9 @@ pub(crate) const DEFAULT_SPARSE_THRESHOLD: usize = 100;
 /// [`BDF2Solver`](super::bdf2::BDF2Solver), which set it through their
 /// own builders and step through [`ImplicitBackend::step`].
 pub(crate) struct ImplicitBackend {
-    /// Dense backend (DD-013), [`NalgebraDenseSolver`] by default.
+    /// Dense backend (DT-013), [`NalgebraDenseSolver`] by default.
     pub(crate) linear_solver: Box<dyn LinearSolver>,
-    /// Sparse backend (DD-043) — `None` by default: the dense path
+    /// Sparse backend (DA-043) — `None` by default: the dense path
     /// (`implicit_step_newton`) is used unless this is configured
     /// explicitly. The banded path runs the same iterated Newton loop as
     /// the dense one, with the solver's Newton parameters.
@@ -726,8 +726,8 @@ pub(crate) struct ImplicitBackend {
     pub(crate) sparse_threshold: usize,
     /// Half-bandwidth of the Jacobian, in flat unknowns — a HOW-side
     /// assertion supplied by the caller (e.g. `scheme.stencil_radius()`,
-    /// DD-039, or `d·(s + 1) − 1` for `d` interleaved components), never
-    /// read from `Domain`/`PhysicalModel` (DD-043, amendment 1). `None` by
+    /// DA-039, or `d·(s + 1) − 1` for `d` interleaved components), never
+    /// read from `Domain`/`PhysicalModel` (DA-043, amendment 1). `None` by
     /// default: no assumption about locality, dense path only.
     #[cfg(feature = "sparse")]
     pub(crate) jacobian_bandwidth: Option<usize>,

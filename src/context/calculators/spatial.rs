@@ -2,7 +2,7 @@
 //!
 //! Finite-difference spatial calculators: gradient and Laplacian.
 //!
-//! Both calculators hold an `Arc<dyn Mesh>` internally (INV-1, DD-007) and
+//! Both calculators hold an `Arc<dyn Mesh>` internally (INV-1, DA-007) and
 //! delegate their stencil math to `operators::fd`'s `compute_from_dx`
 //! functions (#47, FD delegation refactor) — see that module's documentation
 //! for why the delegation bypasses `DiscreteOperator::apply()` itself.
@@ -18,7 +18,7 @@
 //! any other mesh instead of a silently wrong field (#186). Generalising the
 //! stencils to nD structured grids is #152.
 //!
-//! ## `parallel_threshold` via `solver::parallel::ParallelThreshold` (DD-014, DD-048)
+//! ## `parallel_threshold` via `solver::parallel::ParallelThreshold` (DT-014, DA-048)
 //!
 //! Both calculators hold a
 //! `ParallelThreshold` field
@@ -151,7 +151,7 @@ pub struct FDGradientCalculator {
     /// Stencil step resolved from `mesh` at construction, or the reason
     /// `mesh`/`dimension` is not supported (see `grid_step`).
     step: Result<f64, String>,
-    /// Rayon dispatch threshold (DD-014, DD-048) — see
+    /// Rayon dispatch threshold (DT-014, DA-048) — see
     /// [`ParallelThreshold`]'s own docs for the sentinel/gating rationale.
     #[cfg(feature = "parallel")]
     parallel_threshold: ParallelThreshold,
@@ -173,7 +173,7 @@ impl FDGradientCalculator {
     /// `parallel_threshold` has no override by default —
     /// `parallel_threshold` reports
     /// `operators::fd::default_parallel_threshold`
-    /// (DD-014, #51) until one is set, at construction with
+    /// (DT-014, #51) until one is set, at construction with
     /// `with_parallel_threshold` or at runtime with
     /// `set_parallel_threshold`; all three exist only when the crate is
     /// built with the `parallel` feature.
@@ -204,10 +204,10 @@ impl FDGradientCalculator {
         }
     }
 
-    /// Overrides the Rayon dispatch threshold at construction time (DD-014,
+    /// Overrides the Rayon dispatch threshold at construction time (DT-014,
     /// #51). Only exists when the crate is built with the `parallel`
     /// feature — mirrors `BackwardEulerSolver::with_sparse_threshold`'s
-    /// gating (DD-043).
+    /// gating (DA-043).
     ///
     /// # Panics
     ///
@@ -290,7 +290,7 @@ impl ContextCalculator for FDGradientCalculator {
         // (see `operators::fd`'s module documentation for why).
         //
         // The match itself is duplicated per cfg, not just its threshold
-        // input (DD-014, #51): `compute_from_dx`'s arity differs by feature
+        // input (DT-014, #51): `compute_from_dx`'s arity differs by feature
         // (see `operators::fd`), so a single match sharing one `threshold`
         // binding would either not compile without `parallel`, or compute a
         // threshold nobody reads — the earlier version of this method did
@@ -347,7 +347,7 @@ impl ContextCalculator for FDGradientCalculator {
 /// Provides a user-chosen `ContextVariable::External { name }` as a
 /// `ContextValue::ScalarField`. The Laplacian is a scalar nodal field of the
 /// same length as the primary field — no new `ContextVariable` variant is
-/// needed (DD-026 deferred).
+/// needed (DA-026 deferred).
 ///
 /// # Stencil
 ///
@@ -402,7 +402,7 @@ pub struct FDLaplacianCalculator {
     /// Stencil step resolved from `mesh` at construction, or the reason
     /// `mesh` is not supported (see `grid_step`).
     step: Result<f64, String>,
-    /// Rayon dispatch threshold (DD-014, DD-048) — see
+    /// Rayon dispatch threshold (DT-014, DA-048) — see
     /// [`ParallelThreshold`]'s own docs for the sentinel/gating rationale.
     #[cfg(feature = "parallel")]
     parallel_threshold: ParallelThreshold,
@@ -425,7 +425,7 @@ impl FDLaplacianCalculator {
     /// `parallel_threshold` has no override by default —
     /// `parallel_threshold` reports
     /// `operators::fd::default_parallel_threshold`
-    /// (DD-014, #51) until one is set, at construction with
+    /// (DT-014, #51) until one is set, at construction with
     /// `with_parallel_threshold` or at runtime with
     /// `set_parallel_threshold`; all three exist only when the crate is
     /// built with the `parallel` feature.
@@ -456,9 +456,9 @@ impl FDLaplacianCalculator {
         self
     }
 
-    /// Overrides the Rayon dispatch threshold at construction time (DD-014,
+    /// Overrides the Rayon dispatch threshold at construction time (DT-014,
     /// #51). Only exists when the crate is built with the `parallel`
-    /// feature (DD-043 gating pattern).
+    /// feature (DA-043 gating pattern).
     ///
     /// # Panics
     ///
@@ -776,7 +776,7 @@ mod tests {
         assert!(matches!(result, Err(OxiflowError::TypeMismatch { .. })));
     }
 
-    // ── with_parallel_threshold (DD-014, #51) ─────────────────────────────────
+    // ── with_parallel_threshold (DT-014, #51) ─────────────────────────────────
     //
     // Overriding the threshold must not change the result on fields far
     // below and far above it — only which `operators::fd` code path runs.
@@ -825,7 +825,7 @@ mod tests {
         );
     }
 
-    // ── set_parallel_threshold / parallel_threshold() (DD-014, DD-048) ────────
+    // ── set_parallel_threshold / parallel_threshold() (DT-014, DA-048) ────────
     //
     // Per-instance ParallelThreshold, reconfigurable through &self — the
     // point is that this works without rebuilding the calculator, and
@@ -866,7 +866,7 @@ mod tests {
         FDLaplacianCalculator::new(grid(5), laplacian_var()).set_parallel_threshold(0);
     }
 
-    // ── 0-as-"unset" sentinel (DD-014, DD-048) ─────────────────────────────────
+    // ── 0-as-"unset" sentinel (DT-014, DA-048) ─────────────────────────────────
     //
     // A fresh instance has no override materialized at construction (the
     // whole point of ParallelThreshold's design — see that module's own

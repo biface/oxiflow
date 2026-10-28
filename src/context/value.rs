@@ -67,11 +67,11 @@ use crate::context::error::OxiflowError;
 /// assert_eq!(t.as_scalar().unwrap(), 1.5);
 /// assert!(!field.as_scalar_field().unwrap().is_empty());
 /// ```
-// GPU-READY: bytemuck::Pod candidate (DD-026 INV-GPU-5) — pending v0.8.0 (J8),
+// GPU-READY: bytemuck::Pod candidate (DA-026 INV-GPU-5) — pending v0.8.0 (J8),
 // for the `Vector`/`Matrix`/`ScalarField`/`VectorField` variants specifically;
 // `Scalar`/`Boolean` are trivially Pod-compatible, the enum discriminant is
 // the actual blocker for a direct `derive(Pod)` and will need to be resolved
-// at upload-boundary design time (DD-045), not before.
+// at upload-boundary design time (DT-045), not before.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -96,7 +96,7 @@ pub enum ContextValue {
     /// This variant stores components in the current reference frame only.
     ///
     /// Memory layout: `DMatrix<f64>` is **column-major** (nalgebra default,
-    /// Fortran order) — DD-026 INV-GPU-4. WGSL (the `wgpu` shader language)
+    /// Fortran order) — DA-026 INV-GPU-4. WGSL (the `wgpu` shader language)
     /// is row-major; any transposition is resolved at the future GPU upload
     /// boundary, never in this type.
     Matrix(DMatrix<f64>),
@@ -114,10 +114,10 @@ pub enum ContextValue {
     /// dimension, as for a velocity field) or `d` unknowns carried by each
     /// node, unrelated to the mesh dimension: two species on a 1D mesh give
     /// `d = 2` (#192). Dimensions (`n_nodes`, `d`) are available via
-    /// `DMatrix::nrows()`/`ncols()` (DD-026 INV-GPU-2).
+    /// `DMatrix::nrows()`/`ncols()` (DA-026 INV-GPU-2).
     ///
     /// Memory layout: `DMatrix<f64>` is **column-major** (nalgebra default,
-    /// Fortran order) — DD-026 INV-GPU-4. WGSL (the `wgpu` shader language)
+    /// Fortran order) — DA-026 INV-GPU-4. WGSL (the `wgpu` shader language)
     /// is row-major; any transposition is resolved at the future GPU upload
     /// boundary, never in this type.
     VectorField(DMatrix<f64>),

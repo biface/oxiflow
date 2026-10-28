@@ -1,6 +1,6 @@
 //! # Module `boundary`
 //!
-//! Boundary conditions — [`BoundaryCondition`] trait (DD-008, issue #34)
+//! Boundary conditions — [`BoundaryCondition`] trait (DA-008, issue #34)
 //! and built-in implementations (issue #35).
 //!
 //! ## Classification
@@ -246,7 +246,7 @@ pub enum BoundaryLocation {
 /// `BoundaryCondition` does not implement `serde::Serialize` / `serde::Deserialize`.
 /// Concrete implementations may hold arbitrary state that cannot be serialised
 /// generically. If persistence is required, provide a dedicated configuration
-/// type and reconstruct the BC from it — see `SimulationSnapshot` (DD-025).
+/// type and reconstruct the BC from it — see `SimulationSnapshot` (DT-025).
 ///
 /// # Examples
 ///
@@ -285,9 +285,9 @@ pub enum BoundaryLocation {
 /// [`RequiresContext`]: crate::model::RequiresContext
 /// [`ComputeContext`]: crate::context::ComputeContext
 ///
-/// # `Send + Sync` (DD-037)
+/// # `Send + Sync` (DA-037)
 ///
-/// Added alongside DD-037 (#45): [`crate::solver::methods::imex::SplitOperator`]
+/// Added alongside DA-037 (#45): [`crate::solver::methods::imex::SplitOperator`]
 /// is the first place in the engine where a `Domain` is *owned* by a type
 /// that must itself be `Send + Sync` (`Solver: Send + Sync`) rather than
 /// only borrowed as `&Domain`. Without this bound, `Box<dyn BoundaryCondition>`

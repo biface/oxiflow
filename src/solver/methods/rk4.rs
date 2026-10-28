@@ -355,7 +355,7 @@ mod tests {
         );
     }
 
-    // ── SteppableSolver (DD-031) ──────────────────────────────────────────────
+    // ── SteppableSolver (DA-031) ──────────────────────────────────────────────
 
     #[test]
     fn step_matches_one_iteration_of_solve() {

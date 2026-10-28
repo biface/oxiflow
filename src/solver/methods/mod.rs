@@ -8,11 +8,11 @@
 //! |---|---|---|
 //! | [`euler::ForwardEulerSolver`] | Explicit, 1st order | #33, #41 |
 //! | [`rk4::RK4Solver`] | Explicit, 4th order | #41 |
-//! | [`backward_euler::BackwardEulerSolver`] | Implicit, 1st order | #43, DD-013, DD-033 |
-//! | [`crank_nicolson::CrankNicolsonSolver`] | Semi-implicit, 2nd order | #43, DD-013, DD-033 |
+//! | [`backward_euler::BackwardEulerSolver`] | Implicit, 1st order | #43, DT-013, DD-033 |
+//! | [`crank_nicolson::CrankNicolsonSolver`] | Semi-implicit, 2nd order | #43, DT-013, DD-033 |
 //! | [`bdf2::BDF2Solver`] | Implicit multi-step, 2nd order | #44, DD-034 |
 //! | [`dopri45::DoPri45Solver`] | Adaptive explicit, order 5 | #42, DD-036 |
-//! | [`imex::OperatorSplittingSolver`] | Operator splitting (Strang), n ≥ 2 | #45, DD-037 |
+//! | [`imex::OperatorSplittingSolver`] | Operator splitting (Strang), n ≥ 2 | #45, DA-037 |
 //!
 //! All integrators are decoupled from the spatial scheme via
 //! `DiscreteOperator<M: Mesh>` (INV-2, J4b) — no FD/FV/FEM
@@ -43,7 +43,7 @@
 //! [`crank_nicolson`] (#111) and [`bdf2`] (#112), the Backward Euler
 //! bootstrap step of [`bdf2`] included (see that module's docs).
 //!
-//! ## Per-step primitive, with history (DD-031, DD-034)
+//! ## Per-step primitive, with history (DA-031, DD-034)
 //!
 //! [`SteppableSolver`] exposes a single-step primitive on top of `Solver`'s
 //! full-time-range `solve()`. [`crate::solver::orchestrator::MultiDomainOrchestrator`]
@@ -64,7 +64,7 @@
 //! get: the step-size controller itself, decoupled from any specific
 //! integrator's error source.
 //!
-//! [`imex::OperatorSplittingSolver`] (DD-037, #45) also implements `Solver`
+//! [`imex::OperatorSplittingSolver`] (DA-037, #45) also implements `Solver`
 //! directly rather than `SteppableSolver` — same posture as DoPri45: each
 //! of its sub-operators already carries its own `Domain`, so fitting it
 //! into the single-`Domain`-per-step shape of `SteppableSolver::step`
@@ -317,7 +317,7 @@ pub(crate) fn check_finite(state: &ContextValue, t: f64) -> Result<(), OxiflowEr
 /// result.
 ///
 /// Shared by every solver loop (fixed-step, DoPri45, operator splitting) so
-/// that the snapshot contract stays the same everywhere (DD-025, #134).
+/// that the snapshot contract stays the same everywhere (DT-025, #134).
 pub(crate) fn divergence_snapshot(
     config: &SolverConfiguration,
     state: &ContextValue,
@@ -345,7 +345,7 @@ pub(crate) fn divergence_snapshot(
 
 // ── SteppableSolver ───────────────────────────────────────────────────────────
 
-/// Single-domain solvers that expose a per-step primitive (DD-031, DD-034).
+/// Single-domain solvers that expose a per-step primitive (DA-031, DD-034).
 ///
 /// `Solver::solve()` drives a full time range for one domain; `step()`
 /// advances a single domain by exactly one `dt`, given its current state

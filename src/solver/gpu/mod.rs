@@ -1,18 +1,18 @@
 //! # Module `solver::gpu`
 //!
-//! GPU architecture layer (DD-026, issue #73; DD-045, issue #127).
+//! GPU architecture layer (DA-026, issue #73; DT-045, issue #127).
 //!
 //! ## Scope
 //!
 //! This module owns exactly two things, both HOW-side (never surfacing into
-//! `PhysicalModel`/`Domain`/`Scenario`, per DD-045):
+//! `PhysicalModel`/`Domain`/`Scenario`, per DT-045):
 //!
 //! 1. **Adapter/device acquisition** ([`GpuContext::new`]) — blocking, via
 //!    `pollster`, with an automatic `HighPerformance` adapter preference and
 //!    an explicit [`OxiflowError::GpuUnavailable`] on failure (never a silent
 //!    CPU fallback — the caller decides).
 //! 2. **CPU↔GPU boundary conversion** ([`to_gpu_bytes`]) — reinterprets the
-//!    contiguous `f64` payloads already inside [`ContextValue`] (DD-026
+//!    contiguous `f64` payloads already inside [`ContextValue`] (DA-026
 //!    INV-GPU-1) as raw bytes via `bytemuck::cast_slice`, without requiring
 //!    `ContextValue` itself to implement `bytemuck::Pod` (its enum
 //!    discriminant never can). Only the numeric payload is cast, not the
@@ -22,12 +22,12 @@
 //!
 //! No compute shader (WGSL), no buffer upload/dispatch, no `wgpu::Device`
 //! usage beyond acquisition. Actual GPU-accelerated computation is future
-//! work, not part of #74/DD-045 — this module is the boundary layer those
+//! work, not part of #74/DT-045 — this module is the boundary layer those
 //! future kernels will sit behind.
 //!
-//! ## Dispatch model (DD-045)
+//! ## Dispatch model (DT-045)
 //!
-//! No configurable runtime threshold (contrast with `parallel`/DD-014): the
+//! No configurable runtime threshold (contrast with `parallel`/DT-014): the
 //! `gpu` feature flag is itself the opt-in. Once compiled with `--features
 //! gpu`, [`GpuContext::new`] is always the path taken — there is no
 //! CPU/GPU switch left to flip at runtime by this module.
@@ -43,7 +43,7 @@ use crate::context::value::ContextValue;
 /// feature.
 ///
 /// Construction is blocking ([`GpuContext::new`]), consistent with
-/// `Solver::solve()` already being a single blocking call (DD-045): no
+/// `Solver::solve()` already being a single blocking call (DT-045): no
 /// async runtime is introduced anywhere else in the crate.
 pub struct GpuContext {
     /// Kept for adapter introspection (name, backend, limits) — not read by
@@ -57,7 +57,7 @@ pub struct GpuContext {
 }
 
 impl GpuContext {
-    /// Acquires a GPU adapter and device, blocking (DD-045).
+    /// Acquires a GPU adapter and device, blocking (DT-045).
     ///
     /// Requests a `HighPerformance` adapter (compute workload, not
     /// interactive rendering — no `compatible_surface`). Returns
@@ -72,7 +72,7 @@ impl GpuContext {
     pub fn new() -> Result<Self, OxiflowError> {
         // `wgpu 26.0.1` API: `InstanceDescriptor` still implements `Default`
         // at this version (removed in a later release, v29+) — explicit
-        // backends restrict to the set decided in DD-045 (vulkan/metal/dx12,
+        // backends restrict to the set decided in DT-045 (vulkan/metal/dx12,
         // no gles/webgpu), matching the `features` selected in `Cargo.toml`.
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN | wgpu::Backends::METAL | wgpu::Backends::DX12,
@@ -106,7 +106,7 @@ impl GpuContext {
 // ── CPU↔GPU boundary conversion ──────────────────────────────────────────────
 
 /// Reinterprets a numeric [`ContextValue`] payload as raw bytes, ready for
-/// GPU buffer upload (DD-026 INV-GPU-5).
+/// GPU buffer upload (DA-026 INV-GPU-5).
 ///
 /// Only the contiguous `f64` payload is cast (`bytemuck::cast_slice`) — never
 /// `ContextValue` itself, whose enum discriminant is not `Pod`-compatible.
@@ -184,7 +184,7 @@ mod tests {
         assert!(matches!(err, OxiflowError::TypeMismatch { .. }));
     }
 
-    /// No GPU hardware in CI (documented limitation, DD-045 consequences) —
+    /// No GPU hardware in CI (documented limitation, DT-045 consequences) —
     /// `#[ignore]`, run manually on a machine with a real adapter.
     #[test]
     #[ignore = "requires real GPU hardware, not available in CI"]

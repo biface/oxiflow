@@ -1,6 +1,6 @@
 //! # Module `context::state`
 //!
-//! Multi-domain state container for coupled simulations (DD-010, DD-011).
+//! Multi-domain state container for coupled simulations (DD-010, DA-011).
 //!
 //! ## Design
 //!
@@ -37,11 +37,11 @@
 //!
 //! Field values are stored as [`ContextValue::ScalarField`] (`DVector<f64>`,
 //! column-major) or [`ContextValue::VectorField`] (`DMatrix<f64>`, column-major
-//! — nalgebra default). It is these stored *values* that satisfy DD-026
+//! — nalgebra default). It is these stored *values* that satisfy DA-026
 //! INV-GPU-1/INV-GPU-4 (see [`ContextValue`]'s own rustdoc) — `MultiDomainState`
 //! itself is an indexed/orchestration container (`HashMap`), not a contiguous
 //! buffer, and is out of INV-GPU-1's scope for the same reason
-//! `Vec<Box<dyn PhysicalModel>>` is (DD-026): it holds numerical payloads
+//! `Vec<Box<dyn PhysicalModel>>` is (DA-026): it holds numerical payloads
 //! without being one.
 
 use std::collections::HashMap;
@@ -58,7 +58,7 @@ use crate::solver::scenario::DomainId;
 /// Maps `(DomainId, PhysicalQuantity)` composite keys to [`ContextValue`]
 /// fields. Used by [`CouplingOperator`](crate::coupling) to exchange state
 /// between physical domains without implicit ordering conventions (DD-010,
-/// DD-011, INV-3).
+/// DA-011, INV-3).
 ///
 /// # Examples
 ///
@@ -88,7 +88,7 @@ pub struct MultiDomainState {
     /// Internal map: (domain, quantity) → field value.
     ///
     /// The map itself is not contiguous memory; the [`ContextValue`] payloads
-    /// it stores are (DD-026 INV-GPU-1/INV-GPU-4 — see [`ContextValue`]'s
+    /// it stores are (DA-026 INV-GPU-1/INV-GPU-4 — see [`ContextValue`]'s
     /// own rustdoc for the layout note and the `GPU-READY` annotation).
     states: HashMap<(DomainId, PhysicalQuantity), ContextValue>,
 }

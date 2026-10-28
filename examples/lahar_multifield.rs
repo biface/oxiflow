@@ -1,7 +1,7 @@
 //! # Example: multi-field lahar benchmark model (#139, feeds #53)
 //!
-//! Implements DD-032 (#85): a physically representative lahar model per
-//! Woodhouse, Hogg & Phillips (LaharFlowPaper.pdf, cited in DD-032),
+//! Implements DQ-032 (#85): a physically representative lahar model per
+//! Woodhouse, Hogg & Phillips (LaharFlowPaper.pdf, cited in DQ-032),
 //! reduced to one spatial dimension. Four coupled conservation quantities,
 //! not three -- see the state layout note below.
 //!
@@ -23,11 +23,11 @@
 //! - `b(x,t)` is tracked as a fourth evolving quantity, not held fixed --
 //!   the published model is genuinely four coupled equations (mass,
 //!   momentum, solids, bed evolution), not three; #139's three-field
-//!   description omits the bed because DD-032's own summary did too.
+//!   description omits the bed because DQ-032's own summary did too.
 //! - The conserved momentum-equation variables carry the bulk density
 //!   `rho_bar = rho_f*(1-psi_bar) + rho_s*psi_bar`, not raw `h`/`h*u_bar`.
 //!   With `rho_s/rho_f = 2`, dropping this weight would misrepresent the
-//!   bulking behaviour DD-032 explicitly cites as the model's signature
+//!   bulking behaviour DQ-032 explicitly cites as the model's signature
 //!   effect. `h`, `u_bar`, `psi_bar`, `c_bar` are recovered by diagnostic
 //!   (see [`LaharPhysics::primitives`]) wherever needed.
 //!

@@ -385,7 +385,7 @@ fn base64_encode(bytes: &[u8]) -> String {
 /// - Build the calculator chain via `chain::build_calculator_chain()`
 /// - Follow the contractual execution order
 ///
-/// `Solver` is deliberately kept single-domain (DD-031) — coupled
+/// `Solver` is deliberately kept single-domain (DA-031) — coupled
 /// multi-domain scenarios go through [`orchestrator::MultiDomainOrchestrator`]
 /// instead, which drives one [`methods::SteppableSolver`] per domain and
 /// invokes `CouplingOperator`s between steps. This keeps each domain free
@@ -405,7 +405,7 @@ pub trait Solver: Send + Sync {
 
     /// Called automatically right before a divergence-class error is
     /// returned, with a [`SimulationSnapshot`] capturing the state at the
-    /// point of failure (DD-025 Option B, issue #71). Two distinct
+    /// point of failure (DT-025 Option B, issue #71). Two distinct
     /// failure modes are routed through this hook:
     ///
     /// - [`OxiflowError::SolverDivergence`] — a non-finite value appeared

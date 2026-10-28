@@ -24,7 +24,7 @@
 //! **MassTransferCoupling** — transfers a fraction `alpha` of the lahar
 //! concentration field to the lake at each coupling call.
 //!
-//! ## Acceptance criteria (DD-011, INV-3)
+//! ## Acceptance criteria (DA-011, INV-3)
 //!
 //! - `Scenario::multi()` accepts two domains without error
 //! - `with_coupling()` registers the operator and its interface

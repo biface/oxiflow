@@ -2,8 +2,8 @@
 //!
 //! Flux-limited (MUSCL-style) advective flux + centered diffusive flux for
 //! [`UniformGrid1D`] — [`Limiter`] (`MinMod`, `VanLeer`, `Superbee`) and
-//! [`LimitedFlux`] (#99, split out of `#49` at closing time — DD-012,
-//! DD-039, DD-041).
+//! [`LimitedFlux`] (#99, split out of `#49` at closing time — DA-012,
+//! DA-039, DD-041).
 //!
 //! ## Why a limiter, alongside FV and WENO
 //!
@@ -204,7 +204,7 @@ impl LimitedFlux {
 impl RequiresContext for LimitedFlux {
     fn required_variables(&self) -> Vec<ContextVariable> {
         // Constant velocity/diffusion — nothing to resolve from ComputeContext
-        // (the "simple case" of DD-039, same posture as FV/WENO).
+        // (the "simple case" of DA-039, same posture as FV/WENO).
         vec![]
     }
 }

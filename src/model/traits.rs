@@ -1,16 +1,16 @@
 //! # Module `model::traits`
 //!
-//! Core traits for physical model components (DD-005, issue #29, #32).
+//! Core traits for physical model components (DA-005, issue #29, #32).
 //!
 //! ## `RequiresContext`
 //!
-//! Standalone trait — `required_variables()` is mandatory (DD-005).
+//! Standalone trait — `required_variables()` is mandatory (DA-005).
 //!
 //! ## `PhysicalModel`
 //!
 //! Supertrait of `RequiresContext`. Declares the physical equations and computes
 //! field derivatives. The method is named `compute_physics` — the `_v2` suffix
-//! from chrom-rs is dropped because oxiflow never had a v1 (DD-006).
+//! from chrom-rs is dropped because oxiflow never had a v1 (DA-006).
 
 use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
@@ -67,7 +67,7 @@ pub trait RequiresContext {
 ///
 /// The method is named `compute_physics` (not `compute_physics_v2`).
 /// oxiflow never had a v1 API — the `_v2` suffix was a chrom-rs migration
-/// artifact that does not apply here (DD-006).
+/// artifact that does not apply here (DA-006).
 ///
 /// # Examples
 ///

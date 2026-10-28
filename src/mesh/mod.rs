@@ -1,6 +1,6 @@
 //! # Module `mesh`
 //!
-//! Spatial mesh abstraction — INV-1 invariant (DD-007, DD-019, issue #31).
+//! Spatial mesh abstraction — INV-1 invariant (DA-007, DA-019, issue #31).
 //!
 //! ## Core principle (INV-1)
 //!
@@ -9,7 +9,7 @@
 //! forward compatibility with FEM unstructured meshes (v0.11.0 (J11)) — zero breaking change
 //! on existing code when `unstructured/` is added.
 //!
-//! ## Module hierarchy (DD-019)
+//! ## Module hierarchy (DA-019)
 //!
 //! ```text
 //! src/mesh/

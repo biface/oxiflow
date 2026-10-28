@@ -68,7 +68,7 @@ pub struct ExternalTabulated {
 }
 
 impl ExternalTabulated {
-    /// Loads tabulated data from an HDF5 file (DD-027, issue #105).
+    /// Loads tabulated data from an HDF5 file (DT-027, issue #105).
     ///
     /// `variable` must be [`ContextVariable::External`] — its `name` is used
     /// as the HDF5 group to read from. The group must contain two 1D `f64`

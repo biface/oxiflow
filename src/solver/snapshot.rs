@@ -1,10 +1,10 @@
 //! # Module `solver::snapshot`
 //!
 //! Serialisable snapshot of a simulation's physical state, for post-mortem
-//! divergence analysis and normal pause/resume (DD-025 Option B, issue #71 ;
+//! divergence analysis and normal pause/resume (DT-025 Option B, issue #71 ;
 //! generalised by DD-029, issue #77).
 //!
-//! ## Two-phase restore contract (DD-025)
+//! ## Two-phase restore contract (DT-025)
 //!
 //! `SimulationSnapshot` captures only the **physical state** (`ContextValue`,
 //! the temporal configuration in effect, and the integration method used) —

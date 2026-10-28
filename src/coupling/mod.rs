@@ -1,13 +1,13 @@
 //! # Module `coupling`
 //!
-//! Multi-physics inter-domain coupling — INV-3 invariant (DD-011).
+//! Multi-physics inter-domain coupling — INV-3 invariant (DA-011).
 //!
 //! ## Core principle (INV-3)
 //!
 //! All interactions between distinct physical domains (lahar/lake, fluid/solid,
 //! column/reservoir) must go through the [`CouplingOperator`] trait with
 //! [`DomainId`] and [`Interface`]. No coupling logic is coded directly in the
-//! [`Solver`](crate::solver::Solver) (DD-011, J3).
+//! [`Solver`](crate::solver::Solver) (DA-011, J3).
 //!
 //! ## Types
 //!

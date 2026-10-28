@@ -81,7 +81,7 @@ impl From<&str> for DomainId {
 /// `Domain` does not implement `serde::Serialize` / `serde::Deserialize`.
 /// It holds `Box<dyn PhysicalModel>`, `Box<dyn Mesh>`, and
 /// `Box<dyn BoundaryCondition>` (trait objects), which cannot be serialised
-/// directly. See `SimulationSnapshot` (DD-025 Option B).
+/// directly. See `SimulationSnapshot` (DT-025 Option B).
 #[non_exhaustive]
 pub struct Domain {
     /// Unique identifier for this domain.
@@ -179,7 +179,7 @@ impl Domain {
 /// It contains `Vec<Domain>`, which holds trait objects (`Box<dyn PhysicalModel>`,
 /// `Box<dyn Mesh>`). Restoring a simulation from a snapshot requires user code
 /// to reconstruct `Scenario` from its own configuration and inject the physical
-/// state from `SimulationSnapshot` (DD-025 Option B, v0.6.0).
+/// state from `SimulationSnapshot` (DT-025 Option B, v0.6.0).
 ///
 /// # Examples
 ///
@@ -213,9 +213,9 @@ impl Domain {
 pub struct Scenario {
     /// Physical domains — at least one required.
     domains: Vec<Domain>,
-    /// Coupling operators between domains (J3, DD-011, INV-3).
+    /// Coupling operators between domains (J3, DA-011, INV-3).
     couplings: Vec<Box<dyn CouplingOperator>>,
-    /// Interfaces shared between domains (J3, DD-011).
+    /// Interfaces shared between domains (J3, DA-011).
     interfaces: Vec<Interface>,
     /// Simulation start time.
     pub t_start: f64,

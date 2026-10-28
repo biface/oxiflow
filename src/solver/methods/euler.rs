@@ -19,7 +19,7 @@
 //!   see #40 for the dedicated multi-domain proto.
 //! - No `DiscreteOperator` (INV-2) — spatial schemes arrive at J4b.
 //!   The model computes `du/dt` internally from the field state and context.
-//! - Boundary conditions ARE applied (since v0.2.0 / DD-008) — fixed in #41;
+//! - Boundary conditions ARE applied (since v0.2.0 / DA-008) — fixed in #41;
 //!   the original J1 implementation predated `BoundaryCondition` and never
 //!   called it, silently violating the contractual order documented in
 //!   [`crate::solver`].
@@ -335,7 +335,7 @@ mod tests {
         );
     }
 
-    // ── SteppableSolver (DD-031) ──────────────────────────────────────────────
+    // ── SteppableSolver (DA-031) ──────────────────────────────────────────────
 
     #[test]
     fn step_matches_one_iteration_of_solve() {

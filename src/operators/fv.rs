@@ -3,7 +3,7 @@
 //! Finite-volume [`FluxDivergenceOperator`] implementations for
 //! [`UniformGrid1D`] — `FVCenteredFlux` (2nd-order centered advection),
 //! `FVUpwindFlux` (1st-order upwind advection, robust for strong advection)
-//! (#48, DD-039, DD-040).
+//! (#48, DA-039, DD-040).
 //!
 //! Both compute the full flux `F(u, ∇u) = v·u − D·∂u/∂x` (advection, Fick's
 //! law diffusion) — the diffusive term is always centered in both schemes;
@@ -369,7 +369,7 @@ impl RequiresContext for FVCenteredFlux {
     fn required_variables(&self) -> Vec<ContextVariable> {
         // Constant velocity/diffusion — nothing to resolve from ComputeContext.
         // A space/time-varying case would declare them here instead (see the
-        // FluxDivergenceOperator "advanced case" pattern in DD-039).
+        // FluxDivergenceOperator "advanced case" pattern in DA-039).
         vec![]
     }
 }
@@ -794,7 +794,7 @@ mod tests {
         assert!(op.required_variables().is_empty());
     }
 
-    // ── Parallel dispatch (DD-048 consequence) ────────────────────────────────
+    // ── Parallel dispatch (DA-048 consequence) ────────────────────────────────
     //
     // No per-instance threshold on FVCenteredFlux/FVUpwindFlux (chosen over
     // a ParallelThreshold field specifically to keep both structs `Clone` —

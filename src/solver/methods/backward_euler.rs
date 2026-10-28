@@ -49,7 +49,7 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// // Dense path (default).
 /// let solver = BackwardEulerSolver::new();
 ///
-/// // Sparse backend (feature `sparse`, v0.6.0, DD-013 second phase, DD-043):
+/// // Sparse backend (feature `sparse`, v0.6.0, DT-013 second phase, DA-043):
 /// // the dense path stays untouched unless all three are configured explicitly.
 /// # #[cfg(feature = "sparse")]
 /// # {
@@ -62,7 +62,7 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// ```
 #[derive(Default)]
 pub struct BackwardEulerSolver {
-    /// Linear-system backends (DD-013, DD-043): the dense solver and,
+    /// Linear-system backends (DT-013, DA-043): the dense solver and,
     /// with the `sparse` feature, the banded-path configuration, set by
     /// `with_linear_solver` and the `with_sparse_*`/`with_jacobian_bandwidth`
     /// builders.
@@ -89,7 +89,7 @@ impl BackwardEulerSolver {
         Self::default()
     }
 
-    /// Substitutes the linear solver backend (DD-013).
+    /// Substitutes the linear solver backend (DT-013).
     pub fn with_linear_solver(mut self, linear_solver: Box<dyn LinearSolver>) -> Self {
         self.backend.linear_solver = linear_solver;
         self
@@ -154,7 +154,7 @@ impl BackwardEulerSolver {
         self.jacobian_dispatch.threshold()
     }
 
-    /// Configures the sparse backend (DD-043). Has no effect on its own —
+    /// Configures the sparse backend (DA-043). Has no effect on its own —
     /// the sparse path also requires [`Self::with_jacobian_bandwidth`] and
     /// a system larger than [`Self::with_sparse_threshold`] (default 100)
     /// at solve time; otherwise the dense path is used unchanged.
@@ -173,7 +173,7 @@ impl BackwardEulerSolver {
     }
 
     /// Declares the Jacobian's half-bandwidth (e.g.
-    /// `scheme.stencil_radius()`, DD-039) — see [`Self::with_sparse_solver`].
+    /// `scheme.stencil_radius()`, DA-039) — see [`Self::with_sparse_solver`].
     ///
     /// Counted in flat unknowns. For a `ScalarField` state this is the
     /// stencil half-width `s`; for a `VectorField` state of `d` components,

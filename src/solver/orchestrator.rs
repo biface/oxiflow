@@ -1,6 +1,6 @@
 //! # Module `solver::orchestrator`
 //!
-//! Multi-domain orchestration — DD-031.
+//! Multi-domain orchestration — DA-031.
 //!
 //! ## Why this exists
 //!
@@ -10,7 +10,7 @@
 //! (lahar–lake, #40) need several domains advancing together, each
 //! exchanging state with the others via
 //! [`CouplingOperator`](crate::coupling::CouplingOperator) (INV-3,
-//! DD-011) between steps.
+//! DA-011) between steps.
 //!
 //! Rather than generalising `Solver`/`SimulationResult` for this — which
 //! would force every coupled domain through the same integrator —
@@ -24,7 +24,7 @@
 //! same step before couplings are applied. Per-domain `dt` (multirate /
 //! sub-cycling) is a substantially harder problem — interface time
 //! interpolation, coupling stability — deliberately deferred until a
-//! concrete case requires it (see DD-031).
+//! concrete case requires it (see DA-031).
 //!
 //! ## Per-step order
 //!
@@ -33,7 +33,7 @@
 //! 1. **Advance every domain** by one step, each via its own registered
 //!    `SteppableSolver` (which itself follows the contractual
 //!    calculators → boundary conditions → `compute_physics` order, see
-//!    [`crate::solver`]). Split into two passes internally (DD-048
+//!    [`crate::solver`]). Split into two passes internally (DA-048
 //!    consequence): a Jacobi-parallel compute pass (each domain reads
 //!    only the pre-step state, independent by construction, optionally
 //!    dispatched through Rayon above `MultiDomainOrchestrator::parallel_threshold`)
@@ -107,7 +107,7 @@ pub(crate) fn default_parallel_threshold() -> usize {
 #[derive(Debug)]
 pub struct OrchestratorConfig {
     /// Temporal parameters — t_end, step control, save frequency. Only
-    /// `StepControl::Fixed` is supported (DD-031 v1: synchronised `dt`).
+    /// `StepControl::Fixed` is supported (DA-031 v1: synchronised `dt`).
     pub time: TimeConfiguration,
     /// Context variable calculators, shared across all domains — built
     /// once from `scenario.context_requirements()`, which already
@@ -182,7 +182,7 @@ pub struct MultiDomainOrchestrator {
     /// `tests/coupling_proto.rs` (v0.3.0): the caller picks one explicitly,
     /// `PhysicalModel` does not declare it itself.
     quantities: HashMap<DomainId, PhysicalQuantity>,
-    /// Phase-1 dispatch threshold (DD-048 consequence) — gates the
+    /// Phase-1 dispatch threshold (DA-048 consequence) — gates the
     /// "advance every domain" pass between a sequential loop and a Rayon
     /// dispatch across domains. Measured against the *aggregate* mesh
     /// volume (sum of every domain's [`Mesh::n_dof`](crate::mesh::Mesh::n_dof)
@@ -191,7 +191,7 @@ pub struct MultiDomainOrchestrator {
     /// meshes or two trivial ones, and `n_dof()` already exists on every
     /// domain's mesh with no new API needed.
     ///
-    /// Known limitation, accepted deliberately (DD-048/P5 does not
+    /// Known limitation, accepted deliberately (DA-048/P5 does not
     /// require an exact cost measure, only a measured one): this
     /// approximation does not weight for per-node cost differences
     /// between solver types — an adaptive integrator costs more per node
@@ -288,7 +288,7 @@ impl MultiDomainOrchestrator {
     ///   registered solver/quantity, if `scenario` has no domains, or if
     ///   `dt`/`t_end` are invalid.
     /// - `OxiflowError::InvalidDomain` if `config.time.step_control` is not
-    ///   `StepControl::Fixed` (DD-031 v1 scope).
+    ///   `StepControl::Fixed` (DA-031 v1 scope).
     pub fn run(
         &self,
         scenario: &Scenario,
@@ -315,7 +315,7 @@ impl MultiDomainOrchestrator {
             _ => {
                 return Err(OxiflowError::InvalidDomain(
                     "MultiDomainOrchestrator only supports StepControl::Fixed \
-                     (DD-031 v1: dt synchronised across all domains)"
+                     (DA-031 v1: dt synchronised across all domains)"
                         .into(),
                 ))
             }
@@ -375,7 +375,7 @@ impl MultiDomainOrchestrator {
 
             // 1. Advance every domain by one step, each with its own
             //    solver — two-phase Jacobi split (issue tracking this
-            //    consequence of DD-048/#140).
+            //    consequence of DA-048/#140).
             //
             // Domains only read the pre-step (t^n) `multi_state` and never
             // see another domain's post-step value within the same

@@ -1,13 +1,13 @@
 //! # Module `solver::config`
 //!
-//! Solving configuration — `SolverConfiguration` (HOW pole, DD-021, issue #32).
+//! Solving configuration — `SolverConfiguration` (HOW pole, DA-021, issue #32).
 //!
 //! ## Design
 //!
 //! `dt: f64` is never exposed directly in the public API. Instead, `StepControl`
 //! encapsulates both fixed-step and adaptive-step strategies. `TimeConfiguration`
 //! groups all temporal parameters. This prevents the breaking change that would
-//! occur at J4 when adaptive integrators (DoPri45, BDF2) are introduced (DD-021).
+//! occur at J4 when adaptive integrators (DoPri45, BDF2) are introduced (DA-021).
 
 use crate::context::calculator::ContextCalculator;
 
@@ -40,7 +40,7 @@ pub enum StepControl {
         dt: f64,
     },
 
-    /// Adaptive step-size control — RESERVED J4 (DoPri45, BDF2, DD-021).
+    /// Adaptive step-size control — RESERVED J4 (DoPri45, BDF2, DA-021).
     ///
     /// The integrator adjusts $\Delta t$ to keep the local truncation error
     /// within the tolerance band:
@@ -103,9 +103,9 @@ pub enum IntegratorKind {
     Euler,
     /// Runge-Kutta 4 — explicit, 4th order — J4a (#41).
     RK4,
-    /// Backward Euler — implicit, 1st order — J4a (#43, DD-013, DD-033).
+    /// Backward Euler — implicit, 1st order — J4a (#43, DT-013, DD-033).
     BackwardEuler,
-    /// Crank-Nicolson — semi-implicit, 2nd order — J4a (#43, DD-013, DD-033).
+    /// Crank-Nicolson — semi-implicit, 2nd order — J4a (#43, DT-013, DD-033).
     CrankNicolson,
     /// BDF2 — implicit multi-step, 2nd order — J4a (#44, DD-034). Fixed
     /// `dt` only; see `BDF2Solver` module docs for the deferred
@@ -116,7 +116,7 @@ pub enum IntegratorKind {
     /// `DoPri45Solver` module docs.
     DoPri45,
     /// Operator splitting (Strang) — n ≥ 2 sub-models, each with its own
-    /// integrator — J4a (#45, DD-037). `Solver` only, not
+    /// integrator — J4a (#45, DA-037). `Solver` only, not
     /// `SteppableSolver` — see `OperatorSplittingSolver` module docs.
     /// Neither purely explicit nor purely implicit — excluded from
     /// `is_explicit()`.
@@ -208,7 +208,7 @@ impl TimeConfiguration {
 /// `SolverConfiguration` does not implement `serde::Serialize` / `serde::Deserialize`.
 /// The `calculators` field holds `Vec<Box<dyn ContextCalculator>>` (trait objects),
 /// which cannot be serialised directly. The serialisable subset of configuration
-/// is captured in `SimulationSnapshot` (DD-025 Option B, v0.6.0).
+/// is captured in `SimulationSnapshot` (DT-025 Option B, v0.6.0).
 ///
 /// # Examples
 ///

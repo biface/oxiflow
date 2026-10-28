@@ -2,7 +2,7 @@
 //!
 //! WENO (Weighted Essentially Non-Oscillatory) reconstruction schemes for
 //! [`UniformGrid1D`] — `WENO3` (3rd order), `WENO5` (5th order) (#49,
-//! DD-039).
+//! DA-039).
 //!
 //! ## Why WENO
 //!
@@ -47,7 +47,7 @@
 //!
 //! ## Upwind-direction selection
 //!
-//! `velocity` is a constant scalar (the "simple case" of DD-039 — space/time
+//! `velocity` is a constant scalar (the "simple case" of DA-039 — space/time
 //! varying parameters would be declared via `required_variables()` instead,
 //! not needed by `#49`'s scope). Because the sign of `velocity` never
 //! changes across the domain, the upwind bias is chosen once from

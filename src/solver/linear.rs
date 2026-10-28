@@ -1,23 +1,23 @@
 //! # Module `solver::linear`
 //!
-//! Linear system solver abstraction — DD-013.
+//! Linear system solver abstraction — DT-013.
 //!
 //! Lives at `solver::linear`, not nested under `solver::methods`: solving
 //! `A * x = b` knows nothing about `t`, `dt`, or any `Domain` — it is a
 //! generic service, not a temporal-integration concern. The implicit
 //! integrators ([`crate::solver::methods::implicit`]) are its first
-//! consumer. DD-013 also anticipates further consumers unrelated to time
+//! consumer. DT-013 also anticipates further consumers unrelated to time
 //! integration — sparse FEM systems from v0.12.0 (J12) among them — but any sparse
 //! backend is a sibling trait (see below), never a second implementation
 //! of `LinearSolver` itself.
 //!
 //! [`NalgebraDenseSolver`] (dense LU) is the default for the small systems
 //! implicit integrators produce at J4a. The sparse `faer` backend arrives
-//! at v0.6.0 (DD-013 second phase, DD-043) as **`SparseLinearSolver`**
+//! at v0.6.0 (DT-013 second phase, DA-043) as **`SparseLinearSolver`**
 //! (`solver::sparse`) — a sibling trait, not another implementation of
 //! `LinearSolver` itself: `faer`'s sparse matrix type is structurally
 //! incompatible with `DMatrix` without a conversion that would erase the
-//! memory benefit sparsity is meant to provide (DD-043). `LinearSolver` and
+//! memory benefit sparsity is meant to provide (DA-043). `LinearSolver` and
 //! `NalgebraDenseSolver` are unaffected by that addition — no change needed
 //! here when it lands.
 

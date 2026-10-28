@@ -1,7 +1,7 @@
 //! # Module `model::composite`
 //!
 //! `CompositeModel` — sum of multiple [`PhysicalModel`] on the same state
-//! (DD-037, #45).
+//! (DA-037, #45).
 //!
 //! ## Why
 //!
@@ -14,7 +14,7 @@
 //!
 //! 1. **Bookkeeping** for [`crate::solver::methods::imex::OperatorSplittingSolver`]:
 //!    the outer `Domain` required by [`crate::solver::Solver::solve`]
-//!    (DD-037) carries a `CompositeModel` whose `required_variables()`/
+//!    (DA-037) carries a `CompositeModel` whose `required_variables()`/
 //!    `initial_state()` correctly cover the union of the sub-models —
 //!    otherwise `build_calculator_chain` would miss a variable required by
 //!    a single operator.
@@ -38,7 +38,7 @@ use crate::model::traits::{PhysicalModel, RequiresContext};
 
 /// Sum of multiple [`PhysicalModel`] evaluated on the same state.
 ///
-/// See the module documentation for context (DD-037).
+/// See the module documentation for context (DA-037).
 pub struct CompositeModel {
     operators: Vec<Box<dyn PhysicalModel>>,
     name: String,
@@ -180,7 +180,7 @@ impl PhysicalModel for CompositeModel {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("composite model — sums multiple PhysicalModel contributions (DD-037)")
+        Some("composite model — sums multiple PhysicalModel contributions (DA-037)")
     }
 }
 

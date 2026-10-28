@@ -5,7 +5,7 @@
 //! Single definition shared by `examples/lahar_multifield.rs`,
 //! `examples/lahar_multifield_plot.rs`, `examples/lahar_lake_wave.rs`,
 //! `tests/lahar_multifield_analytical.rs` and `benches/lahar_multifield.rs`,
-//! each of which includes this file as a module with `#[path]`. The model (DD-032, Woodhouse, Hogg & Phillips) is
+//! each of which includes this file as a module with `#[path]`. The model (DQ-032, Woodhouse, Hogg & Phillips) is
 //! documented in `examples/lahar_multifield.rs`.
 //!
 //! Requires `rsc/models/lahar_physics.rs` as a sibling module named
@@ -47,7 +47,7 @@ pub(crate) struct LaharSource {
     x_coords: Vec<f64>,
     /// Rayon dispatch threshold for the per-node friction/erosion/
     /// deposition loop -- default measured at v0.9.0, see
-    /// [`default_source_parallel_threshold`]. Per-instance (DD-048
+    /// [`default_source_parallel_threshold`]. Per-instance (DA-048
     /// P1/P2/P3), independent of `ShallowLayerFlux`'s own threshold:
     /// this site's per-node cost (three-branch Pouliquen-Forterre
     /// friction plus the Shields/settling-velocity closures) has nothing

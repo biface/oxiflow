@@ -1,6 +1,6 @@
 //! # Module `solver::sparse`
 //!
-//! Sparse linear system solver abstraction — DD-013 (second phase), DD-043.
+//! Sparse linear system solver abstraction — DT-013 (second phase), DA-043.
 //!
 //! **`#[cfg(feature = "sparse")]` only** — this module does not exist in a
 //! build without the `sparse` feature, and links no `faer` code in that
@@ -16,9 +16,9 @@
 //! sparsity exists to provide in the first place. `SparseLinearSolver`
 //! therefore has its own `solve()` signature over the sparse type — the
 //! same posture as [`crate::operators::FluxDivergenceOperator`] relative to
-//! [`crate::operators::DiscreteOperator`] (DD-039): a sibling trait when
+//! [`crate::operators::DiscreteOperator`] (DA-039): a sibling trait when
 //! the two signatures genuinely diverge, not a sub-trait forcing one onto
-//! the other (DD-043, "Décision — forme du trait", option C).
+//! the other (DA-043, "Décision — forme du trait", option C).
 //!
 //! `b` and the return value stay `nalgebra::DVector<f64>` — consistent with
 //! the rest of the codebase; converting to/from `faer`'s own vector
@@ -64,7 +64,7 @@ pub trait SparseLinearSolver: Send + Sync {
 /// Tested standalone against systems built directly in sparse form (e.g. a
 /// tridiagonal system assembled as triplets), and through the banded Newton
 /// path of the implicit solvers, whose finite-difference Jacobian is
-/// assembled in compressed columns (DD-043, DT-069).
+/// assembled in compressed columns (DA-043, DT-069).
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FaerSparseSolver;
 

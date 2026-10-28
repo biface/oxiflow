@@ -1,8 +1,8 @@
 //! # Example: lahar–lake coupled prototype (#40, J3 exit criterion)
 //!
-//! Demonstrates `MultiDomainOrchestrator` (DD-031) driving two coupled
+//! Demonstrates `MultiDomainOrchestrator` (DA-031) driving two coupled
 //! domains — a lahar (volcanic mudflow) losing mass and a lake receiving
-//! it — through `CouplingOperator` (INV-3, DD-011).
+//! it — through `CouplingOperator` (INV-3, DA-011).
 //!
 //! Run with: `cargo run --example lahar_lake_proto`
 //!
@@ -120,7 +120,7 @@ fn main() {
     let final_mass = total_mass(result.states.last().expect("at least one state"), &quantity);
     let relative_drift = (final_mass - initial_mass).abs() / initial_mass;
 
-    println!("oxiflow — lahar-lake prototype (#40, DD-031)");
+    println!("oxiflow — lahar-lake prototype (#40, DA-031)");
     println!("  steps run:      {}", result.n_steps);
     println!("  initial mass:   {initial_mass:.6}");
     println!("  final mass:     {final_mass:.6}");

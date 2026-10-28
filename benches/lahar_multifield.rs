@@ -6,7 +6,7 @@
 //!
 //! Two dispatch sites were added for this model (session-confirmed:
 //! unlike diffusion_1d/viscous_burgers/langmuir_multi, this model needed
-//! two independent calibrations, not one -- DD-048 P1/P2/P3, granularity
+//! two independent calibrations, not one -- DA-048 P1/P2/P3, granularity
 //! is a per-site decision):
 //!
 //! - [`full_run`] -- fixed-size performance on the Chezy-drag-dominated

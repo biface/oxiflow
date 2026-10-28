@@ -1,18 +1,18 @@
 //! # Module `solver::parallel`
 //!
-//! Shared Rayon-dispatch-threshold mechanism (DD-014, DD-048) — a small,
+//! Shared Rayon-dispatch-threshold mechanism (DT-014, DA-048) — a small,
 //! reusable building block for every site in the crate that decides, per
 //! element, whether to run a computation sequentially or through Rayon.
 //! Extracted after the same field/builder/guard triplet was written
 //! twice, verbatim, on `FDGradientCalculator` and `FDLaplacianCalculator`
-//! (DD-014, #51) — see DD-048 for the full rationale (architecture
+//! (DT-014, #51) — see DA-048 for the full rationale (architecture
 //! principles P1-P5) behind this module's shape.
 //!
 //! ## What this is not
 //!
 //! Not a trait imposed on `ContextCalculator`/`DiscreteOperator`/
-//! `FluxDivergenceOperator` — DD-048 explicitly rejects that shape,
-//! mirroring the precedent already set twice (DD-012 amendment 2, DD-039
+//! `FluxDivergenceOperator` — DA-048 explicitly rejects that shape,
+//! mirroring the precedent already set twice (DA-012 amendment 2, DA-039
 //! option A): forcing an orthogonal capability onto every implementer of
 //! a shared trait, when only some of them benefit from it. Each site that
 //! wants Rayon dispatch holds a `ParallelThreshold` field and reads it
@@ -32,11 +32,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// without extra indirection). [`Self::get`] resolves the sentinel to a
 /// caller-supplied default rather than materializing that default at
 /// construction — one authoritative default, consulted on demand, rather
-/// than copied into every instance (DD-048; closer to chrom-rs's single
+/// than copied into every instance (DA-048; closer to chrom-rs's single
 /// process-wide default than to a per-instance constant).
 ///
 /// Deliberately per-instance, not a shared `static` (chrom-rs's own
-/// design) — `MultiDomainOrchestrator` (DD-031) can run several domains,
+/// design) — `MultiDomainOrchestrator` (DA-031) can run several domains,
 /// each with its own solver, in the same process; a single global would
 /// force them to share one setting, with a "last writer wins" race
 /// between domains adjusting it independently. Reconfigurable at runtime
@@ -62,12 +62,12 @@ impl ParallelThreshold {
     /// should want anyway: it would force parallel dispatch on every
     /// non-empty input, never the intended behaviour (mirrors chrom-rs's
     /// own `set_parallel_threshold` guard). No other value is validated
-    /// — DD-048 deliberately leaves "how low is too low" to the caller's
+    /// — DA-048 deliberately leaves "how low is too low" to the caller's
     /// own measurement (see [`calibrate_parallel_threshold`]), consistent
-    /// with `sparse_threshold`/`jacobian_bandwidth` (DD-043), which
+    /// with `sparse_threshold`/`jacobian_bandwidth` (DA-043), which
     /// validate nothing at all: there is no threshold floor that is
     /// universally sensible across workloads (chrom-rs's 999 is nearly a
-    /// total loss for the FD stencils DD-014 calibrated 49999 against).
+    /// total loss for the FD stencils DT-014 calibrated 49999 against).
     pub(crate) fn set(&self, threshold: usize) {
         assert!(threshold > 0, "parallel threshold must be at least 1");
         self.0.store(threshold, Ordering::Relaxed);
@@ -85,7 +85,7 @@ impl ParallelThreshold {
 /// Empirically measures the sequential/parallel crossover point for a
 /// given per-element workload, on the machine actually running the code
 /// — rather than assuming a number calibrated for a different workload
-/// or a different machine (DD-048).
+/// or a different machine (DA-048).
 ///
 /// Tries each of `candidate_sizes`, in order, timing a sequential loop
 /// and a Rayon `into_par_iter` dispatch of `work` over `0..n` elements;
