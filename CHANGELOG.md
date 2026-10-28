@@ -228,6 +228,14 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   either vector components or `d` unknowns unrelated to the mesh dimension;
   the default dispatch threshold of the finite-difference operators
   (49 999) is documented as indicative (#140, #194).
+- Documentation: the READMEs, the contributing guides and the development
+  guides follow the 0.xx milestone numbering. Their milestone tables give
+  the titles, versions and dates of the GitHub milestones, from J0 to J30
+  and v0.40.0, and the old v1.0, v2.0 and v3.0 targets are gone. The quick
+  start of the READMEs is rewritten: the previous one used an API that
+  oxiflow never had (`oxiflow::prelude`, `Scenario::builder`); the new one
+  compiles against the crate and runs a diffusion case. Decision
+  identifiers carry the prefix of their issue (#169).
 
 ### Fixed
 

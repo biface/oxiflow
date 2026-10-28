@@ -2,11 +2,12 @@
 
 Ce document est la référence architecturale d'oxiflow. Il couvre les principes de conception,
 les spécifications de jalons, les invariants de conception, la stratégie d'écosystème et le
-journal de décisions qui guident l'ensemble du travail d'implémentation de v0.1 à v3.0.
+journal de décisions qui guident l'ensemble du travail d'implémentation, de v0.1.0 à v0.30.0
+et au-delà.
 
-> **Version actuelle :** v0.6.0 — Algèbre creuse & persistance (clos)
-> **Développement actif :** v0.7.0 — Intégration temporelle non linéaire (J7), pas encore démarré
-> **Version du document :** 2.3 — Juillet 2026
+> **Version actuelle :** v0.9.0 — Parallélisme & benchmarking (publiée)
+> **Développement actif :** v0.10.0 — Écosystème stable (J10), en cours
+> **Version du document :** 3.0 — Octobre 2026
 
 ---
 
@@ -17,15 +18,15 @@ journal de décisions qui guident l'ensemble du travail d'implémentation de v0.
 3. [J1 — Architecture cœur (v0.1)](#3-j1--architecture-cœur-v01)
 4. [J2 — Contexte complet (v0.2)](#4-j2--contexte-complet-v02)
 5. [J3 — Multi-composants (v0.3)](#5-j3--multi-composants-v03)
-6. [J4a — Intégrateurs (v0.4)](#6-j4a--intégrateurs-v04)
+6. [J4 — Intégrateurs (v0.4)](#6-j4--intégrateurs-v04)
 7. [J5 — Discrétisation (v0.5)](#7-j5--discrétisation-v05)
-8. [J6 — Algèbre creuse & persistance (v0.6)](#8-j6--algèbre-creuse--persistance-v06)
+8. [J6 — Algèbre linéaire creuse & persistance (v0.6)](#8-j6--algèbre-linéaire-creuse--persistance-v06)
 9. [J7 — Intégration temporelle non linéaire (v0.7)](#9-j7--intégration-temporelle-non-linéaire-v07)
-10. [J8 — Optimisation computationnelle (v0.8)](#10-j8--optimisation-computationnelle-v08)
+10. [J8 — Optimisation des calculs (v0.8)](#10-j8--optimisation-des-calculs-v08)
 11. [J9 — Parallélisme & benchmarking (v0.9)](#11-j9--parallélisme--benchmarking-v09)
-12. [J10 — Écosystème stable (v1.0)](#12-j10--écosystème-stable-v10)
-13. [Compatibilité FEM — Trajectoire v2.0 (J20)](#13-compatibilité-fem--trajectoire-v20-j20)
-14. [J30 — Frameworks de niche (v3.0)](#14-j30--frameworks-de-niche-v30)
+12. [J10 — Écosystème stable (v0.10)](#12-j10--écosystème-stable-v010)
+13. [Compatibilité FEM — Trajectoire de J11 à J20](#13-compatibilité-fem--trajectoire-de-j11-à-j20)
+14. [J30 — Frameworks de niche (v0.30)](#14-j30--frameworks-de-niche-v030)
 15. [Frameworks de l'écosystème connus](#15-frameworks-de-lécosystème-connus)
 16. [Journal des décisions architecturales](#16-journal-des-décisions-architecturales)
 17. [Registre des risques](#17-registre-des-risques)
@@ -64,7 +65,7 @@ transfert thermique, électromagnétisme diffusif, et tout domaine qu'un tiers s
   ne nécessite pas de modifier le cœur du moteur
 - **Séparation stricte des responsabilités** — le modèle déclare, le calculateur exécute,
   le solveur orchestre, le Scenario valide
-- **Compatibilité FEM anticipée** — les abstractions v1.0 ne présupposent pas de grille
+- **Compatibilité FEM anticipée** — les abstractions de J1 à J10 ne présupposent pas de grille
   structurée (INV-1/2/3)
 - **API plugin-safe** — tous les traits publics sont object-safe afin que des crates de
   frameworks tiers puissent les implémenter sans accéder aux internals du moteur (INV-4,
@@ -82,25 +83,37 @@ scientifiques spécifiques avec un minimum de code de plomberie.
 
 ## 2. Vue d'ensemble des jalons
 
-| Jalon | Version | État | Thème |
-|---|---|---|---|
-| J0 — Fondations | v0.0.1–v0.0.5 | ✅ Acquis | placeholder crates.io · CI · structure projet |
-| J1 — Architecture cœur | v0.1.0 | ✅ Acquis | ContextValue · OxiflowError · Mesh (INV-1) |
-| J2 — Contexte complet | v0.2.0 | ✅ Acquis | BCs requirantes · ordonnancement topologique · calculateurs built-in |
-| J3 — Multi-composants | v0.3.0 | ✅ Acquis | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3) |
-| J4a — Intégrateurs | v0.4.0 | ✅ Acquis | Euler, RK4, DoPri45, Euler implicite, Crank-Nicolson, BDF2, IMEX |
-| J5 — Discrétisation | v0.5.0 | ✅ Atteint | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
-| J6 — Algèbre creuse & persistance | v0.6.0 | ✅ Atteint | faer-sparse · export VTK/HDF5 · SimulationSnapshot |
-| J7 — Intégration temporelle non linéaire | v0.7.0 | ⏳ Planifié | Newton et méthodes apparentées pour intégrateurs implicites |
-| J8 — Optimisation computationnelle | v0.8.0 | ⏳ Planifié | Profilage, optimisation algorithmique/mémoire, GPU (`wgpu`) |
-| J9 — Parallélisme & benchmarking | v0.9.0 | ⏳ Planifié | Rayon · cache dirty-flag · benchmarks Criterion |
-| J10 — Écosystème stable | v1.0.0 | ⏳ Planifié | 7 exemples · audit FEM INV-1/2/3 · API stable |
-| J20 — FEM | v2.0.0 | ⏳ Planifié | Maillages non structurés · ALE · INV-4 plugin-safe |
-| J30 — Frameworks de niche | v3.0.0 | ⏳ Planifié | oxiflow-chrom · oxiflow-geo · oxiflow-thermo · oxiflow-em · CLI · tiers |
+| Jalon | Version | Statut | Date | Thème |
+|---|---|---|---|---|
+| J0 — Fondations | v0.0.1 / v0.0.5 | ✅ Publié | 2026-03-20 | Placeholder · CI · structure du projet |
+| J1 — Architecture cœur | v0.1.0 | ✅ Publié | 2026-04-12 | ContextValue · OxiflowError · Mesh (INV-1) |
+| J2 — Contexte complet | v0.2.0 | ✅ Publié | 2026-05-02 | Conditions aux limites requérantes · tri topologique · calculateurs |
+| J3 — Multi-composants | v0.3.0 | ✅ Publié | 2026-06-03 | PhysicalQuantity · MultiDomainState · CouplingOperator (INV-3) |
+| J4 — Intégrateurs | v0.4.0 | ✅ Publié | 2026-06-25 | Euler, RK4, DoPri45, Euler implicite, Crank–Nicolson, BDF2, IMEX |
+| J5 — Discrétisation | v0.5.0 | ✅ Publié | 2026-07-17 | DiscreteOperator (INV-2) · FD/FV · WENO3/5 · limiteurs de flux + sélection adaptative |
+| J6 — Algèbre linéaire creuse & persistance | v0.6.0 | ✅ Publié | 2026-07-21 | Solveur creux faer · SimulationSnapshot (checkpoint/on_divergence) · chargement HDF5 · export VTK · IntegratorSpec |
+| J7 — Intégration temporelle non linéaire | v0.7.0 | ✅ Publié | 2026-07-30 | Itération de Newton pour les intégrateurs implicites ([DD-044](https://github.com/biface/oxiflow/issues/109)) · `IntegratorSpec` étendu à BE/CN/BDF2 |
+| J8 — Optimisation des calculs | v0.8.0 | ✅ Publié | 2026-08-03 | GPU-readiness ([DA-026](https://github.com/biface/oxiflow/issues/73), [DT-045](https://github.com/biface/oxiflow/issues/128)) · feature `gpu` (`wgpu`) · MSRV 1.84 |
+| J9 — Parallélisme & benchmarking | v0.9.0 | ✅ Publié | 2026-09-16 | Dispatch Rayon ([DT-014](https://github.com/biface/oxiflow/issues/14)/[DA-048](https://github.com/biface/oxiflow/issues/140)) · suite de benchmarks Criterion (`oxiflow_parallel`) · modèle lahar multi-champs ([DQ-032](https://github.com/biface/oxiflow/issues/85)) · graphiques SVG de référence |
+| J10 — Écosystème stable | v0.10.0 | 🚧 En cours | 2026-11-30 | Sept exemples de référence · coefficients `(x, t)` (`CoefficientField`, [DD-066](https://github.com/biface/oxiflow/issues/181)) · audit des invariants FEM · SemVer strict, `cargo-semver-checks` ([DQ-016](https://github.com/biface/oxiflow/issues/16)) |
+| J11 — Fondations de maillage nD | v0.11.0 (FEM) / v0.11.5 (structuré) | ⏳ Planifié | 2027-01-14 / 2027-02-28 | `FiniteElementMesh`, maillages non structurés 2D/3D ([DA-049](https://github.com/biface/oxiflow/issues/150)) · `UniformGrid1D` généralisée en nD ([DD-051](https://github.com/biface/oxiflow/issues/152)) |
+| J12 — Discrétisation vitesse-pression | v0.12.0 / v0.12.5 | ⏳ Planifié | 2027-04-14 / 2027-05-29 | FEM (import Gmsh, [DT-028](https://github.com/biface/oxiflow/issues/76)) ou MAC/colocalisé + Rhie–Chow (structuré) |
+| J13 — SaddlePointSolver | v0.13.0 | ⏳ Planifié | 2027-07-13 | `SaddlePointSolver`, commun aux deux voies |
+| J14 — Systèmes différentiels-algébriques & Navier–Stokes | v0.14.0 | ⏳ Planifié | 2027-08-27 | Intégration temporelle DAE · Navier–Stokes en `PhysicalModel`, commun |
+| J15 — Branchement de bout en bout de NS | v0.15.0 / v0.15.5 | ⏳ Planifié | 2027-10-11 / 2027-11-25 | Taylor–Hood/MINI (FEM) ou chaîne structurée complète |
+| J16 — Solveurs creux préconditionnés | v0.16.0 | ⏳ Planifié | 2028-01-09 | Préconditionneurs ILU/AMG, avant la comparaison qui en a besoin à résolution fine ([DQ-047](https://github.com/biface/oxiflow/issues/132)) |
+| J17 — Comparaison FEM / structuré | v0.17.0 | ⏳ Planifié | 2028-02-23 | Cavité entraînée, Poiseuille, Ghia et al. 1982 |
+| J18 — Arbitrary Lagrangian–Eulerian | v0.18.0 | ⏳ Planifié | 2028-04-08 | Formulation ALE |
+| J19 — Méthodes spectrales | v0.19.0 | ⏳ Planifié | 2028-05-23 | `Discretization` ancêtre commun, `Mesh`/`SpectralBasis` frères ([DA-024](https://github.com/biface/oxiflow/issues/63)) |
+| J20 — Stabilisation | v0.20.0 | 🔭 Horizon | 2028-07-07 | Point d'étape qui clôt le premier cycle ([DQ-063](https://github.com/biface/oxiflow/issues/165)) · 1.0.0 n'est lié à aucun jalon ([DQ-016](https://github.com/biface/oxiflow/issues/16)) |
+| J30 — Frameworks de niche | v0.30.0 | 🔭 Horizon | 2029-12-31 | oxiflow-chrom · oxiflow-geo · oxiflow-thermo · oxiflow-em · CLI `oxiflow run` · plugins tiers ([DA-017](https://github.com/biface/oxiflow/issues/17)) |
+| Phase future | v0.40.0 | 🔭 Horizon | 2030-12-31 | Périmètre à définir |
+
+Date : date de publication d'un jalon publié, échéance des autres (jalons GitHub).
 
 Chaque jalon est livrable indépendamment. J1 seul (v0.1) est une bibliothèque utilisable
 pour la modélisation en chromatographie. Le développement de frameworks tiers peut démarrer
-dès la publication de v2.0 et la mise en place d'INV-4.
+dès la mise en place d'INV-4 (v0.30.0, §13.2).
 
 ---
 
@@ -186,39 +199,39 @@ Correspondances BC chromatographiques :
 ## 5. J3 — Multi-composants (v0.3)
 
 `PhysicalQuantity` indexé. `MultiDomainState`. `CouplingOperator` inter-domaines (INV-3).
-Proto lahar–lac sur grilles régulières — base de régression pour la FEM v2.0.
+Proto lahar–lac sur grilles régulières — base de régression pour la voie FEM (à partir de J11).
 
 ---
 
-## 6. J4a — Intégrateurs (v0.4)
+## 6. J4 — Intégrateurs (v0.4)
 
 | Intégrateur | Type | Statut | Issue / DD |
 |---|---|---|---|
 | Forward Euler | Explicite, 1er ordre | ✅ Clos | #33, #41 |
 | RK4 | Explicite, 4e ordre | ✅ Clos | #41 |
-| Backward Euler | Implicite, 1er ordre | ✅ Clos | #43, DD-013, DD-033 |
-| Crank-Nicolson | Semi-implicite, 2e ordre | ✅ Clos | #43, DD-013, DD-033 |
+| Backward Euler | Implicite, 1er ordre | ✅ Clos | #43, DT-013, DD-033 |
+| Crank-Nicolson | Semi-implicite, 2e ordre | ✅ Clos | #43, DT-013, DD-033 |
 | BDF2 | Implicite multi-pas, 2e ordre | ✅ Clos | #44, DD-034 |
 | DoPri45 | Explicite adaptatif, ordre 5 | ✅ Clos | #42, DD-036 |
-| IMEX (splitting de Strang) | Transport-réaction | ✅ Clos | #45, DD-037 |
+| IMEX (splitting de Strang) | Transport-réaction | ✅ Clos | #45, DA-037 |
 
-J4a est intégralement livré : les sept intégrateurs sont clos, y compris IMEX (#45) et les
+J4 est intégralement livré : les sept intégrateurs sont clos, y compris IMEX (#45) et les
 annotations serde `cfg_attr` sur les types J4 (#70).
 
-Architecture posée en chemin, réutilisable au-delà de J4a :
+Architecture posée en chemin, réutilisable au-delà de J4 :
 
-- **`SteppableSolver`** (DD-031, DD-034) — primitive de pas (`step()`), historique borné via
+- **`SteppableSolver`** (DA-031, DD-034) — primitive de pas (`step()`), historique borné via
   `history_depth()` pour les méthodes multi-pas (BDF2). Corps `solve_fixed_step()` par défaut
   (DD-035) partagé par tous les intégrateurs à pas fixe — chaque `Solver::solve()` ci-dessus est
   un appel unique à cette méthode.
-- **`MultiDomainOrchestrator`** (DD-031) — pilote plusieurs domaines couplés, chacun avec son
+- **`MultiDomainOrchestrator`** (DA-031) — pilote plusieurs domaines couplés, chacun avec son
   propre `SteppableSolver` ; `dt` synchronisé entre domaines (multi-rate explicitement reporté).
-- **`LinearSolver`** (DD-013, `solver::linear`) — `Ax=b` indépendant du backend ; `nalgebra` dense
-  livré à J4a, `faer` creux prévu à J6 (v0.6.0, #50) derrière le même trait.
+- **`LinearSolver`** (DT-013, `solver::linear`) — `Ax=b` indépendant du backend ; `nalgebra` dense
+  livré à J4, `faer` creux prévu à J6 (v0.6.0, #50) derrière le même trait.
 - **`StepSizeController`** (DD-036, `solver::methods::step_control`) — contrôle de pas adaptatif
   indépendant de la source d'erreur (contrôleur PI) ; DoPri45 en est le premier consommateur, un
   futur solveur implicite adaptatif (Newton itéré, DD-033, J7) en est le second anticipé.
-- **`CompositeModel`** (DD-037, `model::composite`) — somme de plusieurs `PhysicalModel` sur un
+- **`CompositeModel`** (DA-037, `model::composite`) — somme de plusieurs `PhysicalModel` sur un
   même état ; sert de référence monolithique testable pour `OperatorSplittingSolver`
   (`solver::methods::imex`).
 - DoPri45 implémente `Solver` seul, pas `SteppableSolver` — choisir son propre `dt` d'un appel à
@@ -229,8 +242,8 @@ Architecture posée en chemin, réutilisable au-delà de J4a :
 
 ## 7. J5 — Discrétisation (v0.5)
 
-**Développement actif.** Deux traits frères, chacun ne portant que ce dont sa famille a
-réellement besoin (DD-012, DD-039) :
+Deux traits frères, chacun ne portant que ce dont sa famille a
+réellement besoin (DA-012, DA-039) :
 
 ```rust
 /// Quantité différentielle brute — jamais besoin du contexte (dx vient du maillage).
@@ -259,46 +272,46 @@ Deux points de branchement distincts, chacun cohérent avec le trait de sa famil
   `FDLaplacianCalculator` délèguent leur stencil à `operators::fd` sans changement d'API
   publique (issue de refactorisation dédiée, dépend de #47).
 - **FV/WENO** — consommés directement dans `compute_physics()` via le nouveau composite
-  `DiscretizedModel<Op: FluxDivergenceOperator>` (DD-038 amendée, DD-039), qui enveloppe le
+  `DiscretizedModel<Op: FluxDivergenceOperator>` (DA-038 amendée, DA-039), qui enveloppe le
   schéma spatial comme un `PhysicalModel` ordinaire ne renvoyant que `-∇·F`. La borne de type
   garantit à la compilation qu'un opérateur FD ne peut pas y être branché par erreur. Le
-  terme source S, quand il existe, se compose via `CompositeModel` (DD-037, déjà livré) —
+  terme source S, quand il existe, se compose via `CompositeModel` (DA-037, déjà livré) —
   aucun nouveau trait `SourceTerm` n'est introduit ce sprint. Les paramètres physiques de F
   (vitesse, diffusion) sont soit des champs constants à la construction (cas simple,
   `required_variables() -> vec![]`), soit référencés par `ContextVariable` et fournis par un
   `ContextCalculator` ordinaire déjà ordonnancé par `chain.rs` (DD-009) — aucun mécanisme
   nouveau. Le calculateur interne (`FluxDivergenceCalculator`) reste privé ce sprint — champ
   `instance_id` réservé pour une publication dans `ComputeContext` au moment de l'export
-  VTK/HDF5 (J6, DD-027).
+  VTK/HDF5 (J6, DT-027).
 
-Algèbre linéaire déléguée à `nalgebra` (dense, livré J4a) et `faer` (creux, prévu J6) —
-l'intégration de `faer` prolonge le trait `LinearSolver` déjà posé à J4a (DD-013), pas une
+Algèbre linéaire déléguée à `nalgebra` (dense, livré J4) et `faer` (creux, prévu J6) —
+l'intégration de `faer` prolonge le trait `LinearSolver` déjà posé à J4 (DT-013), pas une
 nouvelle abstraction.
 
-**Critère de sortie :** #46–#49 clos, DD-012, DD-038 et DD-039 fermées, refactorisation FD
+**Critère de sortie :** #46–#49 clos, DA-012, DA-038 et DA-039 fermées, refactorisation FD
 livrée.
 
 ---
 
-## 8. J6 — Algèbre creuse & persistance (v0.6)
+## 8. J6 — Algèbre linéaire creuse & persistance (v0.6)
 
-Solveur linéaire creux `faer-sparse` pour les systèmes implicites (#50, DD-013 phase 2).
+Solveur linéaire creux `faer-sparse` pour les systèmes implicites (#50, DT-013 phase 2).
 Export des résultats : VTK (`vtkio` à l'époque, remplacé par une écriture `.vtu` interne en v0.10.0, #191) comme pivot interop pour `SimulationResult` (#78,
-DD-027), HDF5 (`hdf5-metno`, migration de dépendance #79) pour les données volumineuses,
+DT-027), HDF5 (`hdf5-metno`, migration de dépendance #79) pour les données volumineuses,
 incluant le chargement HDF5 pour `ExternalTabulated` (#105, scindée de #75).
 `SimulationSnapshot` généralisé au-delà de la reprise sur crash vers un checkpoint/reprise
 normal (DD-029, étend #71, #77) — pas de méthode `Solver::checkpoint()` : l'appelant
 construit le snapshot directement, voir la documentation de module de `snapshot.rs`.
 
-L'amendement 1 de DD-027 ajoute le premier DTO de configuration côté HOW,
+L'amendement 1 de DT-027 ajoute le premier DTO de configuration côté HOW,
 `IntegratorSpec` (#104) — `TryFrom<IntegratorSpec> for Box<dyn Solver>`, seule la
 variante `BackwardEuler` pour cet incrément (le chemin de dispatch creux, #50). Les
 autres intégrateurs et l'axe WHAT (`ModelConfig`/`MeshConfig`/`BoundaryConditionConfig`)
 restent à faire, hors périmètre de J6.
 
 C'est également au moment de cette étape que le calculateur privé `FluxDivergenceCalculator`
-(DD-038, J5) est candidat à un branchement dans le pipeline de `ContextCalculator`, si l'export
-générique de champs de flux se révèle nécessaire — décision à reprendre avec le détail de DD-027,
+(DA-038, J5) est candidat à un branchement dans le pipeline de `ContextCalculator`, si l'export
+générique de champs de flux se révèle nécessaire — décision à reprendre avec le détail de DT-027,
 pas figée à J5.
 
 Feature flags : `sparse`, `hdf5`, `vtk`.
@@ -308,10 +321,10 @@ Feature flags : `sparse`, `hdf5`, `vtk`.
 ## 9. J7 — Intégration temporelle non linéaire (v0.7)
 
 DD-033 gèle la méthode theta des intégrateurs implicites (Backward Euler, Crank-Nicolson,
-BDF2) à une correction de type Newton non itérée pour J4a — exact pour les problèmes affines
+BDF2) à une correction de type Newton non itérée pour J4 — exact pour les problèmes affines
 en `u`, approximation de premier ordre sinon. J7 lève cette limitation : solveur non linéaire
 (Newton itéré à convergence, ou méthode apparentée) branché derrière le même point d'extension
-que DD-033 anticipait déjà, sans réécriture des solveurs J4a.
+que DD-033 anticipait déjà, sans réécriture des solveurs J4.
 
 ### Pourquoi c'est nécessaire : le résidu discrétisé n'est pas toujours linéaire
 
@@ -327,13 +340,13 @@ g(u^{n+1}) = u^{n+1} - u^n - Δt · [(1-θ)·f(u^n) + θ·f(u^{n+1})] = 0
 (BDF2 a son propre résidu, `g(u) = (3/2)u - 2u^n + (1/2)u^{n-1} - Δt·f(u)`, mais le
 raisonnement est identique.) `g` est **linéaire** en `u^{n+1}` exactement lorsque `f` est
 affine en `u` — c'est-à-dire lorsque `F` et `S` sont tous deux affines. C'est précisément le
-cas que la correction unique à Jacobien gelé de J4a (DD-033, Option B) résout déjà de façon
+cas que la correction unique à Jacobien gelé de J4 (DD-033, Option B) résout déjà de façon
 exacte : pour `f` affine, le Jacobien `∂g/∂u` est constant, indépendant de `u^{n+1}` — un
 unique pas de Newton depuis `u^n` tombe donc exactement sur la racine, sans itération
 nécessaire. Ce n'est pas un choix d'approximation, c'est une propriété d'algèbre linéaire.
 
 Toute non-linéarité **physique** de `F` ou `S` brise cette propriété : `g` devient une
-équation algébrique non linéaire, et la correction unique de J4a n'en donne alors qu'une
+équation algébrique non linéaire, et la correction unique de J4 n'en donne alors qu'une
 approximation de premier ordre de la racine — suffisant pour des problèmes faiblement non
 linéaires et un `Δt` petit, pas exact en général. Cas physiques concrets qu'oxiflow doit
 traiter correctement, issus des domaines cibles du projet lui-même :
@@ -352,7 +365,7 @@ J^k · Δu^k = -g(u^k),    J^k = ∂g/∂u |_{u=u^k} = I - Δt·θ · ∂f/∂u 
 u^{k+1} = u^k + Δu^k
 ```
 
-`∂f/∂u` est exactement ce que `finite_difference_jacobian` (DD-013, déjà en place depuis J4a)
+`∂f/∂u` est exactement ce que `finite_difference_jacobian` (DT-013, déjà en place depuis J4)
 approxime par différences finies — Newton la réutilise inchangée. Ce que DD-044 change, c'est
 *combien de fois* ce Jacobien est réévalué par pas de temps et *quand la boucle s'arrête* —
 voir ci-dessous — pas le résidu, l'assemblage du Jacobien, ni la forme canonique elle-même.
@@ -363,10 +376,11 @@ DD-044 formalise cette activation : `NewtonConvergence` (basé résidu, par déf
 `JacobianStrategy` (Newton modifié/gelé, par défaut) comme énumérations HOW configurables ;
 `OxiflowError::NewtonNotConverged` routée via `Solver::on_divergence()` élargi ; une boucle
 Newton générique unique partagée par la méthode theta (Backward Euler/Crank-Nicolson) et BDF2,
-au lieu de la duplication par famille que J4a utilisait quand Newton n'avait qu'un seul
+au lieu de la duplication par famille que J4 utilisait quand Newton n'avait qu'un seul
 consommateur ; `IntegratorSpec` étendu à `BackwardEuler` (champs Newton ajoutés) plus nouveaux
-variants `CrankNicolson` et `BDF2` (ce dernier sans champs sparse — `BDF2Solver` n'a pas de
-dispatch sparse, un écart DD-043 laissé ouvert ici, pas une préoccupation de J7).
+variants `CrankNicolson` et `BDF2` (ce dernier sans champs sparse — `BDF2Solver` n'avait pas de
+dispatch sparse, un écart DA-043 laissé ouvert ici, pas une préoccupation de J7 ; comblé en
+v0.10.0 par #133).
 
 Découpage opérationnel (DD-044, `oxiflow-issues-v0.7.0.yml`) :
 
@@ -381,15 +395,15 @@ Découpage opérationnel (DD-044, `oxiflow-issues-v0.7.0.yml`) :
 
 **Critère de sortie :** un problème non affine en `u` converge à l'ordre attendu sous
 Backward Euler/Crank-Nicolson/BDF2 avec le solveur non linéaire, là où la correction gelée
-de J4a ne donnait qu'une approximation de premier ordre.
+de J4 ne donnait qu'une approximation de premier ordre.
 
 ---
 
-## 10. J8 — Optimisation computationnelle (v0.8)
+## 10. J8 — Optimisation des calculs (v0.8)
 
 Profilage du cœur de calcul (chaîne de calculateurs, opérateurs spatiaux J5, solveurs
 linéaires J6) et optimisation algorithmique/mémoire ciblée sur les points chauds mesurés.
-Formalisation du GPU-readiness (DD-026, cinq invariants structurels INV-GPU-1 à INV-GPU-5 :
+Formalisation du GPU-readiness (DA-026, cinq invariants structurels INV-GPU-1 à INV-GPU-5 :
 mémoire contigüe, dimensions explicites, absence de trait objects dans le cœur numérique).
 Feature flag `gpu` (`wgpu`) introduite derrière ces invariants — pas avant qu'ils soient
 vérifiés sur la codebase existante. ROCm explicitement hors périmètre.
@@ -399,7 +413,7 @@ vérifiés sur la codebase existante. ROCm explicitement hors périmètre.
 ## 11. J9 — Parallélisme & benchmarking (v0.9)
 
 Parallélisme Rayon (feature `parallel` opt-in, seuil configurable via
-`set_parallel_threshold()`, DD-014). Cache dirty-flag + invalidation temporelle sur
+`set_parallel_threshold()`, DT-014). Cache dirty-flag + invalidation temporelle sur
 `ComputeContext` (DD-015). Benchmarks Criterion.
 
 **Critère de sortie :** benchmark de référence (diffusion 1D, 1000 points, 10 000 pas)
@@ -407,7 +421,7 @@ Parallélisme Rayon (feature `parallel` opt-in, seuil configurable via
 
 ---
 
-## 12. J10 — Écosystème stable (v1.0)
+## 12. J10 — Écosystème stable (v0.10)
 
 Sept exemples de référence multi-domaines, un par domaine du tableau du README : analyse
 frontale binaire en adsorption compétitive ; conduction transitoire 1D dans une barre (homogène
@@ -416,13 +430,16 @@ et graduée) ; Gray–Scott en 1D : instabilité de Turing, réplication ; couch
 magnétique 1D dans un conducteur (proto) ; génération d'une vague par un lahar dans un lac.
 Chacun se contrôle contre sa référence de validation et tourne aussi en CI.
 
+Coefficients dépendant de la position et du temps, `(x, t)`, via `CoefficientField` (DD-066,
+#181).
+
 Audit des invariants FEM avant publication (INV-1/2/3 vérifiés sur l'ensemble de la codebase).
 
 Stabilité API : SemVer strict, `cargo-semver-checks` dans le pipeline de release, MSRV documenté.
 
-`oxiflow-prelude` (DD-023) : crate d'entrée ergonomique, réexports + calculateurs built-in +
-`quick_config()`/`run()` pour les cas simples — dépendance strictement unidirectionnelle vers
-le moteur.
+`oxiflow-prelude` (DA-023, #62), crate d'entrée ergonomique (réexports + calculateurs built-in +
+`quick_config()`/`run()` pour les cas simples) à dépendance strictement unidirectionnelle vers
+le moteur, ne fait pas partie de J10 : elle est reportée à J20 (v0.20.0) et en attente.
 
 ### 12.1 Exemples, tests, benchmarks et modèles partagés
 
@@ -456,7 +473,7 @@ Règles pour `rsc/models/` :
 
 ---
 
-## 13. Compatibilité FEM — Trajectoire v2.0 (J20)
+## 13. Compatibilité FEM — Trajectoire de J11 à J20
 
 ### 13.1 Cas moteur
 
@@ -491,19 +508,19 @@ impl RequiresContext for ModeleExterne { /* ... */ }
 INV-4 est le prérequis des frameworks de niche de v0.30.0. Aucun framework de niche ne peut être développé avant
 qu'il soit en place et vérifié.
 
-### 13.3 Périmètre v2.0
+### 13.3 Périmètre de la voie FEM
 
-Maillage non structuré (parseur interne minimal pour `.msh` Gmsh — nœuds, connectivité,
-groupes physiques → `BoundaryLocation`, DD-028 ; triangles 2D, tétraèdres 3D, raffinement
-h-adaptatif). Espaces fonctionnels (P1, P2 Lagrange, Raviart–Thomas, DG0). Assembleur FEM
-(matrices de rigidité et de masse, quadratures de Gauss, intégration sur faces). Solveurs
-linéaires creux (`faer-sparse`, préconditionneurs ILU/AMG). Formulation ALE pour
-l'exemple lahar–lac. Méthodes spectrales (DD-024) restent une question ouverte différée
-post-v1.0 — l'expérience FEM sur `Mesh::coordinates()` à J20 en éclairera la viabilité.
+Réparti de J11 à J18 (voir §2). Maillage non structuré (parseur interne minimal pour `.msh` Gmsh
+— nœuds, connectivité, groupes physiques → `BoundaryLocation`, DT-028 ; triangles 2D, tétraèdres
+3D, raffinement h-adaptatif). Espaces fonctionnels (P1, P2 Lagrange, Raviart–Thomas, DG0).
+Assembleur FEM (matrices de rigidité et de masse, quadratures de Gauss, intégration sur faces).
+Solveurs linéaires creux (`faer-sparse`, préconditionneurs ILU/AMG). Formulation ALE pour
+l'exemple lahar–lac. Les méthodes spectrales (DA-024) viennent après cette voie, à J19 :
+l'expérience FEM sur `Mesh::coordinates()` en guidera la conception.
 
 ---
 
-## 14. J30 — Frameworks de niche (v3.0)
+## 14. J30 — Frameworks de niche (v0.30)
 
 ### 14.1 Architecture
 
@@ -587,7 +604,7 @@ oxiflow list models --framework chrom
 Les tiers sont explicitement encouragés à publier des crates `oxiflow-*` sur crates.io.
 Conditions pour un framework tiers :
 
-- Dépend de `oxiflow = "2"` (ou supérieur).
+- Dépend de `oxiflow = "0.30"` (ou supérieur), première version dotée d'INV-4.
 - Conserve le fichier `NOTICE` du moteur dans toute redistribution (exigence Apache 2.0).
 - Utilise une licence compatible (Apache 2.0 recommandé ; toute licence OSI acceptée).
 - Utilise le préfixe `oxiflow-` sur crates.io pour la découvrabilité.
@@ -600,10 +617,10 @@ Conditions pour un framework tiers :
 
 | Crate | Domaine | Mainteneur | Statut |
 |---|---|---|---|
-| `oxiflow-chrom` | Chromatographie | équipe core oxiflow | Planifié v3.0 |
-| `oxiflow-geo` | Géophysique de surface | équipe core oxiflow | Planifié v3.0 |
-| `oxiflow-thermo` | Transfert thermique | équipe core oxiflow | Planifié v3.0 |
-| `oxiflow-em` | Électromagnétisme diffusif | équipe core oxiflow | Planifié v3.0 |
+| `oxiflow-chrom` | Chromatographie | équipe core oxiflow | Planifié v0.30.0 |
+| `oxiflow-geo` | Géophysique de surface | équipe core oxiflow | Planifié v0.30.0 |
+| `oxiflow-thermo` | Transfert thermique | équipe core oxiflow | Planifié v0.30.0 |
+| `oxiflow-em` | Électromagnétisme diffusif | équipe core oxiflow | Planifié v0.30.0 |
 
 *Pour ajouter un framework à cette liste, ouvrir une PR modifiant ce tableau.*
 
@@ -622,19 +639,19 @@ Conditions pour un framework tiers :
 | Ordonnancement | Topologie + priorité hybride | DAG pur ou priorité seule | J2 | |
 | Multi-composants | `PhysicalQuantity` indexé | Enum plat avec breaking changes | J3 | |
 | Couplage multi-physique | `CouplingOperator` avec `DomainId` + `Interface` | Méthode ad-hoc | J3 | INV-3 |
-| Solveurs linéaires (dense) | Délégation `nalgebra` | Implémentation maison | J4a | |
-| Composition temporelle | `SplitOperator`/`OperatorSplittingSolver` (Strang) | Paire figée explicite/implicite | J4a | |
+| Solveurs linéaires (dense) | Délégation `nalgebra` | Implémentation maison | J4 | |
+| Composition temporelle | `SplitOperator`/`OperatorSplittingSolver` (Strang) | Paire figée explicite/implicite | J4 | |
 | Opérateurs spatiaux | `DiscreteOperator` abstrait (type associé `MeshType`) | FD codé en dur | J5 | INV-2 |
 | Composition spatiale F/S | `DiscretizedModel<Op>` (F) + `CompositeModel` existant (F+S) | Nouveau trait `SourceTerm` ; flux exposé via `ContextVariable` | J5 | INV-2 |
 | Accès contexte des opérateurs | `FluxDivergenceOperator` : trait frère de `DiscreteOperator`, porte `ctx`/`RequiresContext` | Ajout de `ctx` directement sur `DiscreteOperator` ; sous-trait de `DiscreteOperator` | J5 | INV-2 |
 | Solveurs linéaires (creux) | Délégation `faer-sparse` | Implémentation maison | J6 | |
 | Export de résultats | VTK pivot interop + HDF5 données volumineuses | Format maison | J6 | |
-| Intégration non linéaire | Newton itéré, point d'extension DD-033 activé par DD-044 (boucle générique, pas de duplication par famille) | Réécriture des solveurs J4a ; boucle dupliquée par famille | J7 | |
+| Intégration non linéaire | Newton itéré, point d'extension DD-033 activé par DD-044 (boucle générique, pas de duplication par famille) | Réécriture des solveurs J4 ; boucle dupliquée par famille | J7 | |
 | GPU-readiness | Invariants structurels formalisés avant feature `gpu` | `wgpu` sans contrainte préalable | J8 | |
 | Parallélisme | Rayon, opt-in feature flag | Obligatoire ou absent | J9 | |
 | Cache | Dirty flag + invalidation temporelle | Recalcul systématique | J9 | |
 | Stabilité API | SemVer + `cargo-semver-checks` + audit FEM | Convention informelle | J10 | |
-| Ergonomie | `oxiflow-prelude`, crate séparée | Builder intégré au moteur | J10 | |
+| Ergonomie | `oxiflow-prelude`, crate séparée | Builder intégré au moteur | J20 (en attente) | |
 | Architecture plugin | Traits object-safe + `PluginRegistry` | Crate monolithique | J30 | INV-4 |
 | Config framework | TOML + registre runtime | DSL proc-macro | J30 | |
 | Licence | Apache 2.0 seule | MIT ou double MIT/Apache | J0 | |
@@ -647,41 +664,26 @@ Conditions pour un framework tiers :
 |---|---|---|---|
 | R1 | Généricité `ContextValue` trop complexe | Moyenne | Helpers ergonomiques ; tests utilisateurs dès v0.2 |
 | R2 | Bugs silencieux d'ordonnancement | Faible | Tests exhaustifs de détection de cycles ; logging debug |
-| R3 | `PhysicalQuantity` indexé trop verbeux | Moyenne | Constructeurs idiomatiques ; feedback UX avant v1.0 |
+| R3 | `PhysicalQuantity` indexé trop verbeux | Moyenne | Constructeurs idiomatiques ; feedback UX avant 1.0.0 |
 | R4 | Solveurs implicites requièrent algèbre linéaire lourde | Haute | Déléguer à `faer`/`nalgebra` ; documenter les limites |
 | R5 | Rayon + `unsafe` potentiel | Faible | Feature flag opt-in ; ThreadSanitizer en CI |
 | R6 | Périmètre trop ambitieux | Moyenne | Chaque jalon livrable indépendamment |
-| R7 | Breaking change forcé avant v1.0 | Faible | Accepté pre-1.0 mais documenté |
+| R7 | Breaking change forcé avant 1.0.0 | Faible | Accepté pre-1.0 mais documenté |
 | R8 | INV-1/2/3 silencieusement violés | Moyenne | Audit formel à J10 ; tests d'intégration dédiés |
 | R9 | ALE incompatible avec CouplingOperator | Faible | Proto lahar–lac à J3 est le banc d'essai |
 | R10 | INV-4 violé — frameworks tiers cassés lors d'une mise à jour du moteur | Moyenne | Crate `oxiflow-test-plugin` externe en CI dès v0.30.0 ; `cargo-semver-checks` dans le pipeline |
 | R11 | Fragmentation — frameworks tiers incompatibles entre eux | Faible | INV-4 + API publique stable est le seul contrat de compatibilité ; les auteurs de frameworks sont responsables de leur propre SemVer |
-| R12 | Point de branchement FV/WENO (DD-038) mal choisi et coûteux à défaire | Faible | Calculateur interne gardé privé (champ `instance_id` réservé) — extension additive vers J6 sans restructuration |
+| R12 | Point de branchement FV/WENO (DA-038) mal choisi et coûteux à défaire | Faible | Calculateur interne gardé privé (champ `instance_id` réservé) — extension additive vers J6 sans restructuration |
 
 ---
 
 ## 18. Chronologie
 
-Dates d'échéance des jalons GitHub (`oxiflow-milestones.yml`), pas une estimation en mois
-relatifs — remplace l'ancien schéma M+N, devenu incohérent avec les échéances réelles.
-
-| Jalon | Version | Échéance | Objectifs clés |
-|---|---|---|---|
-| J0 | v0.0.1–v0.0.5 | Clos (2026-03) | placeholder crates.io · CI · README · NOTICE |
-| J1 | v0.1.0 | Clos (2026-04) | ContextValue · OxiflowError · Mesh (INV-1) |
-| J2 | v0.2.0 | Clos (2026-05) | BCs requirantes · topologie · calculateurs built-in |
-| J3 | v0.3.0 | Clos (2026-06) | PhysicalQuantity · CouplingOperator (INV-3) · proto lahar–lac |
-| J4a | v0.4.0 | Clos (2026-06) | Intégrateurs temporels, IMEX inclus |
-| J5 | v0.5.0 | Clos (2026-07-17) | DiscreteOperator (INV-2) · FD/FV · WENO3/5 |
-| J6 | v0.6.0 | Clos (2026-07-21) | faer-sparse · export VTK/HDF5 · SimulationSnapshot · IntegratorSpec |
-| J7 | v0.7.0 | 2026-10-07 | Intégration temporelle non linéaire (Newton) |
-| J8 | v0.8.0 | 2026-11-18 | Optimisation computationnelle, GPU-readiness |
-| J9 | v0.9.0 | 2026-12-30 | Rayon · cache dirty-flag · benchmarks Criterion |
-| J10 | v1.0.0 | 2027-03-04 | 7 exemples · gel API · audit FEM · publication stable |
-| J20 | v2.0.0 | 2027-09-02 | Maillage non structuré · assembleur FEM · ALE · INV-4 |
-| J30 | v3.0.0 | 2028-03-02 | oxiflow-chrom · oxiflow-geo · oxiflow-thermo · oxiflow-em · CLI |
-| — | Tiers | continu | Frameworks communautaires sur crates.io |
+Les dates figurent dans le tableau du §2, tirées des jalons GitHub : date de publication d'un
+jalon publié, échéance des autres. Elles ne sont pas répétées ici, pour que les deux tableaux
+ne puissent pas diverger. Les frameworks tiers suivent J30 (v0.30.0) sur crates.io, sans date
+fixée.
 
 ---
 
-*Programme de développement oxiflow v2.2 · Juillet 2026 · Document vivant — mis à jour à chaque jalon*
+*Programme de développement oxiflow · version du document 3.0 · Octobre 2026 · Document vivant — mis à jour à chaque jalon*
