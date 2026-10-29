@@ -439,9 +439,9 @@ impl PhysicalModel for ReactionDiffusion2 {
     }
 }
 
-/// Final state of 5 steps of `kind` (Backward Euler, or BDF2 with its
-/// bootstrap step) on [`ReactionDiffusion2`], 30 nodes (60 unknowns), with
-/// the sparse path forced when `bandwidth` is given.
+/// Final state of 5 steps of `kind` (Backward Euler, Crank–Nicolson, or
+/// BDF2 with its bootstrap step) on [`ReactionDiffusion2`], 30 nodes (60
+/// unknowns), with the sparse path forced when `bandwidth` is given.
 #[cfg(feature = "sparse")]
 fn reaction_diffusion_implicit(
     kind: IntegratorKind,
@@ -472,7 +472,14 @@ fn reaction_diffusion_implicit(
                 .with_sparse_solver(Box::new(FaerSparseSolver))
                 .with_sparse_threshold(0),
         ),
-        _ => unreachable!("Backward Euler and BDF2 only"),
+        (IntegratorKind::CrankNicolson, None) => Box::new(CrankNicolsonSolver::new()),
+        (IntegratorKind::CrankNicolson, Some(k)) => Box::new(
+            CrankNicolsonSolver::new()
+                .with_jacobian_bandwidth(k)
+                .with_sparse_solver(Box::new(FaerSparseSolver))
+                .with_sparse_threshold(0),
+        ),
+        _ => unreachable!("Backward Euler, Crank–Nicolson and BDF2 only"),
     };
     let result = solver.solve(&scenario, &fixed_step(0.05, 0.01, kind))?;
     Ok(result
@@ -487,9 +494,16 @@ fn reaction_diffusion_implicit(
 #[cfg(feature = "sparse")]
 #[test]
 fn banded_path_with_bandwidth_d_times_s_plus_one_minus_one_matches_dense_path() {
-    // Measured gaps: 8.3e-13 (Backward Euler), 1.5e-12 (BDF2) -- the two
-    // factorisations round differently; 1e-10 leaves a margin of about 65.
-    for kind in [IntegratorKind::BackwardEuler, IntegratorKind::BDF2] {
+    // Measured gaps: 8.3e-13 (Backward Euler), 8.8e-13 (Crank–Nicolson),
+    // 1.5e-12 (BDF2) -- the two factorisations round differently; 1e-10
+    // leaves a margin of about 65.
+    // This test alone would also pass if the bandwidth were ignored (dense
+    // against dense); the next one shows that the banded path is taken.
+    for kind in [
+        IntegratorKind::BackwardEuler,
+        IntegratorKind::CrankNicolson,
+        IntegratorKind::BDF2,
+    ] {
         let dense = reaction_diffusion_implicit(kind.clone(), None).unwrap();
         let banded = reaction_diffusion_implicit(kind.clone(), Some(3)).unwrap();
         let gap = (&dense - &banded).amax();
@@ -506,7 +520,11 @@ fn banded_path_with_the_scalar_stencil_width_misses_the_component_coupling() {
     // truncated one it is not, and the Newton loop reports it instead of
     // returning a state that drifts from the dense path. This is why the
     // bandwidth is counted in flat unknowns.
-    for kind in [IntegratorKind::BackwardEuler, IntegratorKind::BDF2] {
+    for kind in [
+        IntegratorKind::BackwardEuler,
+        IntegratorKind::CrankNicolson,
+        IntegratorKind::BDF2,
+    ] {
         let err = reaction_diffusion_implicit(kind.clone(), Some(1)).unwrap_err();
         assert!(
             matches!(err, OxiflowError::NewtonNotConverged { iterations: 1, .. }),
