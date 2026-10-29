@@ -457,12 +457,16 @@ Règles pour `rsc/models/` :
 
 - L'exemple principal d'un modèle porte sa documentation (physique, solution exacte,
   validation) ; le fichier partagé y renvoie. Constantes de scénario, `main`, tracés et
-  assertions restent propres à chaque cible.
+  assertions restent propres à chaque cible, sauf quand un benchmark doit exécuter le scénario
+  d'un exemple : le scénario (constantes physiques, grilles, états initiaux, couplages) passe
+  alors dans le fichier partagé, paramétré par ce que le benchmark fait varier, et seuls les
+  réglages d'exécution restent propres à chaque cible (`lahar_outfall`, pour [#141](https://github.com/biface/oxiflow/issues/141)).
 - Un fichier est inclus comme module de son nom, suffixé `_model` quand il contient un modèle
   entier (`#[path = "../rsc/models/diffusion_1d.rs"] mod diffusion_1d_model;`), pour ne
-  heurter ni un module du crate (`oxiflow::model`) ni un module de bench du même nom. Les trois
-  fichiers du lahar multi-champ (`lahar_physics`, `lahar_flux`, `lahar_source`) gardent leur
-  nom ; les deux derniers importent depuis un module frère `lahar_physics`.
+  heurter ni un module du crate (`oxiflow::model`) ni un module de bench du même nom. Les
+  fichiers du lahar (`lahar_physics`, `lahar_flux`, `lahar_source`, `lahar_outfall`) gardent
+  leur nom ; `lahar_flux` et `lahar_source` importent depuis un module frère `lahar_physics`,
+  `lahar_outfall` depuis les trois.
 - Les éléments partagés sont `pub(crate)` : ils appartiennent à la cible qui les inclut, jamais
   à l'API publique du crate.
 - Un élément qu'une cible n'utilise pas porte un `#[allow(dead_code)]` local, avec un

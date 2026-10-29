@@ -80,6 +80,10 @@
 //!
 //! ## Grid and integrator
 //!
+//! The scenario (constants, grids, initial states, domain models, coupling)
+//! is defined in `rsc/models/lahar_outfall.rs`, with dx as a parameter; this
+//! file holds the run settings, the diagnostics and the checks.
+//!
 //! 801 channel nodes and 601 lake nodes, dx = 5 m. Explicit Euler, the
 //! integrator the overshoot guards of the source term were written for,
 //! dt = 0.1 s (largest wave speed times dt / dx about 0.3); the state is
@@ -130,68 +134,34 @@
 //! friction in the lake, under 3e-3 in both windows.
 
 use std::error::Error;
-use std::sync::Arc;
 
 use nalgebra::DMatrix;
 use oxiflow::{
-    context::{
-        calculators::{FDGradientCalculator, FDScheme},
-        compute::ComputeContext,
-        error::OxiflowError,
-        quantity::PhysicalQuantity,
-        state::MultiDomainState,
-        value::ContextValue,
-        variable::ContextVariable,
-    },
-    coupling::{CouplingOperator, Interface},
-    mesh::{Mesh, UniformGrid1D},
-    model::{CompositeModel, DiscretizedModel, PhysicalModel, RequiresContext},
-    operators::limiters::Limiter,
+    context::error::OxiflowError,
+    mesh::Mesh,
     solver::{
         config::{StepControl, TimeConfiguration},
-        methods::ForwardEulerSolver,
-        orchestrator::{MultiDomainOrchestrator, MultiDomainSimulationResult, OrchestratorConfig},
-        scenario::{Domain, DomainId, Scenario},
+        orchestrator::{MultiDomainSimulationResult, OrchestratorConfig},
     },
 };
 
 #[path = "../rsc/models/lahar_flux.rs"]
 mod lahar_flux;
+#[path = "../rsc/models/lahar_outfall.rs"]
+mod lahar_outfall;
 #[path = "../rsc/models/lahar_physics.rs"]
 mod lahar_physics;
 #[path = "../rsc/models/lahar_source.rs"]
 mod lahar_source;
 
-#[cfg(feature = "parallel")]
-use lahar_flux::default_flux_parallel_threshold;
-use lahar_flux::{EdgeTreatment, Edges, ShallowLayerFlux, ShallowLayerFluxWithEdges};
-use lahar_physics::{
-    ErosionDepositionParams, FrictionParams, LaharPhysics, SourceInjection, COL_B, COL_M, COL_P,
-    COL_S, G, H_MIN,
+use lahar_outfall::{
+    bed_gradient, channel_grid, channel_id, deposit_density, field, initial_states, injection,
+    lake_grid, lake_id, orchestrator, physics, scenario, CHANNEL_LENGTH, CHANNEL_SLOPE_DEG,
+    DEPOSIT_PACKING, INFLOW, INFLOW_SOLIDS, LAKE_DEPTH, LAKE_LENGTH,
 };
-#[cfg(feature = "parallel")]
-use lahar_source::default_source_parallel_threshold;
-use lahar_source::LaharSource;
+use lahar_physics::{COL_B, COL_M, COL_P, COL_S, G, H_MIN};
 
-// ── Scenario ──────────────────────────────────────────────────────────────
-
-const RHO_F: f64 = 1000.0;
-/// Quartz.
-const RHO_S: f64 = 2650.0;
-const VISCOSITY: f64 = 1.0e-6;
-const GRAIN_DIAMETER: f64 = 5.0e-5;
-const DEPOSIT_PACKING: f64 = 0.6;
-const CHEZY_DRAG: f64 = 0.01;
-
-/// Inflow per unit width [m²/s] and its solids fraction.
-const INFLOW: f64 = 20.0;
-const INFLOW_SOLIDS: f64 = 0.2;
-const SOURCE_STRIP: (f64, f64) = (50.0, 150.0);
-
-const CHANNEL_LENGTH: f64 = 4000.0;
-const CHANNEL_SLOPE_DEG: f64 = 3.0;
-const LAKE_LENGTH: f64 = 3000.0;
-const LAKE_DEPTH: f64 = 15.0;
+// ── Run settings ──────────────────────────────────────────────────────────
 
 /// Spacing shared by both grids (see the module documentation).
 const DX: f64 = 5.0;
@@ -211,303 +181,28 @@ const TOL_SOLIDS_EXCHANGE: f64 = 1e-13;
 const TOL_CELERITY: f64 = 2.5e-3;
 const TOL_MASS_RELATION: f64 = 4e-3;
 
-fn physics() -> LaharPhysics {
-    LaharPhysics {
-        rho_f: RHO_F,
-        rho_s: RHO_S,
-    }
-}
-
-/// Bulk density of the deposit.
-fn deposit_density() -> f64 {
-    RHO_F * (1.0 - DEPOSIT_PACKING) + RHO_S * DEPOSIT_PACKING
-}
-
-fn layer() -> PhysicalQuantity {
-    PhysicalQuantity::custom("shallow_layer")
-}
-
-fn channel_id() -> DomainId {
-    DomainId::new("channel")
-}
-
-fn lake_id() -> DomainId {
-    DomainId::new("lake")
-}
-
-fn channel_grid() -> Result<UniformGrid1D, OxiflowError> {
-    UniformGrid1D::new(nodes(CHANNEL_LENGTH), 0.0, CHANNEL_LENGTH)
-}
-
-fn lake_grid() -> Result<UniformGrid1D, OxiflowError> {
-    UniformGrid1D::new(
-        nodes(LAKE_LENGTH),
-        CHANNEL_LENGTH,
-        CHANNEL_LENGTH + LAKE_LENGTH,
-    )
-}
-
-fn nodes(length: f64) -> usize {
-    (length / DX).round() as usize + 1
-}
-
-fn injection() -> SourceInjection {
-    SourceInjection {
-        rate: INFLOW,
-        x_lo: SOURCE_STRIP.0,
-        x_hi: SOURCE_STRIP.1,
-        psi: INFLOW_SOLIDS,
-    }
-}
-
-// ── Models ────────────────────────────────────────────────────────────────
-
-/// The source term of the lahar model with an explicit initial state: a
-/// sloping dry channel or a lake at rest. `CompositeModel` takes its initial
-/// state from its first operator.
-struct SourceWithInitialState {
-    source: LaharSource,
-    initial: DMatrix<f64>,
-}
-
-impl RequiresContext for SourceWithInitialState {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        self.source.required_variables()
-    }
-}
-
-impl PhysicalModel for SourceWithInitialState {
-    fn compute_physics(
-        &self,
-        state: &ContextValue,
-        ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        self.source.compute_physics(state, ctx)
-    }
-
-    fn initial_state(&self, _mesh: &dyn Mesh) -> ContextValue {
-        ContextValue::VectorField(self.initial.clone())
-    }
-
-    fn name(&self) -> &str {
-        self.source.name()
-    }
-}
-
-fn layer_model(
-    grid: &UniformGrid1D,
-    injection: SourceInjection,
-    initial: DMatrix<f64>,
-    edges: Edges,
-    name: &str,
-) -> Result<CompositeModel, OxiflowError> {
-    let friction = FrictionParams {
-        cd: CHEZY_DRAG,
-        tan_d1: 0.0,
-        tan_d2: 0.0,
-        tan_d3: 0.0,
-        length_l: 1.0, // unused: the granular branch is zero.
-        beta: 0.136,
-        gamma: 1.0e-3,
-        alpha: 5.0,
-        psi0: 1.0,
-    };
-    let erosion = ErosionDepositionParams {
-        epsilon: 0.0,
-        nu: VISCOSITY,
-        grain_d: GRAIN_DIAMETER,
-        psi_b: DEPOSIT_PACKING,
-    };
-    let source = LaharSource::new(
-        grid,
-        physics(),
-        friction,
-        erosion,
-        injection,
-        0.0, // unused: the initial state is given.
-        #[cfg(feature = "parallel")]
-        default_source_parallel_threshold(),
-    );
-    let flux = ShallowLayerFluxWithEdges {
-        flux: ShallowLayerFlux {
-            physics: physics(),
-            limiter: Limiter::MinMod,
-            #[cfg(feature = "parallel")]
-            parallel_threshold: default_flux_parallel_threshold(),
-        },
-        edges,
-    };
-    let flux_grid = Arc::new(UniformGrid1D::new(
-        grid.n_dof(),
-        grid.coordinates(0)[0],
-        grid.coordinates(grid.n_dof() - 1)[0],
-    )?);
-    let discretized = DiscretizedModel::new(Arc::new(flux), flux_grid, name);
-    CompositeModel::new(
-        vec![
-            Box::new(SourceWithInitialState { source, initial }),
-            Box::new(discretized),
-        ],
-        name,
-    )
-}
-
-// ── Coupling ──────────────────────────────────────────────────────────────
-
-/// Which side of the lip an [`OutfallExchange`] writes.
-#[derive(Debug, Clone, Copy)]
-enum LipSide {
-    /// First cell of the lake: gains the outflow.
-    LakeInlet,
-    /// Last cell of the channel: loses it.
-    ChannelOutlet,
-}
-
-/// Carries the outflow of the channel over the lip. Both instances compute
-/// the flux from the channel state alone, which neither of them writes
-/// before the other has read it (gain first, see the module documentation).
-struct OutfallExchange {
-    interface: Interface,
-    side: LipSide,
-}
-
-impl RequiresContext for OutfallExchange {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![]
-    }
-}
-
-fn field<'a>(
-    states: &'a MultiDomainState,
-    domain: &DomainId,
-) -> Result<&'a DMatrix<f64>, OxiflowError> {
-    states
-        .get(domain, &layer())
-        .ok_or_else(|| OxiflowError::PreconditionFailed {
-            context: "lahar_lake_wave",
-            message: format!("domain '{domain}' has no shallow-layer state"),
-        })?
-        .as_vector_field()
-}
-
-/// Physical flux of the last channel cell, zero while it is dry.
-fn outfall_flux(states: &MultiDomainState) -> Result<[f64; 3], OxiflowError> {
-    let channel = field(states, &channel_id())?;
-    let last = channel.nrows() - 1;
-    let (m, p, s) = (
-        channel[(last, COL_M)],
-        channel[(last, COL_P)],
-        channel[(last, COL_S)],
-    );
-    let (h, u, psi) = physics().primitives(m, p, s)?;
-    if h <= H_MIN {
-        return Ok([0.0; 3]);
-    }
-    Ok(physics().physical_flux(m, p, s, h, u, psi))
-}
-
-impl CouplingOperator for OutfallExchange {
-    fn apply(
-        &self,
-        states: &MultiDomainState,
-        ctx: &ComputeContext,
-        interface: &Interface,
-    ) -> Result<MultiDomainState, OxiflowError> {
-        let flux = outfall_flux(states)?;
-        let target = interface.target();
-        let mut updated = field(states, target)?.clone();
-        let (row, sign) = match self.side {
-            LipSide::LakeInlet => (0, 1.0),
-            LipSide::ChannelOutlet => (updated.nrows() - 1, -1.0),
-        };
-        let scale = ctx.time_step() / DX;
-        for (k, col) in [COL_M, COL_P, COL_S].into_iter().enumerate() {
-            updated[(row, col)] += sign * (scale * flux[k]);
-        }
-        let mut result = states.clone();
-        result.set(target.clone(), layer(), ContextValue::VectorField(updated));
-        Ok(result)
-    }
-
-    fn interface(&self) -> &Interface {
-        &self.interface
-    }
-}
-
 // ── Run ───────────────────────────────────────────────────────────────────
-
-/// Initial states: a dry channel on its slope, a lake at rest.
-fn initial_states() -> Result<(DMatrix<f64>, DMatrix<f64>), OxiflowError> {
-    let channel = channel_grid()?;
-    let tan = CHANNEL_SLOPE_DEG.to_radians().tan();
-    let mut dry = DMatrix::zeros(channel.n_dof(), 4);
-    for i in 0..channel.n_dof() {
-        dry[(i, COL_B)] = (CHANNEL_LENGTH - channel.coordinates(i)[0]) * tan;
-    }
-    let mut lake = DMatrix::zeros(nodes(LAKE_LENGTH), 4);
-    lake.column_mut(COL_M).fill(RHO_F * LAKE_DEPTH);
-    Ok((dry, lake))
-}
 
 fn run(
     channel0: &DMatrix<f64>,
     lake0: &DMatrix<f64>,
 ) -> Result<MultiDomainSimulationResult, OxiflowError> {
-    let channel_model = layer_model(
-        &channel_grid()?,
-        injection(),
-        channel0.clone(),
-        Edges {
-            left: EdgeTreatment::Wall,
-            right: EdgeTreatment::Exchanged,
-        },
-        "channel",
+    let scenario = scenario(
+        DX,
+        channel0,
+        lake0,
+        #[cfg(feature = "parallel")]
+        None,
     )?;
-    let still_water = SourceInjection {
-        rate: 0.0,
-        ..injection()
-    };
-    let lake_model = layer_model(
-        &lake_grid()?,
-        still_water,
-        lake0.clone(),
-        Edges {
-            left: EdgeTreatment::Wall,
-            right: EdgeTreatment::Wall,
-        },
-        "lake",
-    )?;
-
-    let scenario = Scenario::multi(vec![
-        Domain::new(
-            channel_id(),
-            Box::new(channel_model),
-            Box::new(channel_grid()?),
-        ),
-        Domain::new(lake_id(), Box::new(lake_model), Box::new(lake_grid()?)),
-    ])?
-    .with_coupling(Box::new(OutfallExchange {
-        interface: Interface::new(channel_id(), lake_id()).with_label("outfall, lake gain"),
-        side: LipSide::LakeInlet,
-    }))
-    .with_coupling(Box::new(OutfallExchange {
-        interface: Interface::new(lake_id(), channel_id()).with_label("outfall, channel loss"),
-        side: LipSide::ChannelOutlet,
-    }));
-
-    let orchestrator = MultiDomainOrchestrator::new()
-        .with_domain(channel_id(), Box::new(ForwardEulerSolver), layer())
-        .with_domain(lake_id(), Box::new(ForwardEulerSolver), layer());
     let config = OrchestratorConfig::new(
         TimeConfiguration::new(END_TIME, StepControl::Fixed { dt: DT }).saving_every(SAVE_EVERY),
     )
-    .with_calculator(Box::new(FDGradientCalculator::new(
-        Arc::new(channel_grid()?),
-        0,
-        Some(COL_B),
-        FDScheme::Central,
-    )));
-    orchestrator.run(&scenario, &config)
+    .with_calculator(Box::new(bed_gradient(
+        DX,
+        #[cfg(feature = "parallel")]
+        None,
+    )?));
+    orchestrator().run(&scenario, &config)
 }
 
 // ── Diagnostics ───────────────────────────────────────────────────────────
@@ -566,19 +261,19 @@ fn check(quantity: &str, error: f64, tolerance: f64) -> Result<(), Box<dyn Error
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (channel0, lake0) = initial_states()?;
+    let (channel0, lake0) = initial_states(DX)?;
     println!(
         "Lahar of {INFLOW} m²/s (psi = {INFLOW_SOLIDS}) down {CHANNEL_LENGTH} m at {CHANNEL_SLOPE_DEG}°, \
          into a lake {LAKE_DEPTH} m deep and {LAKE_LENGTH} m long, dx = {DX} m, dt = {DT} s, explicit Euler"
     );
     let result = run(&channel0, &lake0)?;
 
-    let channel_xs = channel_grid()?;
+    let channel_xs = channel_grid(DX)?;
     let source_rate: f64 = (0..channel_xs.n_dof())
         .map(|i| injection().density(channel_xs.coordinates(i)[0]))
         .sum::<f64>()
         * DX;
-    let lake = lake_grid()?;
+    let lake = lake_grid(DX)?;
     let lake_xs: Vec<f64> = (0..lake.n_dof()).map(|i| lake.coordinates(i)[0]).collect();
 
     // 1. Lake at rest until the channel outlet is wet.

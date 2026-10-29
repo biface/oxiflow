@@ -445,13 +445,16 @@ Rules for `rsc/models/`:
 
 - The main example of a model carries its documentation (physics, exact solution, validation);
   the shared file points to it. Scenario constants, `main`, plots and assertions stay in each
-  target.
+  target, unless a benchmark must run the scenario of an example: the scenario (physical
+  constants, grids, initial states, couplings) then moves to the shared file, parametrised by
+  what the benchmark varies, and only the run settings stay in each target (`lahar_outfall`,
+  for [#141](https://github.com/biface/oxiflow/issues/141)).
 - A file is included as a module named after it, with a `_model` suffix when the file holds a
   whole model (`#[path = "../rsc/models/diffusion_1d.rs"] mod diffusion_1d_model;`), so that
   it clashes neither with a module of the crate (`oxiflow::model`) nor with a bench module of
-  the same name. The three lahar multi-field files (`lahar_physics`, `lahar_flux`,
-  `lahar_source`) keep their own names; the last two import from a sibling module
-  `lahar_physics`.
+  the same name. The lahar files (`lahar_physics`, `lahar_flux`, `lahar_source`,
+  `lahar_outfall`) keep their own names; `lahar_flux` and `lahar_source` import from a sibling
+  module `lahar_physics`, `lahar_outfall` from all three.
 - Shared items are `pub(crate)`: they belong to the target that includes them, never to the
   crate's public API.
 - An item that one target does not use carries a local `#[allow(dead_code)]` with a comment

@@ -163,7 +163,9 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Scenario::with_t_start`. A resume reproduces the uninterrupted run for
   one-step integrators only, the snapshot carrying no history (BDF2
   restarts on its bootstrap step), and its times agree to rounding, the
-  fixed-step loop computing `t_start + k·dt` ([#212](https://github.com/biface/oxiflow/issues/212)).
+  fixed-step loop computing `t_start + k·dt`. The `gray_scott_1d` and
+  `lahar_lake_wave` examples use it instead of their own wrappers, with
+  unchanged results ([#212](https://github.com/biface/oxiflow/issues/212)).
 
 ### Changed
 
@@ -240,6 +242,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and `apply` with the threshold forced, instead of partial copies of their
   loops; their default thresholds stay as measured at v0.9.0. The crate
   itself and its public API are unchanged ([#194](https://github.com/biface/oxiflow/issues/194)).
+- The lahar–lake scenario of `examples/lahar_lake_wave` (constants, grids,
+  initial states, domain models, outfall coupling) moves to
+  `rsc/models/lahar_outfall.rs`, with the grid spacing as a parameter and,
+  with the `parallel` feature, a dispatch threshold for the sites inside a
+  domain, so that a benchmark can run the same scenario at other sizes. The
+  example keeps its run settings, diagnostics and checks; its saved states
+  are bit-for-bit unchanged ([#141](https://github.com/biface/oxiflow/issues/141)).
 - Documentation: `ContextValue::VectorField` holds `d` values per node,
   either vector components or `d` unknowns unrelated to the mesh dimension;
   the default dispatch threshold of the finite-difference operators
