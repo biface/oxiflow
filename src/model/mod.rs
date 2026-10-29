@@ -9,10 +9,12 @@
 
 pub mod composite;
 pub mod discretized;
+pub mod initial_condition;
 pub mod traits;
 
 pub use composite::CompositeModel;
 pub use discretized::DiscretizedModel;
+pub use initial_condition::PrescribedInitialState;
 pub use traits::PhysicalModel;
 pub use traits::RequiresContext;
 
@@ -62,6 +64,65 @@ impl PhysicalModel for ExponentialDecay {
 
     fn name(&self) -> &str {
         "exponential_decay"
+    }
+}
+
+/// A model that declares every kind of context need — two required
+/// variables, an optional one, a dependency and a non-default priority —
+/// plus a description; `du/dt = u`, from `u = 0` at every node. For the
+/// tests of the traits' defaults and of the wrappers that delegate them.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct FullModel;
+
+#[cfg(test)]
+impl RequiresContext for FullModel {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![
+            ContextVariable::Time,
+            ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None,
+            },
+        ]
+    }
+
+    fn optional_variables(&self) -> Vec<ContextVariable> {
+        vec![ContextVariable::External {
+            name: "T_amb".into(),
+        }]
+    }
+
+    fn depends_on(&self) -> Vec<ContextVariable> {
+        vec![ContextVariable::Time]
+    }
+
+    fn priority(&self) -> u32 {
+        200
+    }
+}
+
+#[cfg(test)]
+impl PhysicalModel for FullModel {
+    fn compute_physics(
+        &self,
+        state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let u = state.as_scalar_field()?;
+        Ok(ContextValue::ScalarField(u.clone()))
+    }
+
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 0.0))
+    }
+
+    fn name(&self) -> &str {
+        "full_model"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("test model")
     }
 }
 

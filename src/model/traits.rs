@@ -143,53 +143,10 @@ pub trait PhysicalModel: RequiresContext + Send + Sync {
 mod tests {
     use super::*;
     use crate::mesh::structured::UniformGrid1D;
+    use crate::model::FullModel;
     use nalgebra::DVector;
 
     // ── Fixtures ──────────────────────────────────────────────────────────────
-
-    struct FullModel;
-    impl RequiresContext for FullModel {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![
-                ContextVariable::Time,
-                ContextVariable::SpatialGradient {
-                    dimension: 0,
-                    component: None,
-                },
-            ]
-        }
-        fn optional_variables(&self) -> Vec<ContextVariable> {
-            vec![ContextVariable::External {
-                name: "T_amb".into(),
-            }]
-        }
-        fn depends_on(&self) -> Vec<ContextVariable> {
-            vec![ContextVariable::Time]
-        }
-        fn priority(&self) -> u32 {
-            200
-        }
-    }
-
-    impl PhysicalModel for FullModel {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.clone()))
-        }
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 0.0))
-        }
-        fn name(&self) -> &str {
-            "full_model"
-        }
-        fn description(&self) -> Option<&str> {
-            Some("test model")
-        }
-    }
 
     struct MinimalModel;
     impl RequiresContext for MinimalModel {

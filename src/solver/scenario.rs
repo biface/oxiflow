@@ -12,6 +12,7 @@
 
 use crate::boundary::BoundaryCondition;
 use crate::context::error::OxiflowError;
+use crate::context::value::ContextValue;
 use crate::context::variable::ContextVariable;
 use crate::coupling::{CouplingOperator, Interface};
 use crate::mesh::Mesh;
@@ -413,9 +414,27 @@ impl Scenario {
 
     /// Validates scenario consistency before solving.
     ///
-    /// Verifies that at least one domain is present and that no domain has an
-    /// empty mesh. Interface consistency and coupling coverage are not checked
-    /// (finding of the [#172](https://github.com/biface/oxiflow/issues/172) audit).
+    /// Verifies that at least one domain is present, that no domain has an
+    /// empty mesh, and that each domain's initial state has one row per mesh
+    /// node: the length of a `ScalarField`, the row count of a `VectorField`,
+    /// against `mesh.n_dof()`. Other `ContextValue` variants are not sized by
+    /// the mesh and are left unchecked. The initial state is checked here
+    /// because [`PhysicalModel::initial_state`] cannot report an error, and a
+    /// state prescribed from outside the model
+    /// ([`PrescribedInitialState`](crate::model::PrescribedInitialState)) can
+    /// be of any size. Interface consistency and coupling coverage are not
+    /// checked (finding of the [#172](https://github.com/biface/oxiflow/issues/172) audit).
+    ///
+    /// [`Solver::solve`](crate::solver::Solver::solve) and the orchestrator
+    /// call it before the first step; a caller that drives
+    /// [`SteppableSolver::step`](crate::solver::methods::SteppableSolver::step)
+    /// in its own loop calls it itself.
+    ///
+    /// # Errors
+    ///
+    /// `OxiflowError::InvalidDomain` if the scenario has no domain, if a
+    /// domain's mesh is empty, or if a domain's initial state does not match
+    /// its mesh.
     pub fn validate(&self) -> Result<(), OxiflowError> {
         if self.domains.is_empty() {
             return Err(OxiflowError::InvalidDomain(
@@ -423,9 +442,21 @@ impl Scenario {
             ));
         }
         for domain in &self.domains {
-            if domain.mesh.n_dof() == 0 {
+            let n_dof = domain.mesh.n_dof();
+            if n_dof == 0 {
                 return Err(OxiflowError::InvalidDomain(format!(
                     "domain '{}' has empty mesh",
+                    domain.id
+                )));
+            }
+            let rows = match domain.model.initial_state(domain.mesh.as_ref()) {
+                ContextValue::ScalarField(field) => Some(field.len()),
+                ContextValue::VectorField(field) => Some(field.nrows()),
+                _ => None,
+            };
+            if let Some(rows) = rows.filter(|&rows| rows != n_dof) {
+                return Err(OxiflowError::InvalidDomain(format!(
+                    "domain '{}': initial state has {rows} rows, its mesh has {n_dof} nodes",
                     domain.id
                 )));
             }
@@ -629,6 +660,62 @@ mod tests {
     fn validate_ok_for_valid_scenario() {
         let s = Scenario::single(Box::new(NeedsTime), make_mesh());
         assert!(s.validate().is_ok());
+    }
+
+    /// `ZeroDerivative` started from `state`, on the 10-node `make_mesh()`.
+    fn prescribed_scenario(state: ContextValue) -> Scenario {
+        use crate::model::{PrescribedInitialState, ZeroDerivative};
+        let model = PrescribedInitialState::new(Box::new(ZeroDerivative { initial: 0.0 }), state);
+        Scenario::single(Box::new(model), make_mesh())
+    }
+
+    #[test]
+    fn validate_accepts_initial_fields_sized_by_the_mesh() {
+        use nalgebra::DMatrix;
+        let scalar = ContextValue::ScalarField(DVector::zeros(10));
+        let vector = ContextValue::VectorField(DMatrix::zeros(10, 3));
+        assert!(prescribed_scenario(scalar).validate().is_ok());
+        assert!(prescribed_scenario(vector).validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_a_scalar_initial_field_of_the_wrong_length() {
+        let state = ContextValue::ScalarField(DVector::zeros(9));
+        let err = prescribed_scenario(state).validate().unwrap_err();
+        assert!(matches!(err, OxiflowError::InvalidDomain(ref m)
+            if m.contains("9 rows") && m.contains("10 nodes")));
+    }
+
+    #[test]
+    fn validate_rejects_a_vector_initial_field_with_the_wrong_row_count() {
+        use nalgebra::DMatrix;
+        let state = ContextValue::VectorField(DMatrix::zeros(11, 2));
+        let err = prescribed_scenario(state).validate().unwrap_err();
+        assert!(matches!(err, OxiflowError::InvalidDomain(ref m)
+            if m.contains("11 rows") && m.contains("10 nodes")));
+    }
+
+    #[test]
+    fn validate_leaves_initial_values_not_sized_by_the_mesh_unchecked() {
+        assert!(prescribed_scenario(ContextValue::Scalar(1.0))
+            .validate()
+            .is_ok());
+    }
+
+    #[test]
+    fn validate_names_the_domain_whose_initial_state_is_mis_sized() {
+        use crate::model::{PrescribedInitialState, ZeroDerivative};
+        let wrong = PrescribedInitialState::new(
+            Box::new(ZeroDerivative { initial: 0.0 }),
+            ContextValue::ScalarField(DVector::zeros(3)),
+        );
+        let s = Scenario::multi(vec![
+            Domain::new("first", Box::new(NeedsTime), make_mesh()),
+            Domain::new("second", Box::new(wrong), make_mesh()),
+        ])
+        .unwrap();
+        let err = s.validate().unwrap_err();
+        assert!(matches!(err, OxiflowError::InvalidDomain(ref m) if m.contains("'second'")));
     }
 
     // ── BoundaryCondition integration ─────────────────────────────────────────

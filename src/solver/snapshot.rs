@@ -14,6 +14,18 @@
 //! `Domain`/`Scenario`/`SolverConfiguration` themselves and re-injects the
 //! state as the initial condition.
 //!
+//! The re-injection is
+//! [`PrescribedInitialState`](crate::model::PrescribedInitialState): wrap the
+//! rebuilt model with `snapshot.state`, then set
+//! [`Scenario::with_t_start`](crate::solver::scenario::Scenario::with_t_start)
+//! to `snapshot.t`. A resumed run matches the uninterrupted one for one-step
+//! integrators only: the snapshot carries no history, so a multistep
+//! integrator (BDF2) restarts on its bootstrap step. Times agree to rounding
+//! rather than bit for bit, since the fixed-step loop computes
+//! `t_start + k·dt` from the new start. The
+//! [`model::initial_condition`](crate::model::initial_condition) module
+//! documentation details both points and shows a resume.
+//!
 //! ## Two triggers, one type ([DD-029](https://github.com/biface/oxiflow/issues/77))
 //!
 //! - **Automatic** — [`Solver::on_divergence`](super::Solver::on_divergence)

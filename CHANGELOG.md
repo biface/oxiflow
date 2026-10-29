@@ -155,6 +155,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   BDF2 update both take it, through the iterated Newton loop and with the
   solver's Newton parameters. Without these builders the solver stays on
   the dense path, and its results are unchanged bit for bit ([#133](https://github.com/biface/oxiflow/issues/133)).
+- `model::PrescribedInitialState` wraps any `PhysicalModel` and replaces its
+  initial condition with a given `ContextValue`; every other method,
+  `name()` included, is delegated. It completes the restore contract of
+  [DT-025](https://github.com/biface/oxiflow/issues/66): to resume from a `SimulationSnapshot`, wrap the rebuilt model with
+  `snapshot.state` and start the scenario at `snapshot.t` with
+  `Scenario::with_t_start`. A resume reproduces the uninterrupted run for
+  one-step integrators only, the snapshot carrying no history (BDF2
+  restarts on its bootstrap step), and its times agree to rounding, the
+  fixed-step loop computing `t_start + k·dt` ([#212](https://github.com/biface/oxiflow/issues/212)).
 
 ### Changed
 
@@ -214,6 +223,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Result<Self, String>`. `?` now works directly in functions returning
   `OxiflowError`; the `.map_err(OxiflowError::InvalidDomain)` workaround is
   gone from `examples/lahar_multifield.rs` and its test.
+- **Breaking:** `Scenario::validate`, called by `Solver::solve` and the
+  orchestrator before the first step, rejects with
+  `OxiflowError::InvalidDomain` a domain whose initial `ScalarField` or
+  `VectorField` does not have one row per mesh node, and names the domain.
+  Such a state used to be integrated without any error when no calculator
+  or boundary condition reads the mesh: a run on a 10-node mesh from a
+  7-value state returned 7-value states ([#212](https://github.com/biface/oxiflow/issues/212)).
 - Each reference model of the examples, tests and benchmarks (diffusion,
   viscous Burgers, multi-compound Langmuir, multi-field lahar, lahar–lake)
   is defined once under `rsc/models/` and included by every target that
