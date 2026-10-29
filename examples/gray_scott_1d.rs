@@ -127,7 +127,10 @@ use oxiflow::{
         value::ContextValue, variable::ContextVariable,
     },
     mesh::{Mesh, UniformGrid1D},
-    model::traits::{PhysicalModel, RequiresContext},
+    model::{
+        traits::{PhysicalModel, RequiresContext},
+        PrescribedInitialState,
+    },
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::RK4Solver,
@@ -156,12 +159,12 @@ fn laplacian_variable(component: usize) -> ContextVariable {
     }
 }
 
-/// Gray–Scott on a ring, from a given initial state.
+/// Gray–Scott on a ring. Each case starts it from its own state, through
+/// `PrescribedInitialState` (see `solve`).
 struct GrayScott {
     feed: f64,
     kill: f64,
     spacing: f64,
-    initial: DMatrix<f64>,
 }
 
 impl RequiresContext for GrayScott {
@@ -203,8 +206,12 @@ impl PhysicalModel for GrayScott {
         Ok(ContextValue::VectorField(rates))
     }
 
-    fn initial_state(&self, _mesh: &dyn Mesh) -> ContextValue {
-        ContextValue::VectorField(self.initial.clone())
+    /// The trivial homogeneous state, u = 1 and v = 0 at every node: a steady
+    /// state for every feed and kill rate. Neither case starts from it.
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        let mut state = DMatrix::zeros(mesh.n_dof(), 2);
+        state.column_mut(0).fill(1.0);
+        ContextValue::VectorField(state)
     }
 
     fn name(&self) -> &str {
@@ -218,10 +225,11 @@ fn ring(nodes: usize) -> Result<UniformGrid1D, OxiflowError> {
     UniformGrid1D::new(nodes, 0.0, PERIOD - PERIOD / nodes as f64)
 }
 
-/// Runs `model` on a ring of `nodes` nodes with RK4 up to `end_time`,
-/// saving every `save_every` steps.
+/// Runs `model` from `initial` on a ring of `nodes` nodes with RK4 up to
+/// `end_time`, saving every `save_every` steps.
 fn solve(
     model: GrayScott,
+    initial: DMatrix<f64>,
     nodes: usize,
     end_time: f64,
     steps: usize,
@@ -244,6 +252,7 @@ fn solve(
                 .with_component(component),
         ));
     }
+    let model = PrescribedInitialState::new(Box::new(model), ContextValue::VectorField(initial));
     let scenario = Scenario::single(Box::new(model), Box::new(ring(nodes)?));
     RK4Solver.solve(&scenario, &config)
 }
@@ -326,9 +335,15 @@ fn turing_mode(mode: usize) -> Result<(f64, f64, f64), Box<dyn Error>> {
         feed: TURING_FEED,
         kill: TURING_KILL,
         spacing: dx,
-        initial,
     };
-    let result = solve(model, n, TURING_END_TIME, TURING_STEPS, TURING_STEPS)?;
+    let result = solve(
+        model,
+        initial,
+        n,
+        TURING_END_TIME,
+        TURING_STEPS,
+        TURING_STEPS,
+    )?;
     let last = result
         .states
         .last()
@@ -387,10 +402,10 @@ fn pulses() -> Result<SimulationResult, Box<dyn Error>> {
         feed: PULSE_FEED,
         kill: PULSE_KILL,
         spacing: dx,
-        initial,
     };
     Ok(solve(
         model,
+        initial,
         n,
         PULSE_END_TIME,
         PULSE_STEPS,
