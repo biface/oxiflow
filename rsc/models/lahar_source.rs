@@ -1,11 +1,14 @@
 //! Lahar multi-field model, source part: `LaharSource` (friction,
 //! erosion/deposition, bed evolution, top-hat injection) and the paper's
-//! Sec. 4.1 validation configuration (`ValidationRegime`, `build_source`).
+//! Sec. 4.1 validation configuration (`ValidationRegime`, `build_source`,
+//! `analytical_front`).
 //!
 //! Single definition shared by `examples/lahar_multifield.rs`,
 //! `examples/lahar_multifield_plot.rs`, `examples/lahar_lake_wave.rs`,
 //! `tests/lahar_multifield_analytical.rs` and `benches/lahar_multifield.rs`,
-//! each of which includes this file as a module with `#[path]`. The model ([DQ-032](https://github.com/biface/oxiflow/issues/85), Woodhouse, Hogg & Phillips) is
+//! each of which includes this file as a module with `#[path]`. The
+//! validation scenario built on it (source, flux, bed-slope calculator) is
+//! composed in `rsc/models/lahar_validation.rs`. The model ([DQ-032](https://github.com/biface/oxiflow/issues/85), Woodhouse, Hogg & Phillips) is
 //! documented in `examples/lahar_multifield.rs`.
 //!
 //! Requires `rsc/models/lahar_physics.rs` as a sibling module named
@@ -292,10 +295,28 @@ impl PhysicalModel for LaharSource {
 
 // ── Validation scenario (paper Sec. 4.1, single-phase, non-erodible) ─────────
 
-/// Which drag regime a run isolates -- see [`build_source`], and the
-/// analytical-formula selection in `examples/lahar_multifield.rs`
-/// (`run_and_report`) and `tests/lahar_multifield_analytical.rs`
-/// (`run_regime`).
+/// Chezy drag coefficient of the drag-dominated validation runs (paper
+/// Fig. 4, `Cd = 0.04`): set by [`build_source`], read by
+/// [`analytical_front`].
+pub(crate) const CHEZY_DRAG: f64 = 0.04;
+
+/// Constant Coulomb coefficient of the constant-friction validation run
+/// (paper Fig. 4, `mu = 0.1`): set by [`build_source`], read by
+/// [`analytical_front`].
+pub(crate) const COULOMB_FRICTION: f64 = 0.1;
+
+/// Densities of the validation scenario: water carrying grains of twice its
+/// density, used by [`build_source`] and by the flux of the scenario.
+pub(crate) fn validation_physics() -> LaharPhysics {
+    LaharPhysics {
+        rho_f: 1000.0,
+        rho_s: 2000.0,
+    }
+}
+
+/// Which drag regime a run isolates -- see [`build_source`] for the
+/// friction parameters and [`analytical_front`] for the law each regime is
+/// compared to.
 // The plot example and the benchmark run the Chezy-drag-dominated regime
 // only; the other variants are used by the main example and the test.
 #[allow(dead_code)]
@@ -333,24 +354,25 @@ pub(crate) enum ValidationRegime {
 /// (`tan_d1=tan_d2=tan_d3=0.1`, collapsing `mu_branch` to that constant
 /// regardless of `h`) -- the paper's second comparison curve (Fig. 4,
 /// constant Coulomb `mu=0.1`).
-// The coupled-grid example builds its own configuration and does not call
-// this function.
+///
+/// With the `parallel` feature, `parallel_threshold` sets the dispatch
+/// threshold of the per-node loop (`default_source_parallel_threshold()`
+/// for the measured default).
+// Called from `rsc/models/lahar_validation.rs`; the coupled-grid example
+// includes this file without it and builds its own configuration.
 #[allow(dead_code)]
 pub(crate) fn build_source(
     mesh: &UniformGrid1D,
     regime: ValidationRegime,
     source_rate: f64,
+    #[cfg(feature = "parallel")] parallel_threshold: usize,
 ) -> LaharSource {
-    let physics = LaharPhysics {
-        rho_f: 1000.0,
-        rho_s: 2000.0,
-    };
     let friction = if regime == ValidationRegime::CoulombConstant {
         FrictionParams {
             cd: 0.0,
-            tan_d1: 0.1,
-            tan_d2: 0.1,
-            tan_d3: 0.1,
+            tan_d1: COULOMB_FRICTION,
+            tan_d2: COULOMB_FRICTION,
+            tan_d3: COULOMB_FRICTION,
             length_l: 1.0, // unused: mu_branch collapses to 0.1 regardless of h/L.
             beta: 0.136,
             gamma: 1.0e-3,
@@ -359,7 +381,7 @@ pub(crate) fn build_source(
         }
     } else {
         FrictionParams {
-            cd: 0.04,
+            cd: CHEZY_DRAG,
             tan_d1: 0.0,
             tan_d2: 0.0,
             tan_d3: 0.0,
@@ -384,12 +406,32 @@ pub(crate) fn build_source(
     };
     LaharSource::new(
         mesh,
-        physics,
+        validation_physics(),
         friction,
         erosion,
         injection,
         0.0,
         #[cfg(feature = "parallel")]
-        default_source_parallel_threshold(),
+        parallel_threshold,
     )
+}
+
+/// Front position at time `t` predicted by the asymptote of paper Sec. 4.1
+/// that `regime` isolates, for a source rate `source_rate` per unit width:
+///
+/// - `ChezyDragDominated`: `x_f = (g*q^2/Cd)^(1/5) * t^(4/5)` (Fig. 4);
+/// - `CoulombConstant`: `x_f = q*t/sqrt(mu)`, met only on average over the
+///   slump/stall cycles, not pointwise;
+/// - `EarlyInertial`: `x_f = (g*q)^(1/3) * t`, valid at short `t` only.
+// Called by the main example and the analytical test; the plot example, the
+// benchmark and the coupled-grid example include this file without it.
+#[allow(dead_code)]
+pub(crate) fn analytical_front(regime: ValidationRegime, source_rate: f64, t: f64) -> f64 {
+    match regime {
+        ValidationRegime::ChezyDragDominated => {
+            (G * source_rate * source_rate / CHEZY_DRAG).powf(0.2) * t.powf(0.8)
+        }
+        ValidationRegime::CoulombConstant => source_rate * t / COULOMB_FRICTION.sqrt(),
+        ValidationRegime::EarlyInertial => (G * source_rate).powf(1.0 / 3.0) * t,
+    }
 }

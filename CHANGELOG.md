@@ -257,6 +257,17 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the reference test and the benchmark. With the `parallel` feature, the
   calculators take a dispatch threshold. Saved states, outputs and the plot
   are bit-for-bit unchanged ([#141](https://github.com/biface/oxiflow/issues/141)).
+- The validation scenario of the multi-field lahar model (paper Sec. 4.1:
+  source term and flux on a flat, non-erodible bed, bed-slope calculator,
+  front position) is defined once in `rsc/models/lahar_validation.rs`,
+  instead of being copied by the two lahar examples, the analytical test and
+  the benchmark. The analytical front laws of the three drag regimes join
+  `ValidationRegime` in `rsc/models/lahar_source.rs`, next to the friction
+  constants they depend on; `build_source` takes the dispatch threshold of
+  the source term. With the `parallel` feature, the builders take a
+  dispatch threshold for the source term, the flux and the bed-slope
+  calculator. Saved states, outputs and the plots are bit-for-bit unchanged
+  ([#141](https://github.com/biface/oxiflow/issues/141)).
 - Documentation: `ContextValue::VectorField` holds `d` values per node,
   either vector components or `d` unknowns unrelated to the mesh dimension;
   the default dispatch threshold of the finite-difference operators

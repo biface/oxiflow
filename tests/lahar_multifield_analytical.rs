@@ -1,7 +1,8 @@
 //! # Integration test: multi-field lahar model vs. analytical scaling laws ([#139](https://github.com/biface/oxiflow/issues/139))
 //!
-//! Companion to `examples/lahar_multifield.rs`, on the same model
-//! (`rsc/models/lahar_physics.rs`, `lahar_flux.rs`, `lahar_source.rs`):
+//! Companion to `examples/lahar_multifield.rs`, on the same model and
+//! scenario (`rsc/models/lahar_physics.rs`, `lahar_flux.rs`,
+//! `lahar_source.rs`, `lahar_validation.rs`):
 //! this file asserts the acceptance criteria from [#139](https://github.com/biface/oxiflow/issues/139) as a regression
 //! gate.
 //!
@@ -31,20 +32,11 @@
 //!   the qualitative pattern (at least one stall followed by a resume)
 //!   instead of a numerical tolerance against that formula.
 
-use std::sync::Arc;
-
 use oxiflow::{
-    context::{
-        calculators::{FDGradientCalculator, FDScheme},
-        error::OxiflowError,
-    },
-    mesh::{Mesh, UniformGrid1D},
-    model::{CompositeModel, DiscretizedModel},
-    operators::limiters::Limiter,
+    context::error::OxiflowError,
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::ForwardEulerSolver,
-        scenario::Scenario,
         Solver, SolverConfiguration,
     },
 };
@@ -55,12 +47,11 @@ mod lahar_flux;
 mod lahar_physics;
 #[path = "../rsc/models/lahar_source.rs"]
 mod lahar_source;
+#[path = "../rsc/models/lahar_validation.rs"]
+mod lahar_validation;
 
-#[cfg(feature = "parallel")]
-use lahar_flux::default_flux_parallel_threshold;
-use lahar_flux::ShallowLayerFlux;
-use lahar_physics::{front_position, LaharPhysics, COL_B, COL_M};
-use lahar_source::{build_source, ValidationRegime};
+use lahar_source::{analytical_front, ValidationRegime};
+use lahar_validation::SOURCE_RATE;
 
 /// Runs one drag-regime configuration and returns the full `x_f(t)`
 /// trajectory (one entry per recorded state) -- shared by all three
@@ -73,79 +64,42 @@ fn run_regime(
     save_every: usize,
 ) -> Result<Vec<(f64, f64)>, OxiflowError> {
     const DT: f64 = 5.0e-4;
-    const Q: f64 = 1.0; // paper's own q = 1 m^2/s (Sec. 4.1)
 
-    let source_mesh = UniformGrid1D::new(n_points, -x_half_width, x_half_width)?;
-    let source = build_source(&source_mesh, regime, Q);
-
-    let flux_mesh: Arc<UniformGrid1D> =
-        Arc::new(UniformGrid1D::new(n_points, -x_half_width, x_half_width)?);
-    let flux = ShallowLayerFlux {
-        physics: LaharPhysics {
-            rho_f: 1000.0,
-            rho_s: 2000.0,
-        },
-        limiter: Limiter::MinMod,
-        #[cfg(feature = "parallel")]
-        parallel_threshold: default_flux_parallel_threshold(),
-    };
-    let discretized = DiscretizedModel::new(Arc::new(flux), flux_mesh, "lahar_flux");
-
-    let composite = CompositeModel::new(
-        vec![Box::new(source), Box::new(discretized)],
-        "lahar_multifield",
-    )?;
-
-    let grad_mesh: Arc<dyn Mesh> =
-        Arc::new(UniformGrid1D::new(n_points, -x_half_width, x_half_width)?);
     let config = SolverConfiguration::new(
         TimeConfiguration::new(t_end, StepControl::Fixed { dt: DT }).saving_every(save_every),
         IntegratorKind::Euler,
     )
-    .with_calculator(Box::new(FDGradientCalculator::new(
-        grad_mesh,
-        0,
-        Some(COL_B),
-        FDScheme::Central,
-    )));
-
-    let scenario_mesh = UniformGrid1D::new(n_points, -x_half_width, x_half_width)?;
-    let x_coords: Vec<f64> = (0..n_points)
-        .map(|i| scenario_mesh.coordinates(i)[0])
-        .collect();
-
-    let solver = ForwardEulerSolver;
-    let result = solver.solve(
-        &Scenario::single(Box::new(composite), Box::new(scenario_mesh)),
-        &config,
+    .with_calculator(Box::new(lahar_validation::bed_gradient(
+        n_points,
+        x_half_width,
+        #[cfg(feature = "parallel")]
+        None,
+    )?));
+    let scenario = lahar_validation::scenario(
+        regime,
+        n_points,
+        x_half_width,
+        #[cfg(feature = "parallel")]
+        None,
     )?;
 
-    result
-        .times
-        .iter()
-        .zip(&result.states)
-        .map(|(&t, state)| {
-            let m_col = state.as_vector_field()?.column(COL_M).into_owned();
-            Ok((t, front_position(&m_col, &x_coords, 1000.0)))
-        })
-        .collect()
+    let result = ForwardEulerSolver.solve(&scenario, &config)?;
+    lahar_validation::front_trajectory(&result, &lahar_validation::grid(n_points, x_half_width)?)
 }
 
-/// Which drag regime a run isolates -- see `build_source` and
-/// `run_regime`'s analytical-formula selection (`ValidationRegime` is
-/// defined in `rsc/models/lahar_source.rs`; see
-/// `examples/lahar_multifield.rs`'s own doc for the rationale of each
-/// variant).
+/// Front position against the friction-independent early-inertial law
+/// (`analytical_front`, defined with `ValidationRegime` in
+/// `rsc/models/lahar_source.rs`; see `examples/lahar_multifield.rs`'s own
+/// doc for the rationale of each regime).
 #[test]
 fn early_inertial_regime_matches_analytical() {
-    const Q: f64 = 1.0;
     const T_END: f64 = 1.5;
     const TOLERANCE: f64 = 0.01; // 1% -- session run matched to 0.3%
 
     let trajectory = run_regime(ValidationRegime::EarlyInertial, 501, 10.0, T_END, 1)
         .expect("early inertial run should not fail (no CFL/precondition issues observed)");
     let xf_simulated = trajectory.last().expect("at least one recorded state").1;
-    let xf_analytical = (9.81 * Q).powf(1.0 / 3.0) * T_END;
+    let xf_analytical = analytical_front(ValidationRegime::EarlyInertial, SOURCE_RATE, T_END);
 
     let rel_err = (xf_simulated - xf_analytical).abs() / xf_analytical;
     assert!(
@@ -159,8 +113,6 @@ fn early_inertial_regime_matches_analytical() {
 
 #[test]
 fn chezy_drag_dominated_matches_analytical() {
-    const Q: f64 = 1.0;
-    const CD: f64 = 0.04;
     const T_END: f64 = 10.0;
     const TOLERANCE: f64 = 0.15; // 15% -- session run matched to 7.7%; the
                                  // scaling law is itself only asymptotic,
@@ -169,7 +121,7 @@ fn chezy_drag_dominated_matches_analytical() {
     let trajectory = run_regime(ValidationRegime::ChezyDragDominated, 1001, 50.0, T_END, 1)
         .expect("Chezy-drag-dominated run should not fail");
     let xf_simulated = trajectory.last().expect("at least one recorded state").1;
-    let xf_analytical = (9.81 * Q * Q / CD).powf(0.2) * T_END.powf(0.8);
+    let xf_analytical = analytical_front(ValidationRegime::ChezyDragDominated, SOURCE_RATE, T_END);
 
     let rel_err = (xf_simulated - xf_analytical).abs() / xf_analytical;
     assert!(

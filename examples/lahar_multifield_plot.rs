@@ -14,24 +14,19 @@
 //! and used as `benches/lahar_multifield.rs`'s `full_run` fixed-size
 //! target -- not a new, unvalidated scenario.
 //!
-//! The model comes from `rsc/models/lahar_physics.rs`, `lahar_flux.rs`
-//! and `lahar_source.rs`, shared with `examples/lahar_multifield.rs` (see
-//! that file's module doc for the physics).
+//! The model and the scenario come from `rsc/models/lahar_physics.rs`,
+//! `lahar_flux.rs`, `lahar_source.rs` and `lahar_validation.rs`, shared
+//! with `examples/lahar_multifield.rs` (see that file's module doc for the
+//! physics).
 //!
 //! Run with: `cargo run --example lahar_multifield_plot` -- writes both
 //! SVGs to the working directory.
 
-use std::sync::Arc;
-
 use oxiflow::{
-    context::calculators::{FDGradientCalculator, FDScheme},
-    mesh::{Mesh, UniformGrid1D},
-    model::{CompositeModel, DiscretizedModel},
-    operators::limiters::Limiter,
+    mesh::Mesh,
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::ForwardEulerSolver,
-        scenario::Scenario,
         Solver, SolverConfiguration,
     },
 };
@@ -42,12 +37,11 @@ mod lahar_flux;
 mod lahar_physics;
 #[path = "../rsc/models/lahar_source.rs"]
 mod lahar_source;
+#[path = "../rsc/models/lahar_validation.rs"]
+mod lahar_validation;
 
-#[cfg(feature = "parallel")]
-use lahar_flux::default_flux_parallel_threshold;
-use lahar_flux::ShallowLayerFlux;
-use lahar_physics::{front_position, LaharPhysics, COL_B, COL_M};
-use lahar_source::{build_source, ValidationRegime};
+use lahar_physics::COL_M;
+use lahar_source::{validation_physics, ValidationRegime};
 
 use plotters::prelude::*;
 
@@ -56,66 +50,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     const X_HALF_WIDTH: f64 = 50.0;
     const T_END: f64 = 10.0;
     const DT: f64 = 5.0e-4;
-    const Q: f64 = 1.0;
     const SAVE_EVERY: usize = 100; // 200 recorded points over 20,000 steps
 
-    let source_mesh = UniformGrid1D::new(N_POINTS, -X_HALF_WIDTH, X_HALF_WIDTH)?;
-    let source = build_source(&source_mesh, ValidationRegime::ChezyDragDominated, Q);
-
-    let flux_mesh: Arc<UniformGrid1D> =
-        Arc::new(UniformGrid1D::new(N_POINTS, -X_HALF_WIDTH, X_HALF_WIDTH)?);
-    let flux = ShallowLayerFlux {
-        physics: LaharPhysics {
-            rho_f: 1000.0,
-            rho_s: 2000.0,
-        },
-        limiter: Limiter::MinMod,
-        #[cfg(feature = "parallel")]
-        parallel_threshold: default_flux_parallel_threshold(),
-    };
-    let discretized = DiscretizedModel::new(Arc::new(flux), flux_mesh, "lahar_flux");
-
-    let composite = CompositeModel::new(
-        vec![Box::new(source), Box::new(discretized)],
-        "lahar_multifield",
-    )?;
-
-    let grad_mesh: Arc<dyn Mesh> =
-        Arc::new(UniformGrid1D::new(N_POINTS, -X_HALF_WIDTH, X_HALF_WIDTH)?);
     let config = SolverConfiguration::new(
         TimeConfiguration::new(T_END, StepControl::Fixed { dt: DT }).saving_every(SAVE_EVERY),
         IntegratorKind::Euler,
     )
-    .with_calculator(Box::new(FDGradientCalculator::new(
-        grad_mesh,
-        0,
-        Some(COL_B),
-        FDScheme::Central,
-    )));
-
-    let scenario_mesh = UniformGrid1D::new(N_POINTS, -X_HALF_WIDTH, X_HALF_WIDTH)?;
-    let plot_mesh = UniformGrid1D::new(N_POINTS, -X_HALF_WIDTH, X_HALF_WIDTH)?;
+    .with_calculator(Box::new(lahar_validation::bed_gradient(
+        N_POINTS,
+        X_HALF_WIDTH,
+        #[cfg(feature = "parallel")]
+        None,
+    )?));
+    let scenario = lahar_validation::scenario(
+        ValidationRegime::ChezyDragDominated,
+        N_POINTS,
+        X_HALF_WIDTH,
+        #[cfg(feature = "parallel")]
+        None,
+    )?;
+    let plot_mesh = lahar_validation::grid(N_POINTS, X_HALF_WIDTH)?;
     let x_coords: Vec<f64> = (0..N_POINTS).map(|i| plot_mesh.coordinates(i)[0]).collect();
 
-    let solver = ForwardEulerSolver;
-    let result = solver.solve(
-        &Scenario::single(Box::new(composite), Box::new(scenario_mesh)),
-        &config,
-    )?;
+    let result = ForwardEulerSolver.solve(&scenario, &config)?;
 
     // ── View 1: x_f(t), log-log ──────────────────────────────────────
     // t=0 excluded -- undefined on a log scale, and x_f=0 there anyway.
-    let front_trajectory: Vec<(f64, f64)> = result
-        .times
-        .iter()
-        .zip(&result.states)
-        .filter(|(&t, _)| t > 0.0)
-        .map(|(&t, state)| {
-            let m_col = state.as_vector_field().unwrap().column(COL_M).into_owned();
-            (t, front_position(&m_col, &x_coords, 1000.0))
-        })
-        .filter(|&(_, xf)| xf > 0.0)
-        .collect();
+    let front_trajectory: Vec<(f64, f64)> =
+        lahar_validation::front_trajectory(&result, &plot_mesh)?
+            .into_iter()
+            .filter(|&(t, xf)| t > 0.0 && xf > 0.0)
+            .collect();
 
     let t_min = front_trajectory.first().map(|&(t, _)| t).unwrap_or(DT);
     let xf_max = front_trajectory
@@ -166,7 +131,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (idx, (t, state)) in result.times.iter().zip(&result.states).enumerate() {
         if idx % stride == 0 {
             let m_col = state.as_vector_field()?.column(COL_M).into_owned();
-            let h: Vec<f64> = m_col.iter().map(|&m| m / 1000.0).collect();
+            let rho_f = validation_physics().rho_f; // pure water: h = m / rho_f
+            let h: Vec<f64> = m_col.iter().map(|&m| m / rho_f).collect();
             h_max = h_max.max(h.iter().copied().fold(0.0, f64::max));
             snapshots.push((*t, h));
         }

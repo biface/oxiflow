@@ -1,8 +1,9 @@
 //! Criterion benchmarks for the lahar multi-field model ([#139](https://github.com/biface/oxiflow/issues/139), feeds [#53](https://github.com/biface/oxiflow/issues/53)).
 //!
 //! The model comes from `rsc/models/lahar_physics.rs`, `lahar_flux.rs`
-//! and `lahar_source.rs`, shared with the examples and the analytical
-//! test.
+//! and `lahar_source.rs`, and the validation scenario [`full_run`] times
+//! from `rsc/models/lahar_validation.rs`, all shared with the examples and
+//! the analytical test.
 //!
 //! Two dispatch sites were added for this model (session-confirmed:
 //! unlike diffusion_1d/viscous_burgers/langmuir_multi, this model needed
@@ -27,27 +28,19 @@
 //!   `powf`/`tanh`-heavy closures, no allocation), so likely a higher
 //!   crossover -- to be confirmed by the measurement itself, not assumed.
 
-use std::sync::Arc;
-
 #[cfg(feature = "parallel")]
 use nalgebra::{DMatrix, DVector};
-use oxiflow::{
-    context::calculators::{FDGradientCalculator, FDScheme},
-    mesh::{Mesh, UniformGrid1D},
-    model::{CompositeModel, DiscretizedModel},
-    operators::limiters::Limiter,
-    solver::{
-        config::{IntegratorKind, StepControl, TimeConfiguration},
-        methods::ForwardEulerSolver,
-        scenario::Scenario,
-        Solver, SolverConfiguration,
-    },
+use oxiflow::solver::{
+    config::{IntegratorKind, StepControl, TimeConfiguration},
+    methods::ForwardEulerSolver,
+    Solver, SolverConfiguration,
 };
 #[cfg(feature = "parallel")]
 use oxiflow::{
     context::{compute::ComputeContext, value::ContextValue, variable::ContextVariable},
+    mesh::UniformGrid1D,
     model::PhysicalModel,
-    operators::FluxDivergenceOperator,
+    operators::{limiters::Limiter, FluxDivergenceOperator},
 };
 
 #[path = "../rsc/models/lahar_flux.rs"]
@@ -56,18 +49,19 @@ mod lahar_flux;
 mod lahar_physics;
 #[path = "../rsc/models/lahar_source.rs"]
 mod lahar_source;
+#[path = "../rsc/models/lahar_validation.rs"]
+mod lahar_validation;
 
 #[cfg(feature = "parallel")]
-use lahar_flux::default_flux_parallel_threshold;
 use lahar_flux::ShallowLayerFlux;
 #[cfg(feature = "parallel")]
 use lahar_physics::{
-    ErosionDepositionParams, FrictionParams, SourceInjection, COL_M, COL_P, COL_S,
+    ErosionDepositionParams, FrictionParams, LaharPhysics, SourceInjection, COL_B, COL_M, COL_P,
+    COL_S,
 };
-use lahar_physics::{LaharPhysics, COL_B};
 #[cfg(feature = "parallel")]
 use lahar_source::LaharSource;
-use lahar_source::{build_source, ValidationRegime};
+use lahar_source::ValidationRegime;
 
 use std::hint::black_box;
 
@@ -77,59 +71,40 @@ use criterion::Criterion;
 
 /// [#53](https://github.com/biface/oxiflow/issues/53)'s fixed-size target for this model: the Chezy-drag-dominated
 /// scenario already confirmed against the analytical scaling law
-/// (`tests/lahar_multifield_analytical.rs`, 7.7% at t=10s) -- same
-/// wiring as that test's `run_regime`, minus the trajectory recording.
+/// (`tests/lahar_multifield_analytical.rs`, 7.7% at t=10s) -- the same
+/// scenario as that test, built by `rsc/models/lahar_validation.rs`, minus
+/// the trajectory recording. The scenario is built inside the timed loop,
+/// as before.
 pub fn full_run(c: &mut Criterion) {
     const N_POINTS: usize = 1001;
     const X_HALF_WIDTH: f64 = 50.0;
     const T_END: f64 = 10.0;
     const DT: f64 = 5.0e-4;
-    const Q: f64 = 1.0;
 
     c.bench_function("lahar_multifield_full_run", |b| {
         b.iter(|| {
-            let source_mesh = UniformGrid1D::new(N_POINTS, -X_HALF_WIDTH, X_HALF_WIDTH).unwrap();
-            let source = build_source(&source_mesh, ValidationRegime::ChezyDragDominated, Q);
-
-            let flux_mesh: Arc<UniformGrid1D> =
-                Arc::new(UniformGrid1D::new(N_POINTS, -X_HALF_WIDTH, X_HALF_WIDTH).unwrap());
-            let flux = ShallowLayerFlux {
-                physics: LaharPhysics {
-                    rho_f: 1000.0,
-                    rho_s: 2000.0,
-                },
-                limiter: Limiter::MinMod,
-                #[cfg(feature = "parallel")]
-                parallel_threshold: default_flux_parallel_threshold(),
-            };
-            let discretized = DiscretizedModel::new(Arc::new(flux), flux_mesh, "lahar_flux");
-
-            let composite = CompositeModel::new(
-                vec![Box::new(source), Box::new(discretized)],
-                "lahar_multifield",
-            )
-            .unwrap();
-
-            let grad_mesh: Arc<dyn Mesh> =
-                Arc::new(UniformGrid1D::new(N_POINTS, -X_HALF_WIDTH, X_HALF_WIDTH).unwrap());
             let config = SolverConfiguration::new(
                 TimeConfiguration::new(T_END, StepControl::Fixed { dt: DT }),
                 IntegratorKind::Euler,
             )
-            .with_calculator(Box::new(FDGradientCalculator::new(
-                grad_mesh,
-                0,
-                Some(COL_B),
-                FDScheme::Central,
-            )));
-
-            let scenario_mesh = UniformGrid1D::new(N_POINTS, -X_HALF_WIDTH, X_HALF_WIDTH).unwrap();
-            let result = ForwardEulerSolver
-                .solve(
-                    &Scenario::single(Box::new(composite), Box::new(scenario_mesh)),
-                    &config,
+            .with_calculator(Box::new(
+                lahar_validation::bed_gradient(
+                    N_POINTS,
+                    X_HALF_WIDTH,
+                    #[cfg(feature = "parallel")]
+                    None,
                 )
-                .unwrap();
+                .unwrap(),
+            ));
+            let scenario = lahar_validation::scenario(
+                ValidationRegime::ChezyDragDominated,
+                N_POINTS,
+                X_HALF_WIDTH,
+                #[cfg(feature = "parallel")]
+                None,
+            )
+            .unwrap();
+            let result = ForwardEulerSolver.solve(&scenario, &config).unwrap();
             black_box(result)
         })
     });

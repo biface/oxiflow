@@ -5,12 +5,13 @@
 //! reduced to one spatial dimension. Four coupled conservation quantities,
 //! not three -- see the state layout note below.
 //!
-//! The model is defined once in `rsc/models/`, in three files included
+//! The model is defined once in `rsc/models/`, in four files included
 //! below as modules of the same names: `lahar_physics.rs` (state layout,
-//! density mixing, closures), `lahar_flux.rs` (`ShallowLayerFlux`) and
-//! `lahar_source.rs` (`LaharSource` and the Sec. 4.1 validation
-//! configuration). They are shared with the plot example, the analytical
-//! test and the benchmark.
+//! density mixing, closures), `lahar_flux.rs` (`ShallowLayerFlux`),
+//! `lahar_source.rs` (`LaharSource`, the Sec. 4.1 validation configuration
+//! and its analytical laws) and `lahar_validation.rs` (the validation
+//! scenario: source, flux and bed-slope calculator). They are shared with
+//! the plot example, the analytical test and the benchmark.
 //!
 //! ## Governing equations (paper eq. 2, 4-6, 11-21, reduced to 1D)
 //!
@@ -143,20 +144,11 @@
 //!   coordinates, or any `y`-direction term -- out of scope for a 1D
 //!   `UniformGrid1D` benchmark.
 
-use std::sync::Arc;
-
 use oxiflow::{
-    context::{
-        calculators::{FDGradientCalculator, FDScheme},
-        error::OxiflowError,
-    },
-    mesh::{Mesh, UniformGrid1D},
-    model::{CompositeModel, DiscretizedModel},
-    operators::limiters::Limiter,
+    context::error::OxiflowError,
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::ForwardEulerSolver,
-        scenario::Scenario,
         Solver, SolverConfiguration,
     },
 };
@@ -167,12 +159,11 @@ mod lahar_flux;
 mod lahar_physics;
 #[path = "../rsc/models/lahar_source.rs"]
 mod lahar_source;
+#[path = "../rsc/models/lahar_validation.rs"]
+mod lahar_validation;
 
-#[cfg(feature = "parallel")]
-use lahar_flux::default_flux_parallel_threshold;
-use lahar_flux::ShallowLayerFlux;
-use lahar_physics::{front_position, LaharPhysics, COL_B, COL_M};
-use lahar_source::{build_source, ValidationRegime};
+use lahar_source::{analytical_front, ValidationRegime};
+use lahar_validation::SOURCE_RATE;
 
 /// Runs one drag-regime configuration and prints its simulated front
 /// position against the paper's own closed-form scaling law (Sec. 4.1,
@@ -184,58 +175,31 @@ fn run_and_report(
     t_end: f64,
 ) -> Result<(), OxiflowError> {
     const DT: f64 = 5.0e-4; // conservative for CFL near h~0, unchanged from the working run
-    const Q: f64 = 1.0; // paper's own q = 1 m^2/s (Sec. 4.1)
-    const CD: f64 = 0.04;
-    const MU: f64 = 0.1;
 
-    let source_mesh = UniformGrid1D::new(n_points, -x_half_width, x_half_width)?;
-    let source = build_source(&source_mesh, regime, Q);
-
-    let flux_mesh: Arc<UniformGrid1D> =
-        Arc::new(UniformGrid1D::new(n_points, -x_half_width, x_half_width)?);
-    let flux = ShallowLayerFlux {
-        physics: LaharPhysics {
-            rho_f: 1000.0,
-            rho_s: 2000.0,
-        },
-        limiter: Limiter::MinMod,
-        #[cfg(feature = "parallel")]
-        parallel_threshold: default_flux_parallel_threshold(),
-    };
-    let discretized = DiscretizedModel::new(Arc::new(flux), flux_mesh, "lahar_flux");
-
-    let composite = CompositeModel::new(
-        vec![Box::new(source), Box::new(discretized)],
-        "lahar_multifield",
-    )?;
-
-    let grad_mesh: Arc<dyn Mesh> =
-        Arc::new(UniformGrid1D::new(n_points, -x_half_width, x_half_width)?);
     let config = SolverConfiguration::new(
         TimeConfiguration::new(t_end, StepControl::Fixed { dt: DT }),
         IntegratorKind::Euler,
     )
-    .with_calculator(Box::new(FDGradientCalculator::new(
-        grad_mesh,
-        0,
-        Some(COL_B),
-        FDScheme::Central,
-    )));
-
-    let scenario_mesh = UniformGrid1D::new(n_points, -x_half_width, x_half_width)?;
-    let x_coords: Vec<f64> = (0..n_points)
-        .map(|i| scenario_mesh.coordinates(i)[0])
-        .collect();
-
-    let solver = ForwardEulerSolver;
-    let result = solver.solve(
-        &Scenario::single(Box::new(composite), Box::new(scenario_mesh)),
-        &config,
+    .with_calculator(Box::new(lahar_validation::bed_gradient(
+        n_points,
+        x_half_width,
+        #[cfg(feature = "parallel")]
+        None,
+    )?));
+    let scenario = lahar_validation::scenario(
+        regime,
+        n_points,
+        x_half_width,
+        #[cfg(feature = "parallel")]
+        None,
     )?;
 
-    let final_state = result.states.last().expect("at least one recorded state");
-    let m_column = final_state.as_vector_field()?.column(COL_M).into_owned();
-    let xf_simulated = front_position(&m_column, &x_coords, 1000.0);
+    let result = ForwardEulerSolver.solve(&scenario, &config)?;
+    let trajectory = lahar_validation::front_trajectory(
+        &result,
+        &lahar_validation::grid(n_points, x_half_width)?,
+    )?;
+    let xf_simulated = trajectory.last().expect("at least one recorded state").1;
 
     // Trajectory diagnostic -- prints x_f(t) at a handful of points so a
     // stalled front (genuine for constant-Coulomb friction, per the
@@ -243,23 +207,19 @@ fn run_and_report(
     // can be told apart from a bug that stops all progress from the
     // start.
     let n_snapshots = 20usize;
-    let stride = (result.states.len() / n_snapshots).max(1);
-    for (idx, (t, state)) in result.times.iter().zip(&result.states).enumerate() {
+    let stride = (trajectory.len() / n_snapshots).max(1);
+    for (idx, (t, xf)) in trajectory.iter().enumerate() {
         if idx % stride == 0 {
-            let m_col = state.as_vector_field()?.column(COL_M).into_owned();
-            let xf = front_position(&m_col, &x_coords, 1000.0);
             println!("  t={t:.3}: x_f={xf:.3}");
         }
     }
 
-    let (regime_name, xf_analytical) = match regime {
-        ValidationRegime::ChezyDragDominated => (
-            "Chezy (drag-dominated)",
-            (9.81 * Q * Q / CD).powf(0.2) * t_end.powf(0.8),
-        ),
-        ValidationRegime::CoulombConstant => ("Coulomb (constant mu)", Q * t_end / MU.sqrt()),
-        ValidationRegime::EarlyInertial => ("Early inertial", (9.81 * Q).powf(1.0 / 3.0) * t_end),
+    let regime_name = match regime {
+        ValidationRegime::ChezyDragDominated => "Chezy (drag-dominated)",
+        ValidationRegime::CoulombConstant => "Coulomb (constant mu)",
+        ValidationRegime::EarlyInertial => "Early inertial",
     };
+    let xf_analytical = analytical_front(regime, SOURCE_RATE, t_end);
     let rel_err = (xf_simulated - xf_analytical).abs() / xf_analytical;
 
     println!(
