@@ -141,6 +141,12 @@ pub fn row_dispatch_diagnostic(c: &mut Criterion) {
 /// species and the backward stencil (`s = 1`), so `2·(2d − 1) + 1` colours,
 /// that is as many tasks. Only exists when the crate is built with the
 /// `parallel` feature.
+///
+/// Both paths run with a Newton budget of [`NEWTON_BUDGET`] iterations
+/// instead of the solver's default of one: the model is nonlinear, and the
+/// two largest banded cases need a second iteration (see the constant).
+/// The cases that converge in one iteration stop there, so the budget
+/// changes nothing for them, and both paths keep the same settings.
 #[cfg(feature = "parallel")]
 pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
     use crate::implicit_dispatch::sequential_vs_parallel;
@@ -157,7 +163,11 @@ pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
             n_points,
             &scenario,
             &config,
-            |threshold| BackwardEulerSolver::new().with_parallel_threshold(threshold),
+            |threshold| {
+                BackwardEulerSolver::new()
+                    .with_max_newton_iterations(NEWTON_BUDGET)
+                    .with_parallel_threshold(threshold)
+            },
         );
     }
 
@@ -174,6 +184,7 @@ pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
             &config,
             |threshold| {
                 BackwardEulerSolver::new()
+                    .with_max_newton_iterations(NEWTON_BUDGET)
                     .with_sparse_solver(Box::new(FaerSparseSolver))
                     .with_jacobian_bandwidth(bandwidth)
                     .with_sparse_threshold(0)
@@ -184,6 +195,15 @@ pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
 
     group.finish();
 }
+
+/// Newton budget of [`implicit_jacobian_dispatch`], sized from the measured
+/// need ([#213](https://github.com/biface/oxiflow/issues/213)): with one iteration, the single Backward Euler step
+/// leaves a residual of 1.017e-5 at 10,000 nodes and 7.136e-5 at 50,000 on
+/// the banded path, against a tolerance of about 1e-5, and stops with
+/// `NewtonNotConverged`; with two, every case converges. The dense cases
+/// (32 to 256 nodes) and the banded case at 1,000 nodes converge in one.
+#[cfg(feature = "parallel")]
+const NEWTON_BUDGET: usize = 2;
 
 /// Scenario and configuration of a single Backward Euler step on
 /// `n_points` nodes, with the model's row loop and the gradient

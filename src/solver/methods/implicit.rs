@@ -300,11 +300,19 @@ pub(crate) fn stiff_jacobian_convergence() -> NewtonConvergence {
     }
 }
 
+/// Zero-config Newton iteration budget of the implicit solvers
+/// ([DD-044](https://github.com/biface/oxiflow/issues/109)): one correction, read by [`NewtonParams::default`] and by the serde
+/// default of the `max_iterations` fields of
+/// [`IntegratorSpec`](crate::solver::spec::IntegratorSpec), so that both
+/// construction paths agree.
+pub(crate) const DEFAULT_MAX_NEWTON_ITERATIONS: usize = 1;
+
 /// Zero-config Newton parameters of the implicit solvers
 /// ([`BackwardEulerSolver`](super::backward_euler::BackwardEulerSolver),
 /// [`CrankNicolsonSolver`](super::crank_nicolson::CrankNicolsonSolver),
 /// [`BDF2Solver`](super::bdf2::BDF2Solver)): [`stiff_jacobian_convergence`],
-/// [`JacobianStrategy::ModifiedFrozen`] and one iteration, the pre-[DD-044](https://github.com/biface/oxiflow/issues/109)
+/// [`JacobianStrategy::ModifiedFrozen`] and [`DEFAULT_MAX_NEWTON_ITERATIONS`]
+/// (one iteration), the pre-[DD-044](https://github.com/biface/oxiflow/issues/109)
 /// single frozen-Jacobian correction. It is exact on affine problems (see
 /// [`newton::solve`]'s docs); a genuinely nonlinear model needs a larger
 /// budget, typically with [`JacobianStrategy::FullNewton`].
@@ -313,7 +321,7 @@ impl Default for NewtonParams {
         Self {
             convergence: stiff_jacobian_convergence(),
             jacobian_strategy: JacobianStrategy::default(),
-            max_iterations: 1,
+            max_iterations: DEFAULT_MAX_NEWTON_ITERATIONS,
         }
     }
 }

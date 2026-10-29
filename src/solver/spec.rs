@@ -44,7 +44,9 @@ use super::methods::backward_euler::BackwardEulerSolver;
 use super::methods::bdf2::BDF2Solver;
 use super::methods::crank_nicolson::CrankNicolsonSolver;
 #[cfg(feature = "serde")]
-use super::methods::implicit::{stiff_jacobian_convergence, DEFAULT_SPARSE_THRESHOLD};
+use super::methods::implicit::{
+    stiff_jacobian_convergence, DEFAULT_MAX_NEWTON_ITERATIONS, DEFAULT_SPARSE_THRESHOLD,
+};
 use super::methods::newton::{JacobianStrategy, NewtonConvergence};
 use super::sparse::FaerSparseSolver;
 use super::Solver;
@@ -152,9 +154,10 @@ fn default_newton_convergence() -> NewtonConvergence {
 }
 
 /// Default for `max_iterations` when omitted — see the field's own docs.
+/// The same value as the solvers' zero-config budget.
 #[cfg(feature = "serde")]
 fn default_max_newton_iterations() -> usize {
-    1
+    DEFAULT_MAX_NEWTON_ITERATIONS
 }
 
 impl TryFrom<IntegratorSpec> for Box<dyn Solver> {

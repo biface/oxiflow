@@ -40,6 +40,17 @@ use crate::solver::sparse::SparseLinearSolver;
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
 /// Crank-Nicolson solver — semi-implicit, 2nd order.
+///
+/// # Newton settings
+///
+/// Each step solves its implicit equation by Newton's method, by default
+/// with a single frozen-Jacobian correction, exact on a model affine in
+/// `u`. A nonlinear model, or a fine grid on the banded path, may need a
+/// larger budget (`with_max_newton_iterations`), another Jacobian strategy
+/// (`with_jacobian_strategy`) or another convergence criterion
+/// (`with_newton_convergence`): see
+/// [`OxiflowError::NewtonNotConverged`] for the defaults and the typical
+/// cases.
 #[derive(Default)]
 pub struct CrankNicolsonSolver {
     /// Linear-system backends ([DT-013](https://github.com/biface/oxiflow/issues/13), [DA-043](https://github.com/biface/oxiflow/issues/103)): the dense solver and,

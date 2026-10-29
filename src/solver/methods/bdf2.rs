@@ -85,6 +85,17 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 /// See [module docs](self) for the startup phase and the fixed-`dt`-only
 /// scope.
 ///
+/// # Newton settings
+///
+/// Each step, the startup step included, solves its implicit equation by Newton's method, by default
+/// with a single frozen-Jacobian correction, exact on a model affine in
+/// `u`. A nonlinear model, or a fine grid on the banded path, may need a
+/// larger budget (`with_max_newton_iterations`), another Jacobian strategy
+/// (`with_jacobian_strategy`) or another convergence criterion
+/// (`with_newton_convergence`): see
+/// [`OxiflowError::NewtonNotConverged`] for the defaults and the typical
+/// cases.
+///
 /// # Examples
 ///
 /// ```rust

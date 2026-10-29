@@ -283,6 +283,18 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The `oxiflow_parallel` benchmark ran to its end only without the `sparse`
+  feature: with `parallel,sparse`, the Jacobian dispatch diagnostic of the
+  multi-compound Langmuir model stopped on `NewtonNotConverged` at 10,000
+  nodes on the banded path, and the cases after it, the lahar groups
+  included, never ran. The diagnostic now gives Backward Euler a budget of
+  two Newton iterations, the measured need of its two largest banded cases,
+  on both paths. The documentation of `OxiflowError::NewtonNotConverged`
+  and of the three implicit solvers says which settings to adjust (budget,
+  Jacobian strategy, convergence criterion) and when (a nonlinear model, a
+  fine grid on the banded path); the default budget, unchanged at one
+  iteration, is defined once for the solvers and for `IntegratorSpec`
+  ([#213](https://github.com/biface/oxiflow/issues/213)).
 - The lahar source term shared by the lahar examples, test and benchmark
   (`rsc/models/lahar_source.rs`) injected the mass of water, `rho_f * Q`,
   whatever the solids fraction `psi` of the inflow, so injected material

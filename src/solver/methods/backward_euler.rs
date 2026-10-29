@@ -42,6 +42,17 @@ use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
 /// Backward Euler solver — implicit, 1st order.
 ///
+/// # Newton settings
+///
+/// Each step solves its implicit equation by Newton's method, by default
+/// with a single frozen-Jacobian correction, exact on a model affine in
+/// `u`. A nonlinear model, or a fine grid on the banded path, may need a
+/// larger budget (`with_max_newton_iterations`), another Jacobian strategy
+/// (`with_jacobian_strategy`) or another convergence criterion
+/// (`with_newton_convergence`): see
+/// [`OxiflowError::NewtonNotConverged`] for the defaults and the typical
+/// cases.
+///
 /// # Examples
 ///
 /// ```rust
@@ -108,9 +119,10 @@ impl BackwardEulerSolver {
         self
     }
 
-    /// Configures the Newton iteration budget ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111)) — see the
-    /// field's own docs for why the default (`1`) reproduces the
-    /// pre-[DD-044](https://github.com/biface/oxiflow/issues/109) behaviour exactly on affine problems.
+    /// Configures the Newton iteration budget ([DD-044](https://github.com/biface/oxiflow/issues/109), [#111](https://github.com/biface/oxiflow/issues/111)). The
+    /// default (`1`) reproduces the pre-[DD-044](https://github.com/biface/oxiflow/issues/109) single correction, exact on
+    /// affine problems; see
+    /// [`OxiflowError::NewtonNotConverged`] for when to raise it.
     pub fn with_max_newton_iterations(mut self, max_newton_iterations: usize) -> Self {
         self.newton.max_iterations = max_newton_iterations;
         self
