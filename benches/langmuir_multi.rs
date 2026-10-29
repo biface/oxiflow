@@ -26,61 +26,45 @@ use criterion::BenchmarkId;
 use criterion::Criterion;
 #[cfg(feature = "parallel")]
 use nalgebra::{DMatrix, DVector};
-use oxiflow::{
-    context::calculators::{FDGradientCalculator, FDScheme},
-    mesh::{Mesh, UniformGrid1D},
-    solver::{
-        config::{IntegratorKind, StepControl, TimeConfiguration},
-        methods::ForwardEulerSolver,
-        scenario::Scenario,
-        Solver, SolverConfiguration,
-    },
+use oxiflow::solver::{
+    config::IntegratorKind, methods::ForwardEulerSolver, scenario::Scenario, Solver,
+    SolverConfiguration,
 };
 #[cfg(feature = "parallel")]
 use oxiflow::{
     context::{compute::ComputeContext, value::ContextValue, variable::ContextVariable},
     model::traits::PhysicalModel,
+    solver::config::{StepControl, TimeConfiguration},
 };
-use std::sync::Arc;
-
-const N_POINTS: usize = 100;
-const COLUMN_LENGTH: f64 = 0.25;
-const TOTAL_TIME: f64 = 800.0;
-const N_STEPS: usize = 4000;
 
 #[path = "../rsc/models/langmuir_multi.rs"]
 mod langmuir_multi_model;
 
-use langmuir_multi_model::make_model;
+use langmuir_multi_model::{
+    column_grid, column_spacing, gradient_calculators, make_model, reference_time, N_POINTS,
+};
+#[cfg(feature = "parallel")]
+use langmuir_multi_model::{N_STEPS, TOTAL_TIME};
 
 /// [#53](https://github.com/biface/oxiflow/issues/53)'s fixed-size target for this model: the `ascorbic_erythorbic`
 /// reference scenario (100 points, 4000 steps).
 pub fn full_run(c: &mut Criterion) {
     c.bench_function("langmuir_multi_full_run", |b| {
         b.iter(|| {
-            let dz = COLUMN_LENGTH / (N_POINTS as f64 - 1.0);
-            let model = make_model(dz);
+            let model = make_model(column_spacing(N_POINTS));
             let n_species = model.n_species();
-            let mesh = UniformGrid1D::new(N_POINTS, 0.0, COLUMN_LENGTH).unwrap();
+            let mesh = column_grid(N_POINTS).unwrap();
 
-            let mut config = SolverConfiguration::new(
-                TimeConfiguration::new(
-                    TOTAL_TIME,
-                    StepControl::Fixed {
-                        dt: TOTAL_TIME / N_STEPS as f64,
-                    },
-                ),
-                IntegratorKind::Euler,
-            );
-            for i in 0..n_species {
-                let mesh_arc: Arc<dyn Mesh> =
-                    Arc::new(UniformGrid1D::new(N_POINTS, 0.0, COLUMN_LENGTH).unwrap());
-                config = config.with_calculator(Box::new(FDGradientCalculator::new(
-                    mesh_arc,
-                    0,
-                    Some(i),
-                    FDScheme::Backward,
-                )));
+            let mut config = SolverConfiguration::new(reference_time(), IntegratorKind::Euler);
+            for calculator in gradient_calculators(
+                N_POINTS,
+                n_species,
+                #[cfg(feature = "parallel")]
+                None,
+            )
+            .unwrap()
+            {
+                config = config.with_calculator(calculator);
             }
 
             let scenario = Scenario::single(Box::new(model), Box::new(mesh));
@@ -108,7 +92,7 @@ pub fn full_run(c: &mut Criterion) {
 pub fn row_dispatch_diagnostic(c: &mut Criterion) {
     let mut group = c.benchmark_group("langmuir_multi_row_dispatch");
     for &n_points in &[100usize, 1_000, 10_000, 100_000] {
-        let mut model = make_model(COLUMN_LENGTH / (N_POINTS as f64 - 1.0));
+        let mut model = make_model(column_spacing(N_POINTS));
         let n_species = model.n_species();
 
         // Representative concentrations -- comparable order of magnitude
@@ -207,7 +191,7 @@ pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
 #[cfg(feature = "parallel")]
 fn one_backward_euler_step(n_points: usize) -> (Scenario, SolverConfiguration, usize) {
     let dt = TOTAL_TIME / N_STEPS as f64;
-    let mut model = make_model(COLUMN_LENGTH / (n_points as f64 - 1.0));
+    let mut model = make_model(column_spacing(n_points));
     model.parallel_threshold = usize::MAX;
     let n_species = model.n_species();
 
@@ -215,16 +199,11 @@ fn one_backward_euler_step(n_points: usize) -> (Scenario, SolverConfiguration, u
         TimeConfiguration::new(dt, StepControl::Fixed { dt }),
         IntegratorKind::BackwardEuler,
     );
-    for i in 0..n_species {
-        let mesh_arc: Arc<dyn Mesh> =
-            Arc::new(UniformGrid1D::new(n_points, 0.0, COLUMN_LENGTH).unwrap());
-        config = config.with_calculator(Box::new(
-            FDGradientCalculator::new(mesh_arc, 0, Some(i), FDScheme::Backward)
-                .with_parallel_threshold(usize::MAX),
-        ));
+    for calculator in gradient_calculators(n_points, n_species, Some(usize::MAX)).unwrap() {
+        config = config.with_calculator(calculator);
     }
 
-    let mesh = UniformGrid1D::new(n_points, 0.0, COLUMN_LENGTH).unwrap();
+    let mesh = column_grid(n_points).unwrap();
     let scenario = Scenario::single(Box::new(model), Box::new(mesh));
     (scenario, config, 2 * n_species - 1)
 }

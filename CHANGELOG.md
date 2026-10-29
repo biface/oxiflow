@@ -249,6 +249,14 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   domain, so that a benchmark can run the same scenario at other sizes. The
   example keeps its run settings, diagnostics and checks; its saved states
   are bit-for-bit unchanged ([#141](https://github.com/biface/oxiflow/issues/141)).
+- The column of the multi-compound Langmuir model (length, grid and spacing
+  for a node count, one backward-gradient calculator per species) and the
+  reference scenario of `examples/langmuir_multi` (100 nodes, 4000 steps
+  over 800 s) are defined once in `rsc/models/langmuir_multi.rs`, instead of
+  being copied by the two Langmuir examples, `competitive_frontal_analysis`,
+  the reference test and the benchmark. With the `parallel` feature, the
+  calculators take a dispatch threshold. Saved states, outputs and the plot
+  are bit-for-bit unchanged ([#141](https://github.com/biface/oxiflow/issues/141)).
 - Documentation: `ContextValue::VectorField` holds `d` values per node,
   either vector components or `d` unknowns unrelated to the mesh dimension;
   the default dispatch threshold of the finite-difference operators

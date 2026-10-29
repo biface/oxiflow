@@ -128,15 +128,10 @@
 //! deficit drops to 5e-4. Each tolerance is about twice the measured error.
 
 use std::error::Error;
-use std::sync::Arc;
 
 use oxiflow::{
     boundary::TemporalInjection,
-    context::{
-        calculators::{FDGradientCalculator, FDScheme},
-        error::OxiflowError,
-    },
-    mesh::{Mesh, UniformGrid1D},
+    context::error::OxiflowError,
     solver::{
         config::{IntegratorKind, StepControl, TimeConfiguration},
         methods::RK4Solver,
@@ -148,12 +143,13 @@ use oxiflow::{
 #[path = "../rsc/models/langmuir_multi.rs"]
 mod langmuir_multi_model;
 
-use langmuir_multi_model::{ascorbic_erythorbic, LangmuirMulti};
+use langmuir_multi_model::{
+    ascorbic_erythorbic, column_grid, column_spacing, gradient_calculators, LangmuirMulti,
+    COLUMN_LENGTH,
+};
 
 // ── Scenario ──────────────────────────────────────────────────────────────
 
-/// Column length (m).
-const COLUMN_LENGTH: f64 = 0.25;
 /// Grid nodes, both ends included (dz = L / 400).
 const N_NODES: usize = 401;
 /// Feed concentration of each solute (mol/L).
@@ -168,17 +164,9 @@ const PLATEAU_TOLERANCE: f64 = 2.5e-2;
 /// Tolerance on the relative mass-balance error of each solute.
 const MASS_BALANCE_TOLERANCE: f64 = 1e-6;
 
-fn grid() -> Result<UniformGrid1D, OxiflowError> {
-    UniformGrid1D::new(N_NODES, 0.0, COLUMN_LENGTH)
-}
-
-fn spacing() -> f64 {
-    COLUMN_LENGTH / (N_NODES - 1) as f64
-}
-
 fn column() -> LangmuirMulti {
     ascorbic_erythorbic(
-        spacing(),
+        column_spacing(N_NODES),
         TemporalInjection::SustainedStep {
             start: 0.0,
             concentration: FEED,
@@ -192,16 +180,15 @@ fn solve() -> Result<SimulationResult, OxiflowError> {
         TimeConfiguration::new(END_TIME, StepControl::Fixed { dt: TIME_STEP }),
         IntegratorKind::RK4,
     );
-    for species in 0..column().n_species() {
-        let mesh: Arc<dyn Mesh> = Arc::new(grid()?);
-        config = config.with_calculator(Box::new(FDGradientCalculator::new(
-            mesh,
-            0,
-            Some(species),
-            FDScheme::Backward,
-        )));
+    for calculator in gradient_calculators(
+        N_NODES,
+        column().n_species(),
+        #[cfg(feature = "parallel")]
+        None,
+    )? {
+        config = config.with_calculator(calculator);
     }
-    let scenario = Scenario::single(Box::new(column()), Box::new(grid()?));
+    let scenario = Scenario::single(Box::new(column()), Box::new(column_grid(N_NODES)?));
     RK4Solver.solve(&scenario, &config)
 }
 
@@ -300,7 +287,7 @@ fn mass_balance_error(
     let held: f64 = (0..N_NODES)
         .map(|node| {
             let c = [last[(node, 0)], last[(node, 1)]];
-            spacing() * (eps * c[species] + (1.0 - eps) * adsorbed(model, c, species))
+            column_spacing(N_NODES) * (eps * c[species] + (1.0 - eps) * adsorbed(model, c, species))
         })
         .sum();
     let values = outlet(result, species)?;

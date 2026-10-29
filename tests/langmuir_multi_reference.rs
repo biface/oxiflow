@@ -20,55 +20,36 @@
 //! defect in either one. The tolerances below reflect that: tight against
 //! the analytical formula, looser against chrom-rs's own numbers.
 
-use std::sync::Arc;
-
-use oxiflow::{
-    context::calculators::{FDGradientCalculator, FDScheme},
-    mesh::{Mesh, UniformGrid1D},
-    solver::{
-        config::{IntegratorKind, StepControl, TimeConfiguration},
-        methods::ForwardEulerSolver,
-        scenario::Scenario,
-        Solver, SolverConfiguration,
-    },
+use oxiflow::solver::{
+    config::IntegratorKind, methods::ForwardEulerSolver, scenario::Scenario, Solver,
+    SolverConfiguration,
 };
-
-const N_POINTS: usize = 100;
-const COLUMN_LENGTH: f64 = 0.25;
-const TOTAL_TIME: f64 = 800.0;
-const N_STEPS: usize = 4000;
 
 #[path = "../rsc/models/langmuir_multi.rs"]
 mod langmuir_multi_model;
 
-use langmuir_multi_model::make_model;
+use langmuir_multi_model::{
+    column_grid, column_spacing, gradient_calculators, make_model, reference_time, COLUMN_LENGTH,
+    N_POINTS,
+};
 
 /// Runs the reference scenario and returns, per species, the outlet's
 /// (peak_time, peak_concentration).
 fn run_and_find_outlet_peaks() -> Vec<(f64, f64)> {
-    let dz = COLUMN_LENGTH / (N_POINTS as f64 - 1.0);
-    let model = make_model(dz);
+    let model = make_model(column_spacing(N_POINTS));
     let n_species = model.n_species();
-    let mesh = UniformGrid1D::new(N_POINTS, 0.0, COLUMN_LENGTH).unwrap();
+    let mesh = column_grid(N_POINTS).unwrap();
 
-    let mut config = SolverConfiguration::new(
-        TimeConfiguration::new(
-            TOTAL_TIME,
-            StepControl::Fixed {
-                dt: TOTAL_TIME / N_STEPS as f64,
-            },
-        ),
-        IntegratorKind::Euler,
-    );
-    for i in 0..n_species {
-        let mesh_arc: Arc<dyn Mesh> =
-            Arc::new(UniformGrid1D::new(N_POINTS, 0.0, COLUMN_LENGTH).unwrap());
-        config = config.with_calculator(Box::new(FDGradientCalculator::new(
-            mesh_arc,
-            0,
-            Some(i),
-            FDScheme::Backward,
-        )));
+    let mut config = SolverConfiguration::new(reference_time(), IntegratorKind::Euler);
+    for calculator in gradient_calculators(
+        N_POINTS,
+        n_species,
+        #[cfg(feature = "parallel")]
+        None,
+    )
+    .unwrap()
+    {
+        config = config.with_calculator(calculator);
     }
 
     let solver = ForwardEulerSolver;
@@ -99,8 +80,7 @@ fn relative_error(observed: f64, reference: f64) -> f64 {
 
 #[test]
 fn outlet_peak_time_matches_analytical_retention_time_within_one_percent() {
-    let dz = COLUMN_LENGTH / (N_POINTS as f64 - 1.0);
-    let model = make_model(dz);
+    let model = make_model(column_spacing(N_POINTS));
     let peaks = run_and_find_outlet_peaks();
 
     for (i, &(observed_t, _)) in peaks.iter().enumerate() {

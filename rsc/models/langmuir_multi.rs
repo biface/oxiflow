@@ -5,21 +5,103 @@
 //! Single definition shared by `examples/langmuir_multi.rs`,
 //! `examples/langmuir_multi_plot.rs`, `examples/competitive_frontal_analysis.rs`,
 //! `tests/langmuir_multi_reference.rs` and `benches/langmuir_multi.rs`, each
-//! of which includes this file as a module with `#[path]`. The model equations, the inlet treatment and the
-//! validation levels are documented in `examples/langmuir_multi.rs`.
-//! Scenario constants (point count, column length, time span) stay in each
-//! consumer.
+//! of which includes this file as a module with `#[path]`. The model
+//! equations, the inlet treatment and the validation levels are documented
+//! in `examples/langmuir_multi.rs`.
+//!
+//! The column is shared with it: its length, its grid and spacing for a
+//! given node count, and the backward-gradient calculators the model reads.
+//! So is the reference scenario of `examples/langmuir_multi.rs` (100 nodes,
+//! 4000 steps over 800 s), which the test and the benchmark run as well.
+//! `competitive_frontal_analysis` keeps its own node count, time span and
+//! integrator.
+//!
+//! With the `parallel` feature, `gradient_calculators` takes an
+//! `internal_threshold: Option<usize>`: `None` keeps the calculators'
+//! default dispatch threshold, `Some(t)` sets it to `t`.
+
+use std::sync::Arc;
 
 use nalgebra::{DMatrix, DVector};
 use oxiflow::{
     boundary::TemporalInjection,
     context::{
-        compute::ComputeContext, error::OxiflowError, value::ContextValue,
+        calculators::{FDGradientCalculator, FDScheme},
+        compute::ComputeContext,
+        error::OxiflowError,
+        value::ContextValue,
         variable::ContextVariable,
+        ContextCalculator,
     },
-    mesh::Mesh,
+    mesh::{Mesh, UniformGrid1D},
     model::traits::{PhysicalModel, RequiresContext},
+    solver::config::{StepControl, TimeConfiguration},
 };
+
+// ── Column and reference scenario ─────────────────────────────────────────
+
+/// Length of the `ascorbic_erythorbic` column (m).
+pub(crate) const COLUMN_LENGTH: f64 = 0.25;
+
+/// Nodes of the reference scenario, both ends included.
+// Not used by `competitive_frontal_analysis`, which has its own scenario.
+#[allow(dead_code)]
+pub(crate) const N_POINTS: usize = 100;
+/// Time span of the reference scenario (s).
+// Not used by `competitive_frontal_analysis`, which has its own scenario.
+#[allow(dead_code)]
+pub(crate) const TOTAL_TIME: f64 = 800.0;
+/// Fixed steps of the reference scenario.
+// Not used by `competitive_frontal_analysis`, which has its own scenario.
+#[allow(dead_code)]
+pub(crate) const N_STEPS: usize = 4000;
+
+/// The reference time configuration: `N_STEPS` fixed steps up to
+/// `TOTAL_TIME`.
+// Not used by `competitive_frontal_analysis`, which has its own scenario.
+#[allow(dead_code)]
+pub(crate) fn reference_time() -> TimeConfiguration {
+    TimeConfiguration::new(
+        TOTAL_TIME,
+        StepControl::Fixed {
+            dt: TOTAL_TIME / N_STEPS as f64,
+        },
+    )
+}
+
+/// The column grid of `n_points` nodes over `[0, COLUMN_LENGTH]`.
+pub(crate) fn column_grid(n_points: usize) -> Result<UniformGrid1D, OxiflowError> {
+    UniformGrid1D::new(n_points, 0.0, COLUMN_LENGTH)
+}
+
+/// Spacing of that grid, `COLUMN_LENGTH / (n_points - 1)`: the model's `dz`.
+pub(crate) fn column_spacing(n_points: usize) -> f64 {
+    COLUMN_LENGTH / (n_points as f64 - 1.0)
+}
+
+/// One backward-difference gradient calculator per species, on the column
+/// grid of `n_points` nodes: the `SpatialGradient` of each component that
+/// `LangmuirMulti` requires.
+pub(crate) fn gradient_calculators(
+    n_points: usize,
+    n_species: usize,
+    #[cfg(feature = "parallel")] internal_threshold: Option<usize>,
+) -> Result<Vec<Box<dyn ContextCalculator>>, OxiflowError> {
+    (0..n_species)
+        .map(|species| {
+            let mesh: Arc<dyn Mesh> = Arc::new(column_grid(n_points)?);
+            let calculator = FDGradientCalculator::new(mesh, 0, Some(species), FDScheme::Backward);
+            #[cfg(feature = "parallel")]
+            let calculator = match internal_threshold {
+                Some(threshold) => calculator.with_parallel_threshold(threshold),
+                None => calculator,
+            };
+            Ok(Box::new(calculator) as Box<dyn ContextCalculator>)
+        })
+        .collect()
+}
+
+// ── Model ─────────────────────────────────────────────────────────────────
 
 /// One adsorbing species' physical parameters.
 pub(crate) struct SpeciesParams {
