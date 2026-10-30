@@ -32,6 +32,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   or parallel, on the dense path and, with the `sparse` feature, on the
   banded path, so that the solvers' dispatch threshold can be measured
   locally ([#199](https://github.com/biface/oxiflow/issues/199)).
+- `benches/oxiflow_parallel`: an `orchestrator_phase1` calibration of the
+  `MultiDomainOrchestrator` dispatch. It times ten synchronised steps with
+  the orchestrator's threshold forced sequential or parallel, and the
+  dispatch inside each domain forced sequential or left at its defaults, on
+  K independent Langmuir columns (explicit Euler, and Crank–Nicolson on the
+  banded path with the `sparse` feature), K independent lahar domains and
+  the coupled lahar–lake scenario. Each case is reported against the
+  aggregate mesh volume the threshold compares, so that the threshold can
+  be calibrated on the host ([#141](https://github.com/biface/oxiflow/issues/141)).
 - `ContextCalculator::compute_shared`, a provided method returning
   `Arc<ContextValue>`. The solver now calls it at every derivative
   evaluation. By default it wraps `compute` in an `Arc`, so existing

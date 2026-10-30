@@ -2,9 +2,10 @@
 //! and over a lip into a lake at rest, each a shallow-layer domain, coupled
 //! by the outflow of the channel's last cell (`OutfallExchange`).
 //!
-//! Single definition used by `examples/lahar_lake_wave.rs`, which includes
-//! this file as a module with `#[path]` and documents the physics, the
-//! coupling and the validation. The grid spacing `dx`, shared by both grids,
+//! Single definition used by `examples/lahar_lake_wave.rs` and
+//! `benches/orchestrator_phase1.rs`, each of which includes this file as a
+//! module with `#[path]`; the example documents the physics, the coupling
+//! and the validation. The grid spacing `dx`, shared by both grids,
 //! is a parameter of every function that builds a grid, a state or the
 //! coupling; the run settings (time step, end time, saving) stay in each
 //! consumer.
@@ -80,6 +81,8 @@ pub(crate) fn physics() -> LaharPhysics {
 }
 
 /// Bulk density of the deposit.
+// The benchmark times the run alone and does not read the deposit.
+#[allow(dead_code)]
 pub(crate) fn deposit_density() -> f64 {
     RHO_F * (1.0 - DEPOSIT_PACKING) + RHO_S * DEPOSIT_PACKING
 }

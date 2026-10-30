@@ -4,8 +4,9 @@
 //!
 //! Single definition shared by `examples/langmuir_multi.rs`,
 //! `examples/langmuir_multi_plot.rs`, `examples/competitive_frontal_analysis.rs`,
-//! `tests/langmuir_multi_reference.rs` and `benches/langmuir_multi.rs`, each
-//! of which includes this file as a module with `#[path]`. The model
+//! `tests/langmuir_multi_reference.rs`, `benches/langmuir_multi.rs` and
+//! `benches/orchestrator_phase1.rs`, each of which includes this file as a
+//! module with `#[path]`. The model
 //! equations, the inlet treatment and the validation levels are documented
 //! in `examples/langmuir_multi.rs`.
 //!

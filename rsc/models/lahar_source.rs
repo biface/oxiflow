@@ -5,8 +5,9 @@
 //!
 //! Single definition shared by `examples/lahar_multifield.rs`,
 //! `examples/lahar_multifield_plot.rs`, `examples/lahar_lake_wave.rs`,
-//! `tests/lahar_multifield_analytical.rs` and `benches/lahar_multifield.rs`,
-//! each of which includes this file as a module with `#[path]`. The
+//! `tests/lahar_multifield_analytical.rs`, `benches/lahar_multifield.rs` and
+//! `benches/orchestrator_phase1.rs`, each of which includes this file as a
+//! module with `#[path]`. The
 //! validation scenario built on it (source, flux, bed-slope calculator) is
 //! composed in `rsc/models/lahar_validation.rs`. The model ([DQ-032](https://github.com/biface/oxiflow/issues/85), Woodhouse, Hogg & Phillips) is
 //! documented in `examples/lahar_multifield.rs`.

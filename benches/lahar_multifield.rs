@@ -43,25 +43,18 @@ use oxiflow::{
     operators::{limiters::Limiter, FluxDivergenceOperator},
 };
 
-#[path = "../rsc/models/lahar_flux.rs"]
-mod lahar_flux;
-#[path = "../rsc/models/lahar_physics.rs"]
-mod lahar_physics;
-#[path = "../rsc/models/lahar_source.rs"]
-mod lahar_source;
-#[path = "../rsc/models/lahar_validation.rs"]
-mod lahar_validation;
+use crate::lahar_validation;
 
 #[cfg(feature = "parallel")]
-use lahar_flux::ShallowLayerFlux;
+use crate::lahar_flux::ShallowLayerFlux;
 #[cfg(feature = "parallel")]
-use lahar_physics::{
+use crate::lahar_physics::{
     ErosionDepositionParams, FrictionParams, LaharPhysics, SourceInjection, COL_B, COL_M, COL_P,
     COL_S,
 };
 #[cfg(feature = "parallel")]
-use lahar_source::LaharSource;
-use lahar_source::ValidationRegime;
+use crate::lahar_source::LaharSource;
+use crate::lahar_source::ValidationRegime;
 
 use std::hint::black_box;
 

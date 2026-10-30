@@ -4,8 +4,9 @@
 //!
 //! Single definition shared by `examples/lahar_multifield.rs`,
 //! `examples/lahar_multifield_plot.rs`, `examples/lahar_lake_wave.rs`,
-//! `tests/lahar_multifield_analytical.rs` and `benches/lahar_multifield.rs`,
-//! each of which includes this file as a module with `#[path]`. The model ([DQ-032](https://github.com/biface/oxiflow/issues/85), Woodhouse, Hogg & Phillips) is
+//! `tests/lahar_multifield_analytical.rs`, `benches/lahar_multifield.rs` and
+//! `benches/orchestrator_phase1.rs`, each of which includes this file as a
+//! module with `#[path]`. The model ([DQ-032](https://github.com/biface/oxiflow/issues/85), Woodhouse, Hogg & Phillips) is
 //! documented in `examples/lahar_multifield.rs`.
 //!
 //! `rsc/models/lahar_flux.rs` and `rsc/models/lahar_source.rs` import from

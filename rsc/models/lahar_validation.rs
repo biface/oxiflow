@@ -5,9 +5,9 @@
 //! the front position the runs are compared on.
 //!
 //! Single definition used by `examples/lahar_multifield.rs`,
-//! `examples/lahar_multifield_plot.rs`, `tests/lahar_multifield_analytical.rs`
-//! and `benches/lahar_multifield.rs`, each of which includes this file as a
-//! module with `#[path]`. The drag regime, the node count and the half-width
+//! `examples/lahar_multifield_plot.rs`, `tests/lahar_multifield_analytical.rs`,
+//! `benches/lahar_multifield.rs` and `benches/orchestrator_phase1.rs`, each of
+//! which includes this file as a module with `#[path]`. The drag regime, the node count and the half-width
 //! of the domain `[-x_half_width, x_half_width]` are parameters of every
 //! builder; the run settings (time step, end time, saving) stay in each
 //! consumer. The model is documented in `examples/lahar_multifield.rs`.

@@ -37,8 +37,7 @@ use oxiflow::{
     solver::config::{StepControl, TimeConfiguration},
 };
 
-#[path = "../rsc/models/langmuir_multi.rs"]
-mod langmuir_multi_model;
+use crate::langmuir_multi_model;
 
 use langmuir_multi_model::{
     column_grid, column_spacing, gradient_calculators, make_model, reference_time, N_POINTS,

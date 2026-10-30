@@ -7,6 +7,24 @@
 //! benchmarks via `mod`, rather than one `[[bench]]` target per model —
 //! avoids a `Cargo.toml` edit each time a new model joins the suite.
 
+// Shared models used by more than one benchmark module, included once here
+// (a file loaded as two modules gives two sets of distinct types, and
+// `clippy::duplicate_mod` rejects it); the modules reach them through
+// `crate::`.
+#[path = "../rsc/models/lahar_flux.rs"]
+mod lahar_flux;
+#[cfg(feature = "parallel")]
+#[path = "../rsc/models/lahar_outfall.rs"]
+mod lahar_outfall;
+#[path = "../rsc/models/lahar_physics.rs"]
+mod lahar_physics;
+#[path = "../rsc/models/lahar_source.rs"]
+mod lahar_source;
+#[path = "../rsc/models/lahar_validation.rs"]
+mod lahar_validation;
+#[path = "../rsc/models/langmuir_multi.rs"]
+mod langmuir_multi_model;
+
 mod diffusion_1d;
 #[cfg(feature = "parallel")]
 mod heat_transfer_1d;
@@ -14,6 +32,8 @@ mod heat_transfer_1d;
 mod implicit_dispatch;
 mod lahar_multifield;
 mod langmuir_multi;
+#[cfg(feature = "parallel")]
+mod orchestrator_phase1;
 mod viscous_burgers;
 
 use criterion::{criterion_group, criterion_main};
@@ -34,7 +54,10 @@ criterion_group!(
     langmuir_multi::implicit_jacobian_dispatch,
     lahar_multifield::full_run,
     lahar_multifield::source_dispatch_diagnostic,
-    lahar_multifield::flux_dispatch_diagnostic
+    lahar_multifield::flux_dispatch_diagnostic,
+    orchestrator_phase1::langmuir_multi_domains,
+    orchestrator_phase1::lahar_multifield_domains,
+    orchestrator_phase1::lahar_lake_wave_domains
 );
 #[cfg(not(feature = "parallel"))]
 criterion_group!(
