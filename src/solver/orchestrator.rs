@@ -36,7 +36,9 @@
 //!    [`crate::solver`]). Split into two passes internally ([DA-048](https://github.com/biface/oxiflow/issues/140)
 //!    consequence): a Jacobi-parallel compute pass (each domain reads
 //!    only the pre-step state, independent by construction, optionally
-//!    dispatched through Rayon above `MultiDomainOrchestrator::parallel_threshold`)
+//!    dispatched through Rayon above `MultiDomainOrchestrator::parallel_threshold`,
+//!    an indicative default to calibrate on the host with the benchmark of
+//!    [#141](https://github.com/biface/oxiflow/issues/141))
 //!    followed by a sequential apply pass that writes the results back
 //!    into [`MultiDomainState`]/history. See
 //!    `MultiDomainOrchestrator::compute_domain_steps` for why the split
@@ -61,36 +63,48 @@ use crate::solver::methods::{check_finite, enforce_boundary_conditions, Steppabl
 use crate::solver::parallel::ParallelThreshold;
 use crate::solver::scenario::{Domain, DomainId, Scenario};
 
-/// Default Phase-1 dispatch threshold — a back-of-envelope estimate, not
-/// a measured crossover point like
-/// [`crate::operators::fd::default_parallel_threshold`] (49_999).
+/// Default Phase-1 dispatch threshold: `5_000` nodes of aggregate mesh
+/// volume (`Σ mesh.n_dof()` over the domains of the scenario).
 ///
-/// The two sites dispatch at a different grain, so the numbers are not
-/// comparable directly:
+/// The value is indicative. The crossover depends on the host, on the
+/// number of domains and on the cost of a node for the model and the
+/// solver, and no single aggregate value fits every case. Measure it on the
+/// target host with the calibration benchmark of
+/// [#141](https://github.com/biface/oxiflow/issues/141), then set it with
+/// [`MultiDomainOrchestrator::with_parallel_threshold`] or
+/// [`MultiDomainOrchestrator::set_parallel_threshold`]:
 ///
-/// - `fd.rs` splits `n` elements finely (`into_par_iter()` over a
-///   `Range`), each costing a few flops (~1 ns) -- amortizing Rayon's
-///   per-chunk overhead needs a very large `n`.
-/// - Phase 1 dispatches over *domains* (`.par_iter()`) -- typically a
-///   handful, rarely more -- where each task is an entire
-///   `solver.step()` call (calculator chain + boundary conditions +
-///   physics evaluation, possibly several stages for RK4/BDF2). Few,
-///   large tasks amortize Rayon's fixed join/dispatch overhead (order of
-///   1-few µs) at a much lower total operation count than fine-grained
-///   dispatch does.
+/// ```text
+/// cargo bench --bench oxiflow_parallel --all-features -- orchestrator_phase1
+/// ```
 ///
-/// Rough estimate: a full step costs perhaps 10-50x a bare stencil
-/// evaluation per degree of freedom (~10-50 ns/dof instead of ~1 ns).
-/// With a healthy safety margin (~10x) over Rayon's fixed overhead, the
-/// aggregate mesh volume needs to reach on the order of 10-50 µs worth
-/// of work, i.e. roughly 1,000-5,000 dof. `5_000` is picked from that
-/// range -- **not measured**, unlike `fd.rs`'s 49_999. Replace it with a
-/// real value from
-/// [`calibrate_parallel_threshold`](crate::solver::parallel::calibrate_parallel_threshold)
-/// (representative closure: a full `solver.step()` call, not a
-/// placeholder) via [`MultiDomainOrchestrator::with_parallel_threshold`]
-/// or [`MultiDomainOrchestrator::set_parallel_threshold`] once a real
-/// workload profile is available.
+/// The benchmark times ten steps of K independent Langmuir columns
+/// (explicit Euler, Crank–Nicolson on the banded path), K independent lahar
+/// domains (explicit Euler) and the coupled lahar–lake scenario, with this
+/// threshold forced to `usize::MAX` and to `1`. On one host (Intel Core
+/// i5-1335U: two performance and eight efficiency cores, 12 Rayon threads),
+/// run from a terminal, with the dispatch inside the domains forced
+/// sequential:
+///
+/// - the number of domains weighs as much as the aggregate volume: at
+///   2,000 nodes, eight Langmuir domains under explicit Euler ran about
+///   1.25x faster in parallel, two domains of 1,000 nodes about 1.9x
+///   slower;
+/// - two domains mostly lost: up to 8,000 nodes for the Langmuir columns
+///   under explicit Euler and for the lahar, up to 5,602 for the
+///   lahar–lake scenario. Restricted to the performance cores
+///   (`taskset -c 0-3`, 4 Rayon threads), the same lahar–lake cases gained
+///   about 1.2x from 1,402 nodes on: on a hybrid processor, a step waits
+///   for its slowest domain, which may run on an efficiency core;
+/// - eight costly domains (Crank–Nicolson) gained about 1.6x to 1.9x.
+///
+/// The run conditions weigh as well: launched from an IDE, the same
+/// benchmark gave sequential times up to twice as long and different
+/// gains. Measure from a terminal, on an otherwise idle host.
+///
+/// Only explicit Euler and Crank–Nicolson are measured so far; the
+/// benchmark is meant to extend to RK4, BDF2 and backward Euler. DoPri45
+/// stays out while the orchestrator accepts fixed steps only.
 #[cfg(feature = "parallel")]
 pub(crate) fn default_parallel_threshold() -> usize {
     5_000
@@ -191,12 +205,16 @@ pub struct MultiDomainOrchestrator {
     /// meshes or two trivial ones, and `n_dof()` already exists on every
     /// domain's mesh with no new API needed.
     ///
-    /// Known limitation, accepted deliberately ([DA-048](https://github.com/biface/oxiflow/issues/140)/P5 does not
-    /// require an exact cost measure, only a measured one): this
-    /// approximation does not weight for per-node cost differences
-    /// between solver types — an adaptive integrator costs more per node
-    /// than [`ForwardEulerSolver`](crate::solver::methods::ForwardEulerSolver),
-    /// and the aggregate `n_dof()` sum cannot see that difference.
+    /// Known limitation, measured
+    /// ([#141](https://github.com/biface/oxiflow/issues/141)): the aggregate
+    /// volume sees neither the number of domains nor the cost of a node. On
+    /// the same Langmuir columns, a Crank–Nicolson step on the banded path
+    /// cost 15 to 20 times an explicit Euler step, and at the same aggregate
+    /// volume two domains can lose where eight gain.
+    /// [DA-048](https://github.com/biface/oxiflow/issues/140)/P5 asks for a
+    /// measured threshold, not an exact cost model: see
+    /// `default_parallel_threshold` for the measurements and the calibration
+    /// benchmark.
     #[cfg(feature = "parallel")]
     parallel_threshold: ParallelThreshold,
 }
@@ -242,8 +260,8 @@ impl MultiDomainOrchestrator {
     }
 
     /// Returns the configured Phase-1 dispatch threshold, or
-    /// `default_parallel_threshold` (`5_000` — a rough estimate, not
-    /// measured; see its own docs) if none was set.
+    /// `default_parallel_threshold` (`5_000`, indicative: calibrate it on
+    /// the host, see its docs) if none was set.
     #[cfg(feature = "parallel")]
     pub fn parallel_threshold(&self) -> usize {
         self.parallel_threshold.get(default_parallel_threshold())
