@@ -126,7 +126,7 @@ pub enum OxiflowError {
     /// ([`NewtonConvergence::ResidualOnly`]). These defaults are exact on a
     /// model affine in `u` and are meant to be adjusted for any other case,
     /// on each solver or through the fields of the same names in
-    /// [`IntegratorSpec`]:
+    /// `IntegratorSpec` (`sparse` feature):
     ///
     /// - the budget, `with_max_newton_iterations` (`max_iterations`), the
     ///   first setting to raise;
@@ -156,7 +156,6 @@ pub enum OxiflowError {
     /// [`JacobianStrategy::ModifiedFrozen`]: crate::solver::methods::newton::JacobianStrategy::ModifiedFrozen
     /// [`JacobianStrategy::FullNewton`]: crate::solver::methods::newton::JacobianStrategy::FullNewton
     /// [`NewtonConvergence::ResidualOnly`]: crate::solver::methods::newton::NewtonConvergence::ResidualOnly
-    /// [`IntegratorSpec`]: crate::solver::spec::IntegratorSpec
     #[error("Newton iteration did not converge after {iterations} iterations (residual = {residual:.4e})")]
     NewtonNotConverged {
         /// Number of iterations actually performed (equals the configured

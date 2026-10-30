@@ -302,9 +302,8 @@ pub(crate) fn stiff_jacobian_convergence() -> NewtonConvergence {
 
 /// Zero-config Newton iteration budget of the implicit solvers
 /// ([DD-044](https://github.com/biface/oxiflow/issues/109)): one correction, read by [`NewtonParams::default`] and by the serde
-/// default of the `max_iterations` fields of
-/// [`IntegratorSpec`](crate::solver::spec::IntegratorSpec), so that both
-/// construction paths agree.
+/// default of the `max_iterations` fields of `IntegratorSpec` (`sparse`
+/// feature), so that both construction paths agree.
 pub(crate) const DEFAULT_MAX_NEWTON_ITERATIONS: usize = 1;
 
 /// Zero-config Newton parameters of the implicit solvers
