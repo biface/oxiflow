@@ -29,9 +29,21 @@
 //! scaled with the grid spacing so that the Courant number of explicit Euler
 //! stays that of the reference run. The dispatch sites inside a domain
 //! (model loops, calculators, implicit Jacobian) are either forced
-//! sequential (`internal_off`) or left at their defaults
-//! (`internal_default`), which nests their dispatch inside the
-//! orchestrator's.
+//! sequential (`inner_seq`) or left at their defaults (`inner_default`),
+//! which nests their dispatch inside the orchestrator's.
+//!
+//! A case is named `orchestrator/<scenario>/<integrator>/<inner>`, then
+//! `K<k>/<sequential|parallel>`, with the aggregate mesh volume as
+//! parameter: one report per scenario, integrator and inner dispatch, with
+//! one curve per number of domains and orchestrator threshold, so that the
+//! weight of the number of domains reads on the same chart as the
+//! crossover. `<integrator>` is `euler` or `cn_banded_newton<N>`
+//! (Crank–Nicolson on the banded path, Newton budget of N iterations);
+//! `<inner>` is `inner_seq` or `inner_default`. Criterion cuts each
+//! component of a name to 64 bytes for its directory under
+//! `target/criterion/`, and tells the names it cut apart with suffixes
+//! `_2`, `_3`…; the names are checked against that limit when they are
+//! built.
 //!
 //! The orchestrator holds one calculator chain for all its domains, built
 //! on one grid ([#210](https://github.com/biface/oxiflow/issues/210)): the K domains of a scenario share the same
@@ -41,7 +53,7 @@
 //! printed before the first case that runs. Command:
 //!
 //! ```text
-//! cargo bench --bench oxiflow_parallel --all-features -- orchestrator_phase1
+//! cargo bench --bench oxiflow_parallel --all-features -- orchestrator/
 //! ```
 //!
 //! Each scenario is built the first time one of its cases runs, so a filter
@@ -80,14 +92,20 @@ pub const MEASURED_STEPS: usize = 10;
 const DOMAIN_COUNTS: [usize; 3] = [2, 4, 8];
 
 /// Dispatch sites inside a domain: forced sequential, or at their defaults.
-const INTERNAL_MODES: [(&str, Option<usize>); 2] = [
-    ("internal_off", Some(usize::MAX)),
-    ("internal_default", None),
-];
+const INTERNAL_MODES: [(&str, Option<usize>); 2] =
+    [("inner_seq", Some(usize::MAX)), ("inner_default", None)];
 
 /// Thresholds of the orchestrator: every step sequential, every step
 /// through Rayon.
 const ORCHESTRATOR_MODES: [(&str, usize); 2] = [("sequential", usize::MAX), ("parallel", 1)];
+
+/// First component of every group name, and the filter of the command.
+const GROUP_PREFIX: &str = "orchestrator";
+
+/// Length in bytes past which Criterion cuts a group or function name for
+/// its directory under `target/criterion/` (`MAX_DIRECTORY_NAME_LEN` in
+/// its `report` module).
+const CRITERION_NAME_MAX: usize = 64;
 
 // ── Langmuir ──────────────────────────────────────────────────────────────
 
@@ -108,7 +126,7 @@ impl LangmuirIntegrator {
         match self {
             Self::Euler => "euler".to_owned(),
             #[cfg(feature = "sparse")]
-            Self::CrankNicolsonBanded(budget) => format!("crank_nicolson_banded_newton{budget}"),
+            Self::CrankNicolsonBanded(budget) => format!("cn_banded_newton{budget}"),
         }
     }
 
@@ -159,14 +177,9 @@ pub fn langmuir_multi_domains(c: &mut Criterion) {
 
     for integrator in integrators {
         for (internal_label, internal) in INTERNAL_MODES {
+            let mut group =
+                configured_group(c, "langmuir_multi", &integrator.label(), internal_label);
             for k in DOMAIN_COUNTS {
-                let mut group = configured_group(
-                    c,
-                    &format!(
-                        "orchestrator_phase1/langmuir_multi/{}/{internal_label}/K{k}",
-                        integrator.label()
-                    ),
-                );
                 for n_points in LANGMUIR_NODES {
                     let n_species = langmuir_multi_model::make_model(
                         langmuir_multi_model::column_spacing(n_points),
@@ -177,6 +190,7 @@ pub fn langmuir_multi_domains(c: &mut Criterion) {
                         .n_dof();
                     time_both_dispatches(
                         &mut group,
+                        k,
                         total_nodes,
                         || langmuir_scenario(n_points, k, internal).expect("Langmuir scenario"),
                         |threshold| {
@@ -189,8 +203,8 @@ pub fn langmuir_multi_domains(c: &mut Criterion) {
                         },
                     );
                 }
-                group.finish();
             }
+            group.finish();
         }
     }
 }
@@ -261,17 +275,15 @@ pub fn lahar_multifield_domains(c: &mut Criterion) {
     let starts: Vec<OnceCell<ContextValue>> = LAHAR_NODES.iter().map(|_| OnceCell::new()).collect();
 
     for (internal_label, internal) in INTERNAL_MODES {
+        let mut group = configured_group(c, "lahar_multifield", "euler", internal_label);
         for k in DOMAIN_COUNTS {
-            let mut group = configured_group(
-                c,
-                &format!("orchestrator_phase1/lahar_multifield/euler/{internal_label}/K{k}"),
-            );
             for (&n_points, start) in LAHAR_NODES.iter().zip(&starts) {
                 let total_nodes = k * lahar_validation::grid(n_points, LAHAR_HALF_WIDTH)
                     .expect("lahar grid")
                     .n_dof();
                 time_both_dispatches(
                     &mut group,
+                    k,
                     total_nodes,
                     || {
                         let start = start.get_or_init(|| {
@@ -289,8 +301,8 @@ pub fn lahar_multifield_domains(c: &mut Criterion) {
                     },
                 );
             }
-            group.finish();
         }
+        group.finish();
     }
 }
 
@@ -383,19 +395,15 @@ pub fn lahar_lake_wave_domains(c: &mut Criterion) {
         .collect();
 
     for (internal_label, internal) in INTERNAL_MODES {
-        let mut group = configured_group(
-            c,
-            &format!("orchestrator_phase1/lahar_lake_wave/euler/{internal_label}/K2"),
-        );
+        let mut group = configured_group(c, "lahar_lake_wave", "euler", internal_label);
         for ((&dx, start), &nodes) in LAKE_SPACINGS.iter().zip(&starts).zip(&total_nodes) {
             time_both_dispatches(
                 &mut group,
+                2,
                 nodes,
                 || {
                     let (channel, lake) = start.get_or_init(|| {
-                        eprintln!(
-                            "orchestrator_phase1/lahar_lake_wave: dx = {dx} m, {nodes} nodes"
-                        );
+                        eprintln!("{GROUP_PREFIX}/lahar_lake_wave: dx = {dx} m, {nodes} nodes");
                         lake_start_states(dx).expect("lake starting states")
                     });
                     lake_scenario(dx, channel, lake, internal).expect("lake scenario")
@@ -444,9 +452,15 @@ fn lake_scenario(
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-/// A group of `name`, sized for runs of several seconds per iteration on
-/// the largest cases.
-fn configured_group<'a>(c: &'a mut Criterion, name: &str) -> BenchmarkGroup<'a, WallTime> {
+/// The group of `scenario`, `integrator` and `inner` dispatch, sized for
+/// runs of several seconds per iteration on the largest cases.
+fn configured_group<'a>(
+    c: &'a mut Criterion,
+    scenario: &str,
+    integrator: &str,
+    inner: &str,
+) -> BenchmarkGroup<'a, WallTime> {
+    let name = checked_name(format!("{GROUP_PREFIX}/{scenario}/{integrator}/{inner}"));
     let mut group = c.benchmark_group(name);
     group
         .sample_size(10)
@@ -455,13 +469,14 @@ fn configured_group<'a>(c: &'a mut Criterion, name: &str) -> BenchmarkGroup<'a, 
     group
 }
 
-/// Times [`MEASURED_STEPS`] steps of the scenario built by `prepare`, once
-/// per orchestrator threshold, with `total_nodes`, the aggregate mesh volume
-/// of the scenario, as parameter. `prepare` runs the first time one of the
-/// two cases runs, and the scenario is shared by both; `orchestrator`
-/// builds the orchestrator for a given threshold.
+/// Times [`MEASURED_STEPS`] steps of the scenario of `k` domains built by
+/// `prepare`, once per orchestrator threshold, with `total_nodes`, the
+/// aggregate mesh volume of the scenario, as parameter. `prepare` runs the
+/// first time one of the two cases runs, and the scenario is shared by
+/// both; `orchestrator` builds the orchestrator for a given threshold.
 fn time_both_dispatches(
     group: &mut BenchmarkGroup<'_, WallTime>,
+    k: usize,
     total_nodes: usize,
     prepare: impl Fn() -> (Scenario, OrchestratorConfig),
     orchestrator: impl Fn(usize) -> MultiDomainOrchestrator,
@@ -470,7 +485,7 @@ fn time_both_dispatches(
     for (label, threshold) in ORCHESTRATOR_MODES {
         let orchestrator = orchestrator(threshold);
         group.bench_with_input(
-            BenchmarkId::new(label, total_nodes),
+            BenchmarkId::new(checked_name(format!("K{k}/{label}")), total_nodes),
             &total_nodes,
             |b, _| {
                 let (scenario, config) = prepared.get_or_init(|| {
@@ -490,6 +505,17 @@ fn time_both_dispatches(
             },
         );
     }
+}
+
+/// `name`, checked to fit [`CRITERION_NAME_MAX`]: a longer name would be
+/// cut, and its reports filed under a suffixed directory.
+fn checked_name(name: String) -> String {
+    assert!(
+        name.len() <= CRITERION_NAME_MAX,
+        "benchmark name `{name}` is {} bytes long; Criterion cuts it to {CRITERION_NAME_MAX}",
+        name.len()
+    );
+    name
 }
 
 /// Orchestrator of `k` independent domains ([`domain_id`]), each with a
@@ -541,7 +567,7 @@ fn print_rayon_threads() {
     static PRINTED: std::sync::Once = std::sync::Once::new();
     PRINTED.call_once(|| {
         eprintln!(
-            "orchestrator_phase1: Rayon threads = {}",
+            "{GROUP_PREFIX}: Rayon threads = {}",
             rayon::current_num_threads()
         )
     });

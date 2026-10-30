@@ -75,7 +75,7 @@ use crate::solver::scenario::{Domain, DomainId, Scenario};
 /// [`MultiDomainOrchestrator::set_parallel_threshold`]:
 ///
 /// ```text
-/// cargo bench --bench oxiflow_parallel --all-features -- orchestrator_phase1
+/// cargo bench --bench oxiflow_parallel --all-features -- orchestrator/
 /// ```
 ///
 /// The benchmark times ten steps of K independent Langmuir columns
