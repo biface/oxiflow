@@ -11,6 +11,12 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Mesh` is implemented for `Arc<M>`, for any `M: Mesh` including
+  `dyn Mesh`. Every method forwards to the shared mesh, those with a default
+  implementation included, so a mesh that overrides them keeps its own
+  answers. One grid can then serve a flux scheme, which holds an `Arc`, and
+  a `Domain`, which owns a `Box<dyn Mesh>`, without being built twice
+  ([#108](https://github.com/biface/oxiflow/issues/108)).
 - `SimulationResult::write_vtk` exports a `VectorField` final state (n nodes
   × d components) as well as a `ScalarField`: one scalar `Float64` point-data
   array per component, named `field_0` … `field_{d-1}`, the first one being

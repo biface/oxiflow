@@ -291,6 +291,58 @@ pub trait Mesh: Send + Sync {
     }
 }
 
+// ── Shared meshes ─────────────────────────────────────────────────────────────
+
+/// A mesh behind an [`Arc`](std::sync::Arc) is a mesh: one grid, built once,
+/// can then serve a component that holds an `Arc` (a flux scheme, a
+/// calculator) and a [`Domain`](crate::solver::Domain), which owns a
+/// `Box<dyn Mesh>`, without being copied or built twice.
+///
+/// Every method forwards to the shared mesh, including those with a default
+/// implementation, so that a mesh which overrides them keeps its own
+/// answers.
+///
+/// # Examples
+///
+/// ```rust
+/// use std::sync::Arc;
+/// use oxiflow::mesh::{Mesh, UniformGrid1D};
+///
+/// let grid = Arc::new(UniformGrid1D::new(5, 0.0, 1.0)?);
+/// let owned: Box<dyn Mesh> = Box::new(Arc::clone(&grid));
+/// assert_eq!(owned.n_dof(), grid.n_dof());
+/// assert_eq!(Arc::strong_count(&grid), 2);
+/// # Ok::<(), oxiflow::context::OxiflowError>(())
+/// ```
+impl<M: Mesh + ?Sized> Mesh for std::sync::Arc<M> {
+    fn n_dof(&self) -> usize {
+        (**self).n_dof()
+    }
+
+    fn coordinates(&self, i: usize) -> &[f64] {
+        (**self).coordinates(i)
+    }
+
+    fn spatial_dimension(&self) -> usize {
+        (**self).spatial_dimension()
+    }
+
+    fn characteristic_length(&self) -> f64 {
+        (**self).characteristic_length()
+    }
+
+    fn boundary_nodes(&self, region: &BoundaryRegion) -> Result<Vec<usize>, OxiflowError> {
+        (**self).boundary_nodes(region)
+    }
+
+    fn boundary_neighbours(
+        &self,
+        region: &BoundaryRegion,
+    ) -> Result<Vec<BoundaryNode>, OxiflowError> {
+        (**self).boundary_neighbours(region)
+    }
+}
+
 // ── Uniform spacing ───────────────────────────────────────────────────────────
 
 /// Relative tolerance of [`uniform_spacing`] on each node gap.
@@ -516,6 +568,44 @@ mod tests {
         assert_eq!(Lattice2D.boundary_nodes(&face).unwrap(), vec![2, 3]);
         assert!(refused(
             Lattice2D.boundary_neighbours(&face),
+            "Mesh::boundary_neighbours"
+        ));
+    }
+
+    // ── Shared meshes ────────────────────────────────────────────────────────
+
+    #[test]
+    fn a_shared_grid_answers_as_the_grid() {
+        let grid = std::sync::Arc::new(UniformGrid1D::new(6, -1.0, 1.5).unwrap());
+        let shared: Box<dyn Mesh> = Box::new(std::sync::Arc::clone(&grid));
+        assert_eq!(shared.n_dof(), grid.n_dof());
+        assert_eq!(shared.spatial_dimension(), grid.spatial_dimension());
+        assert_eq!(shared.characteristic_length(), grid.characteristic_length());
+        for i in 0..grid.n_dof() {
+            assert_eq!(shared.coordinates(i), grid.coordinates(i));
+        }
+        for face in [LOWER, UPPER] {
+            assert_eq!(
+                shared.boundary_nodes(&face).unwrap(),
+                grid.boundary_nodes(&face).unwrap()
+            );
+            assert_eq!(
+                shared.boundary_neighbours(&face).unwrap(),
+                grid.boundary_neighbours(&face).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn a_shared_mesh_keeps_its_overrides() {
+        let face = BoundaryRegion::Face {
+            axis: 1,
+            side: FaceSide::Upper,
+        };
+        let shared: std::sync::Arc<dyn Mesh> = std::sync::Arc::new(Lattice2D);
+        assert_eq!(shared.boundary_nodes(&face).unwrap(), vec![2, 3]);
+        assert!(refused(
+            shared.boundary_neighbours(&face),
             "Mesh::boundary_neighbours"
         ));
     }
