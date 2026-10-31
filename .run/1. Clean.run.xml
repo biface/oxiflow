@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="1. Clean" type="CargoCommandRunConfiguration" factoryName="Cargo Command" folderName="Controls">
     <option name="buildProfileId" value="dev" />
-    <option name="command" value="clean" />
+    <option name="command" value="clean --profile dev" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="true" />
