@@ -261,6 +261,14 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   contents with `include`, so a new repository file stays out of the
   package unless added there
   ([#214](https://github.com/biface/oxiflow/issues/214)).
+- The documentation of every Rayon dispatch threshold cites the reference
+  run of the `oxiflow_parallel` benchmarks for v0.10.0 instead of earlier
+  measurements: the Jacobian assembly of the implicit solvers, the FD
+  operators, `MultiDomainOrchestrator`, `CoefficientField` and the
+  reference models of `rsc/`. The documentation of `solver::parallel`
+  explains how to size a threshold, as the sequential time of one call of
+  the dispatched loop, and links the dispatch abaques of the wiki
+  ([#214](https://github.com/biface/oxiflow/issues/214)).
 - `Cargo.toml` sets `autobenches = false`: `oxiflow_parallel` is the only
   bench target, as intended. Cargo no longer also builds each module of
   `benches/` as an empty standalone target ([#199](https://github.com/biface/oxiflow/issues/199)).

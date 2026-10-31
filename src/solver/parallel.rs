@@ -21,6 +21,33 @@
 //! Entirely gated behind the `parallel` feature, at the module
 //! declaration itself (`solver::mod`) — mirrors `solver::sparse`/
 //! `solver::gpu`'s own gating, not merely the items inside it.
+//!
+//! ## Sizing a threshold
+//!
+//! A dispatch pays once the work it splits outweighs the cost of handing
+//! it to the Rayon pool. That work reads best as the sequential time of
+//! one call of the dispatched loop, the number of items times the cost of
+//! one item, rather than as a node count, which means nothing without the
+//! cost of a node. On the design machine (Intel Core i5-1335U, 12 Rayon
+//! threads), the reference run of the `oxiflow_parallel` benchmarks for
+//! v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)) puts the crossover early for loops limited by
+//! arithmetic: parallel loses while one call lasts 10 to 30 µs
+//! sequentially, and wins from about 100 µs for heavy items (a Langmuir
+//! row, a lahar source node) and 300 µs for the lightest (a closed-form
+//! coefficient), that is from about 10³ items at 100 ns each or 10⁵ items
+//! at 3 ns each. Loops limited by memory bandwidth cross much later:
+//! between 0.4 and 4 ms of sequential work for the lahar flux, around
+//! 30 ms for the FD Laplacian.
+//!
+//! Two effects move the crossover in a full run. Inside a time step, a
+//! dispatch sits between sequential phases and costs more than in a
+//! back-to-back benchmark loop. Under `MultiDomainOrchestrator`, the
+//! dispatch inside each domain competes with the dispatch across domains.
+//! Every default in the crate is therefore an indicative starting point:
+//! measure the target workload with [`calibrate_parallel_threshold`] or the
+//! benchmarks under `benches/`, then set the threshold of each site. The
+//! abaques of the reference run, with the charts and tables of every site,
+//! are on the wiki: [Dispatch abaques](https://github.com/biface/oxiflow/wiki/Dispatch-abaques).
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 

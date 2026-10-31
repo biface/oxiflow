@@ -130,22 +130,22 @@ pub(crate) struct LangmuirMulti {
     /// dominated. Measured: `benches/langmuir_multi.rs`'s
     /// `row_dispatch_diagnostic` puts the real crossover between n=100
     /// and n=1,000 -- see [`default_parallel_threshold`]'s own docs for
-    /// the numbers (measured at v0.9.0, [#53](https://github.com/biface/oxiflow/issues/53)).
+    /// the numbers.
     #[cfg(feature = "parallel")]
     pub(crate) parallel_threshold: usize,
 }
 
-/// Measured: `benches/langmuir_multi.rs`'s `row_dispatch_diagnostic`
-/// shows the real crossover between n=100 (1.36x slower) and n=1,000
-/// (1.53x faster) on the design machine (12 logical cores), measured at
-/// v0.9.0 ([#53](https://github.com/biface/oxiflow/issues/53)). `1_000` sits right at that crossover rather than
-/// waiting for a larger safety margin, since the win grows quickly past
-/// it (2.6x faster by n=10,000). Originally a back-of-envelope `2_000`
-/// (picked from between fd.rs's 49_999 and the orchestrator's 5_000, see
-/// git history) before this measurement replaced the guess. At v0.9.0
-/// the diagnostic timed a copy of the row loop; it now times this
-/// model's `compute_physics`, so the numbers above hold until the next
-/// measurement.
+/// Measured: `benches/langmuir_multi.rs`'s `row_dispatch_diagnostic`,
+/// which times this model's `compute_physics`, shows the crossover between
+/// n=100 (1.42x slower) and n=1,000 (0.65x the sequential time) on the
+/// design machine (12 logical cores), in the reference run for v0.10.0
+/// ([#214](https://github.com/biface/oxiflow/issues/214)); the win grows past it (0.35x by n=10,000). One call of 1,000
+/// rows lasts about 135 µs sequentially, the order from which loops limited
+/// by arithmetic pay. The default holds under `MultiDomainOrchestrator`
+/// too: with the orchestrator sequential, explicit Euler steps on 1,000 and
+/// 4,000-node columns ran in 0.51x to 0.73x the time with this loop at its
+/// default than forced sequential. Abaques:
+/// <https://github.com/biface/oxiflow/wiki/Dispatch-abaques>.
 #[cfg(feature = "parallel")]
 pub(crate) fn default_parallel_threshold() -> usize {
     1_000

@@ -81,26 +81,35 @@ use crate::solver::scenario::{Domain, DomainId, Scenario};
 /// The benchmark times ten steps of K independent Langmuir columns
 /// (explicit Euler, Crank–Nicolson on the banded path), K independent lahar
 /// domains (explicit Euler) and the coupled lahar–lake scenario, with this
-/// threshold forced to `usize::MAX` and to `1`. On one host (Intel Core
-/// i5-1335U: two performance and eight efficiency cores, 12 Rayon threads),
-/// run from a terminal, with the dispatch inside the domains forced
+/// threshold forced to `usize::MAX` and to `1`, and the dispatch inside the
+/// domains forced sequential, left at its defaults or forced parallel. On
+/// one host (Intel Core i5-1335U: two performance and eight efficiency
+/// cores, 12 Rayon threads), run from a terminal, the reference run for
+/// v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)) gives, with the dispatch inside the domains forced
 /// sequential:
 ///
-/// - the number of domains weighs as much as the aggregate volume: at
-///   2,000 nodes, eight Langmuir domains under explicit Euler ran about
-///   1.25x faster in parallel, two domains of 1,000 nodes about 1.9x
-///   slower;
-/// - two domains mostly lost: up to 8,000 nodes for the Langmuir columns
-///   under explicit Euler and for the lahar, up to 5,602 for the
-///   lahar–lake scenario. Restricted to the performance cores
-///   (`taskset -c 0-3`, 4 Rayon threads), the same lahar–lake cases gained
-///   about 1.2x from 1,402 nodes on: on a hybrid processor, a step waits
-///   for its slowest domain, which may run on an efficiency core;
-/// - eight costly domains (Crank–Nicolson) gained about 1.6x to 1.9x.
+/// - two domains lost up to about 2,000 nodes, by up to 1.12x for the
+///   Langmuir columns under explicit Euler and for the lahar, and gained
+///   from 8,000 (0.68x to 0.75x the sequential time); the coupled
+///   lahar–lake scenario gained from 702 nodes on (0.83x);
+/// - four and eight domains gained from the smallest volumes measured:
+///   0.69x to 0.85x for four domains at 1,000 to 2,000 nodes, 0.37x to
+///   0.46x for eight domains at 2,000 to 4,000;
+/// - costly domains gained most: eight Crank–Nicolson columns ran 2.3 to
+///   3.2 times faster.
 ///
-/// The run conditions weigh as well: launched from an IDE, the same
-/// benchmark gave sequential times up to twice as long and different
-/// gains. Measure from a terminal, on an otherwise idle host.
+/// With the dispatch inside the domains left at its defaults, the parallel
+/// orchestrator mostly gained more, down to 0.2x the sequential time. At
+/// eight domains, forcing the inner dispatch parallel mostly lost, by
+/// 1.06x to 1.9x against keeping it sequential: the domains already fill
+/// the pool.
+///
+/// The default, 5,000 nodes, stays clear of the losing two-domain cases
+/// and leaves the gains of four or more small domains unused. Measure from
+/// a terminal, on an otherwise idle host: the run conditions shift the
+/// figures. [`crate::solver::parallel`] explains how to read a crossover;
+/// the abaques of the reference run are on the wiki:
+/// [Dispatch abaques](https://github.com/biface/oxiflow/wiki/Dispatch-abaques).
 ///
 /// Only explicit Euler and Crank–Nicolson are measured so far; the
 /// benchmark is meant to extend to RK4, BDF2 and backward Euler. DoPri45

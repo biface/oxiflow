@@ -58,6 +58,14 @@
 //! bandwidth, thermal state) -- see [DA-048](https://github.com/biface/oxiflow/issues/140) and [#140](https://github.com/biface/oxiflow/issues/140). The default is a
 //! starting point; the benchmarks under `benches/` are there to build the
 //! charts that replace it for a given use.
+//!
+//! A stencil loop is limited by memory bandwidth more than by arithmetic,
+//! so its own crossover lies far above the default: in the reference run
+//! for v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)), the Laplacian ran 1.7x slower in parallel at
+//! 100,000 nodes, broke even around 10⁷ and gained under 5 % at 3·10⁷.
+//! How to read a crossover is explained in the documentation of
+//! `solver::parallel` (`parallel` feature); the abaques of every dispatch
+//! site are on the wiki: [Dispatch abaques](https://github.com/biface/oxiflow/wiki/Dispatch-abaques).
 
 use nalgebra::DVector;
 #[cfg(feature = "parallel")]

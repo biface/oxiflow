@@ -159,8 +159,10 @@ impl BackwardEulerSolver {
 
     /// Returns the effective dispatch threshold of the Jacobian assembly —
     /// the override if one was set, otherwise an indicative default of 256
-    /// unknowns, to be replaced by a value measured on the target workload
-    /// (`oxiflow_parallel` benchmarks). Only exists when the crate is built
+    /// unknowns. The crossover depends on the model, and on the banded path
+    /// parallelism is limited to the 2b + 1 colors, which rarely pays below
+    /// about 10⁴ nodes: measure the target workload (see
+    /// [`crate::solver::parallel`]). Only exists when the crate is built
     /// with the `parallel` feature.
     #[cfg(feature = "parallel")]
     pub fn parallel_threshold(&self) -> usize {

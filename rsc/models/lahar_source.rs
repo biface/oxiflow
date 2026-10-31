@@ -50,7 +50,7 @@ pub(crate) struct LaharSource {
     dx: f64,
     x_coords: Vec<f64>,
     /// Rayon dispatch threshold for the per-node friction/erosion/
-    /// deposition loop -- default measured at v0.9.0, see
+    /// deposition loop -- default measured for v0.10.0, see
     /// [`default_source_parallel_threshold`]. Per-instance ([DA-048](https://github.com/biface/oxiflow/issues/140)
     /// P1/P2/P3), independent of `ShallowLayerFlux`'s own threshold:
     /// this site's per-node cost (three-branch Pouliquen-Forterre
@@ -60,15 +60,22 @@ pub(crate) struct LaharSource {
     parallel_threshold: usize,
 }
 
-/// Measured: `benches/lahar_multifield.rs`'s `source_dispatch_diagnostic` put the real crossover
-/// between 100 and 1,000, consistent across runs (2.71x, then 2.90x
-/// faster at 1,000 -- no sign flip): the same profile as
-/// `langmuir_multi`'s own measured threshold ([#138](https://github.com/biface/oxiflow/issues/138)), sitting right at
-/// the crossover rather than carrying a larger, unjustified safety
-/// margin, measured at v0.9.0 ([#53](https://github.com/biface/oxiflow/issues/53)). At v0.9.0 the diagnostic timed a
-/// partial copy of the per-node loop; it now times this model's
-/// `compute_physics`, so the numbers above hold until the next
-/// measurement.
+/// Measured: `benches/lahar_multifield.rs`'s `source_dispatch_diagnostic`,
+/// which times this model's `compute_physics` on a uniform synthetic flow
+/// (h = 0.5 m, u = 2 m/s on every node), shows the crossover between 100
+/// (1.66x slower) and 1,000 nodes (0.47x the sequential time) on the
+/// design machine (12 logical cores), in the reference run for v0.10.0
+/// ([#214](https://github.com/biface/oxiflow/issues/214)): the same profile as `langmuir_multi`'s rows.
+///
+/// The cost of a node depends on the state of the flow, and the
+/// synthetic state is a costly one. In a real run, a step of the
+/// validation scenario (Chézy regime) on 1,000 nodes lasts about 94 µs
+/// sequentially, flux included, so the source takes well under the 105 µs
+/// the diagnostic measures; under `MultiDomainOrchestrator`, with the
+/// orchestrator sequential, this loop at its default made the steps 1.1x
+/// to 1.7x slower than forced sequential, from 1,000 to 4,000 nodes per
+/// domain. Measure on the target flow before relying on the default.
+/// Abaques: <https://github.com/biface/oxiflow/wiki/Dispatch-abaques>.
 #[cfg(feature = "parallel")]
 pub(crate) fn default_source_parallel_threshold() -> usize {
     1_000

@@ -111,12 +111,26 @@ const FD_EPSILON: f64 = 1e-7;
 
 /// Default Rayon dispatch threshold of the Jacobian assembly, in unknowns
 /// ([DT-069](https://github.com/biface/oxiflow/issues/198)) — an indicative value, shared by the three implicit
-/// solvers since they share this assembly. Each dispatched task is a full
-/// derivative evaluation, much heavier than one stencil point, so the
-/// crossover is expected far below
-/// [`crate::operators::fd::default_parallel_threshold`] (49 999). Measure it
-/// on the target workload with the `oxiflow_parallel` benchmarks and set
-/// it through the solver's `with_parallel_threshold`.
+/// solvers since they share this assembly. The dispatched tasks are the
+/// Jacobian's columns on the dense path and its colors on the banded path
+/// (2b + 1 for a bandwidth b), each a full derivative evaluation, so the
+/// crossover depends on the model far more than on the number of
+/// unknowns. Reference run for v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)), one Backward Euler step:
+///
+/// - dense path: a two-species Langmuir column runs about twice as fast
+///   from 32 nodes (64 unknowns) on, while 1D diffusion, whose derivative
+///   costs a few flops per node, is still 1.06x slower at 512 nodes;
+/// - banded path: with at most 2b + 1 tasks, parallelism stays limited at
+///   any size. Langmuir (7 colors) is neutral at 1,000 nodes and gains 10
+///   to 14 % from 10,000 on; diffusion (3 colors) is still 1.14x slower at
+///   100,000. Under `MultiDomainOrchestrator`, Crank–Nicolson on the banded
+///   path ran up to 1.9x slower at 250 nodes per domain, where this
+///   assembly was the only dispatch site.
+///
+/// On the banded path, keep the assembly sequential below about 10⁴ nodes
+/// (`with_parallel_threshold(usize::MAX)`); on the dense path, measure the
+/// model. [`crate::solver::parallel`] explains how to read a crossover and
+/// points to the abaques.
 #[cfg(feature = "parallel")]
 pub(crate) fn default_parallel_threshold() -> usize {
     256
