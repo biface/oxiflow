@@ -23,6 +23,28 @@ readme      = "README.md"
 keywords    = ["pde", "solver", "transport", "diffusion", "numerical"]
 categories  = ["science", "algorithms"]
 
+# Contenu du paquet publié : ce dont Cargo a besoin, et rien d'autre. La
+# bibliothèque, les cibles déclarées et les modèles de `rsc/` qu'elles
+# incluent par `#[path]`, l'en-tête KaTeX appelé par `rustdoc-args` (docs.rs),
+# la licence et la notice (Apache 2.0, § 4), le README du champ `readme` et le
+# CHANGELOG. La configuration du dépôt (CI, hooks, IDE, scripts) et les guides
+# de contribution restent sur GitHub. Liste blanche : un fichier ajouté au
+# dépôt n'entre dans le paquet que si on l'ajoute ici.
+include = [
+    "/src/**",
+    "/examples/**",
+    "/tests/**",
+    "/benches/**",
+    "/rsc/**",
+    "/docs/katex-header.html",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/LICENSE.txt",
+    "/NOTICE",
+    "/CHANGELOG.md",
+]
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Dépendances de production / Production dependencies
 # ──────────────────────────────────────────────────────────────────────────────

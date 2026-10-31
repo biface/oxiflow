@@ -252,6 +252,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   saved data are unchanged; existing results can be redrawn without new
   sampling through Criterion's `--load-baseline`
   ([#214](https://github.com/biface/oxiflow/issues/214)).
+- The published package keeps what Cargo and docs.rs use: the library,
+  the examples, tests and benchmarks with the models of `rsc/` they
+  include, the KaTeX header of the documentation, the licence and notice,
+  the README and this changelog. Repository configuration (CI workflows,
+  hooks, IDE run configurations, scripts) and the contribution guides stay
+  on GitHub; the package goes from 159 to 119 files. `Cargo.toml` lists the
+  contents with `include`, so a new repository file stays out of the
+  package unless added there
+  ([#214](https://github.com/biface/oxiflow/issues/214)).
 - `Cargo.toml` sets `autobenches = false`: `oxiflow_parallel` is the only
   bench target, as intended. Cargo no longer also builds each module of
   `benches/` as an empty standalone target ([#199](https://github.com/biface/oxiflow/issues/199)).
