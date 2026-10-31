@@ -40,8 +40,8 @@ pub(crate) struct ShallowLayerFlux {
     pub(crate) limiter: Limiter,
     /// Rayon dispatch threshold for the divergence loop (two
     /// [`ShallowLayerFlux::rusanov_face`] evaluations per node --
-    /// primitives + physical flux each side) -- default measured at
-    /// v0.9.0, see [`default_flux_parallel_threshold`]. Per-
+    /// primitives + physical flux each side) -- default measured for
+    /// v0.10.0, see [`default_flux_parallel_threshold`]. Per-
     /// instance, not global ([DA-048](https://github.com/biface/oxiflow/issues/140) P1/P2/P3): this site's own coupling
     /// granularity (one node's flux touches only its immediate face
     /// neighbours) has nothing to do with `LaharSource`'s per-node cost
@@ -50,17 +50,16 @@ pub(crate) struct ShallowLayerFlux {
     pub(crate) parallel_threshold: usize,
 }
 
-/// Measured: `benches/lahar_multifield.rs`'s `flux_dispatch_diagnostic` put the real crossover
-/// between 1,000 and 10,000 -- but 1,000 itself flips sign between runs
-/// (session: 1.18x slower in one run, 1.09x faster in another, on the
-/// same machine), so the default sits at 10,000, past that noisy
-/// boundary, where the win is consistent and stable (~3-4x from 10,000
-/// through 1,000,000), measured at v0.9.0 ([#53](https://github.com/biface/oxiflow/issues/53)). At v0.9.0 the diagnostic
-/// timed a copy of the divergence loop; it now times this operator's
-/// `apply`, so the numbers above hold until the next measurement.
+/// Measured: `benches/lahar_multifield.rs`'s `flux_dispatch_diagnostic`,
+/// which times this operator's `apply` on a uniform synthetic flow, on the
+/// design machine (12 logical cores) for v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)): parallel is
+/// 1.16x slower than sequential at 10,000 nodes and 0.76x its time at
+/// 100,000, so the default sits at 100,000. Each node reads and writes more
+/// memory than it computes, which puts the crossover well beyond
+/// `LaharSource`'s.
 #[cfg(feature = "parallel")]
 pub(crate) fn default_flux_parallel_threshold() -> usize {
-    10_000
+    100_000
 }
 
 impl ShallowLayerFlux {

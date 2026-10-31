@@ -64,7 +64,7 @@ fn layered(x: f64) -> f64 {
 /// its crossover is an upper bound for a closed-form coefficient; the
 /// layered profile shows how the crossover moves when the function costs
 /// more. Both feed the dispatch charts of [DA-048](https://github.com/biface/oxiflow/issues/140); the default threshold
-/// (10 000 nodes) stays indicative.
+/// (100 000 nodes) stays indicative.
 pub fn coefficient_dispatch(c: &mut Criterion) {
     let mut group = crate::log_scaled_group(c, "heat_transfer_1d_coefficient_dispatch");
     let profiles: [(&str, Profile); 2] = [("graded", |x| GRADED.value(x)), ("layered", layered)];

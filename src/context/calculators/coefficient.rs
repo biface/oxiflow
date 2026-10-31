@@ -58,15 +58,19 @@ use crate::model::traits::RequiresContext;
 use crate::solver::parallel::ParallelThreshold;
 
 /// Default Rayon dispatch threshold of [`CoefficientField`], in nodes — an
-/// indicative value. One node costs one call of the user function, often
-/// heavier than one stencil point of the FD operators
-/// ([`crate::operators::fd::default_parallel_threshold`], 49 999) and much
-/// lighter than one derivative evaluation of the Jacobian assembly (256).
-/// Measure the crossover on the target function and mesh, and set it with
+/// indicative value. One node costs one call of the user function, so the
+/// crossover moves with that function. Measured by
+/// `benches/heat_transfer_1d.rs`'s `coefficient_dispatch` on the design
+/// machine (12 logical cores) for v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)): with the cheapest
+/// function measured, the graded profile of the example, parallel is 2.4×
+/// slower at 10 000 nodes and 0.79× the sequential time at 100 000; with a
+/// costlier one, the layered profile, it already wins at 10 000 (0.89×).
+/// The default follows the cheapest function. Measure the crossover on the
+/// target function and mesh, and set it with
 /// [`CoefficientField::with_parallel_threshold`].
 #[cfg(feature = "parallel")]
 pub(crate) fn default_parallel_threshold() -> usize {
-    10_000
+    100_000
 }
 
 /// Space-time coefficient function, as stored by [`CoefficientField::of_x_t`].
@@ -242,7 +246,7 @@ impl CoefficientField {
 
     /// Returns the effective Rayon dispatch threshold, in nodes: the
     /// configured override if one was set, otherwise an indicative default
-    /// of 10 000 to be replaced by a measured value. Only exists when the
+    /// of 100 000 to be replaced by a measured value. Only exists when the
     /// crate is built with the `parallel` feature.
     #[cfg(feature = "parallel")]
     pub fn parallel_threshold(&self) -> usize {

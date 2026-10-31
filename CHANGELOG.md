@@ -84,7 +84,7 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ExternalData`, naming the first node, its coordinates and the time. With
   the `parallel` feature, nodes are evaluated through Rayon above a
   threshold set with `with_parallel_threshold` or `set_parallel_threshold`;
-  the default, 10 000 nodes, is indicative. The function must be pure
+  the default, 100 000 nodes, is indicative. The function must be pure
   ([#182](https://github.com/biface/oxiflow/issues/182)).
 - `BoundaryCondition::constrained_nodes`, a provided method returning the
   nodes `apply` sets (empty by default). The solver sets the derivative to
