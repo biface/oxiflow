@@ -60,10 +60,10 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `benches/oxiflow_parallel`: an `orchestrator_phase1` calibration of the
   `MultiDomainOrchestrator` dispatch. It times ten synchronised steps with
   the orchestrator's threshold forced sequential or parallel, and the
-  dispatch inside each domain forced sequential or left at its defaults, on
-  K independent Langmuir columns (explicit Euler, and Crank–Nicolson on the
-  banded path with the `sparse` feature), K independent lahar domains and
-  the coupled lahar–lake scenario. Each case is reported against the
+  dispatch inside each domain forced sequential, left at its defaults or
+  forced parallel, on K independent Langmuir columns (explicit Euler, and
+  Crank–Nicolson on the banded path with the `sparse` feature), K
+  independent lahar domains and the coupled lahar–lake scenario. Each case is reported against the
   aggregate mesh volume the threshold compares, so that the threshold can
   be calibrated on the host ([#141](https://github.com/biface/oxiflow/issues/141)).
 - `ContextCalculator::compute_shared`, a provided method returning

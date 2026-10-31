@@ -28,9 +28,12 @@
 //! Every case runs [`MEASURED_STEPS`] steps per iteration, at a time step
 //! scaled with the grid spacing so that the Courant number of explicit Euler
 //! stays that of the reference run. The dispatch sites inside a domain
-//! (model loops, calculators, implicit Jacobian) are either forced
-//! sequential (`inner_seq`) or left at their defaults (`inner_default`),
-//! which nests their dispatch inside the orchestrator's.
+//! (model loops, calculators, implicit Jacobian) are forced sequential
+//! (`inner_seq`), left at their defaults (`inner_default`), or forced
+//! parallel (`inner_par`); the last two nest their dispatch inside the
+//! orchestrator's. The forced modes bound what the sites can give at every
+//! size, including below a default threshold, and the default mode shows
+//! where the defaults place a run between those bounds.
 //!
 //! A case is named `orchestrator/<scenario>/<integrator>/<inner>`, then
 //! `K<k>/<sequential|parallel>`, with the aggregate mesh volume as
@@ -39,8 +42,8 @@
 //! weight of the number of domains reads on the same chart as the
 //! crossover. `<integrator>` is `euler` or `cn_banded_newton<N>`
 //! (Crank–Nicolson on the banded path, Newton budget of N iterations);
-//! `<inner>` is `inner_seq` or `inner_default`. Criterion cuts each
-//! component of a name to 64 bytes for its directory under
+//! `<inner>` is `inner_seq`, `inner_default` or `inner_par`. Criterion
+//! cuts each component of a name to 64 bytes for its directory under
 //! `target/criterion/`, and tells the names it cut apart with suffixes
 //! `_2`, `_3`…; the names are checked against that limit when they are
 //! built.
@@ -91,9 +94,13 @@ pub const MEASURED_STEPS: usize = 10;
 /// Numbers of independent domains of the Langmuir and lahar scenarios.
 const DOMAIN_COUNTS: [usize; 3] = [2, 4, 8];
 
-/// Dispatch sites inside a domain: forced sequential, or at their defaults.
-const INTERNAL_MODES: [(&str, Option<usize>); 2] =
-    [("inner_seq", Some(usize::MAX)), ("inner_default", None)];
+/// Dispatch sites inside a domain: forced sequential, at their defaults,
+/// or forced parallel.
+const INTERNAL_MODES: [(&str, Option<usize>); 3] = [
+    ("inner_seq", Some(usize::MAX)),
+    ("inner_default", None),
+    ("inner_par", Some(1)),
+];
 
 /// Thresholds of the orchestrator: every step sequential, every step
 /// through Rayon.
@@ -130,8 +137,8 @@ impl LangmuirIntegrator {
         }
     }
 
-    /// One solver of this integrator, its Jacobian dispatch forced
-    /// sequential when `internal` is `Some`.
+    /// One solver of this integrator, the threshold of its Jacobian
+    /// dispatch forced to `internal` when `Some`.
     #[cfg_attr(not(feature = "sparse"), allow(unused_variables))]
     fn solver(self, n_species: usize, internal: Option<usize>) -> Box<dyn SteppableSolver> {
         match self {
