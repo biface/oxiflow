@@ -29,6 +29,89 @@ pub enum Interpolation {
     // PiecewiseCubic — RESERVED, no milestone assigned (would require feature `spline`).
 }
 
+// ── TabulatedSeries ───────────────────────────────────────────────────────────
+
+/// `(t, value)` pairs with their interpolation: the data part of
+/// [`ExternalTabulated`], shared with every other consumer of a tabulated
+/// function of time, so that validation and interpolation exist once.
+#[derive(Debug, Clone)]
+pub(crate) struct TabulatedSeries {
+    /// (t, value) pairs, sorted by t ascending.
+    data: Vec<(f64, f64)>,
+    interpolation: Interpolation,
+}
+
+impl TabulatedSeries {
+    /// Checks `data` (at least 2 points, strictly ascending `t`) and keeps
+    /// it with `interpolation`. `owner` names the consumer in the error
+    /// messages.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(OxiflowError::ExternalData)` if `data` has fewer than 2
+    /// points or is not sorted by strictly ascending `t`.
+    pub(crate) fn new(
+        owner: &str,
+        data: Vec<(f64, f64)>,
+        interpolation: Interpolation,
+    ) -> Result<Self, OxiflowError> {
+        if data.len() < 2 {
+            return Err(OxiflowError::ExternalData(format!(
+                "{owner} requires at least 2 data points, got {}",
+                data.len()
+            )));
+        }
+
+        // Verify ascending t order.
+        for w in data.windows(2) {
+            if w[0].0 >= w[1].0 {
+                return Err(OxiflowError::ExternalData(format!(
+                    "{owner} data must be sorted by ascending t: \
+                     t[i]={} >= t[i+1]={}",
+                    w[0].0, w[1].0
+                )));
+            }
+        }
+
+        Ok(Self {
+            data,
+            interpolation,
+        })
+    }
+
+    /// Interpolates the data at time `t`.
+    ///
+    /// Clamps to endpoint values outside the data range.
+    pub(crate) fn value_at(&self, t: f64) -> f64 {
+        let (t_min, v_min) = self.data[0];
+        let (t_max, v_max) = *self.data.last().unwrap();
+
+        // Clamp outside range.
+        if t <= t_min {
+            return v_min;
+        }
+        if t >= t_max {
+            return v_max;
+        }
+
+        // Binary search for the bracketing interval.
+        let idx = self
+            .data
+            .partition_point(|(ti, _)| *ti <= t)
+            .saturating_sub(1);
+
+        let (t0, v0) = self.data[idx];
+        let (t1, v1) = self.data[idx + 1];
+
+        match self.interpolation {
+            Interpolation::Linear => v0 + (v1 - v0) * (t - t0) / (t1 - t0),
+            // PiecewiseCubic would be added here (reserved, no milestone).
+            #[allow(unreachable_patterns)]
+            _ => v0, // unreachable while `Linear` is the only variant
+        }
+    }
+}
+
 // ── ExternalTabulated ─────────────────────────────────────────────────────────
 
 /// Provides a time-dependent scalar from tabulated (t, value) data.
@@ -62,9 +145,7 @@ pub enum Interpolation {
 #[derive(Debug)]
 pub struct ExternalTabulated {
     variable: ContextVariable,
-    /// (t, value) pairs, sorted by t ascending.
-    data: Vec<(f64, f64)>,
-    interpolation: Interpolation,
+    series: TabulatedSeries,
 }
 
 impl ExternalTabulated {
@@ -157,61 +238,10 @@ impl ExternalTabulated {
         data: Vec<(f64, f64)>,
         interpolation: Interpolation,
     ) -> Result<Self, OxiflowError> {
-        if data.len() < 2 {
-            return Err(OxiflowError::ExternalData(format!(
-                "ExternalTabulated requires at least 2 data points, got {}",
-                data.len()
-            )));
-        }
-
-        // Verify ascending t order.
-        for w in data.windows(2) {
-            if w[0].0 >= w[1].0 {
-                return Err(OxiflowError::ExternalData(format!(
-                    "ExternalTabulated data must be sorted by ascending t: \
-                     t[i]={} >= t[i+1]={}",
-                    w[0].0, w[1].0
-                )));
-            }
-        }
-
         Ok(Self {
             variable,
-            data,
-            interpolation,
+            series: TabulatedSeries::new("ExternalTabulated", data, interpolation)?,
         })
-    }
-
-    /// Interpolates the tabulated data at time `t`.
-    ///
-    /// Clamps to endpoint values outside the data range.
-    fn interpolate(&self, t: f64) -> f64 {
-        let (t_min, v_min) = self.data[0];
-        let (t_max, v_max) = *self.data.last().unwrap();
-
-        // Clamp outside range.
-        if t <= t_min {
-            return v_min;
-        }
-        if t >= t_max {
-            return v_max;
-        }
-
-        // Binary search for the bracketing interval.
-        let idx = self
-            .data
-            .partition_point(|(ti, _)| *ti <= t)
-            .saturating_sub(1);
-
-        let (t0, v0) = self.data[idx];
-        let (t1, v1) = self.data[idx + 1];
-
-        match self.interpolation {
-            Interpolation::Linear => v0 + (v1 - v0) * (t - t0) / (t1 - t0),
-            // PiecewiseCubic would be added here (reserved, no milestone).
-            #[allow(unreachable_patterns)]
-            _ => v0, // unreachable while `Linear` is the only variant
-        }
     }
 }
 
@@ -237,7 +267,7 @@ impl ContextCalculator for ExternalTabulated {
         _state: &ContextValue,
         ctx: &ComputeContext,
     ) -> Result<ContextValue, OxiflowError> {
-        let value = self.interpolate(ctx.time());
+        let value = self.series.value_at(ctx.time());
         Ok(ContextValue::Scalar(value))
     }
 
