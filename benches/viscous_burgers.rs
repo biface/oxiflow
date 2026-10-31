@@ -103,7 +103,7 @@ pub fn full_run(c: &mut Criterion) {
 #[cfg(feature = "parallel")]
 pub fn combined_dispatch_diagnostic(c: &mut Criterion) {
     let ctx = ComputeContext::new(0.0, 1e-4);
-    let mut group = c.benchmark_group("viscous_burgers_combined_dispatch");
+    let mut group = crate::log_scaled_group(c, "viscous_burgers_combined_dispatch");
 
     for &n in &[1_000usize, 10_000, 100_000, 1_000_000] {
         let mesh: Arc<dyn Mesh> = Arc::new(UniformGrid1D::new(n, -1.0, 1.0).unwrap());

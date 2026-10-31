@@ -106,7 +106,7 @@ pub fn full_run(c: &mut Criterion) {
 #[cfg(feature = "parallel")]
 pub fn laplacian_dispatch(c: &mut Criterion) {
     let ctx = ComputeContext::new(0.0, 1e-4);
-    let mut group = c.benchmark_group("diffusion_1d_laplacian_dispatch");
+    let mut group = crate::log_scaled_group(c, "diffusion_1d_laplacian_dispatch");
 
     // Extended past 1e6, then past 1e7 (measured at v0.9.0, #53): crossover
     // confirmed between 1e7 (still 1.02x slower) and 3e7 (1.03x faster),
@@ -169,7 +169,7 @@ pub fn raw_rayon_dispatch_diagnostic(c: &mut Criterion) {
         0.3 * x.sin() + 0.5 * x.cos() - 0.2 * x
     };
 
-    let mut group = c.benchmark_group("raw_rayon_dispatch_diagnostic");
+    let mut group = crate::log_scaled_group(c, "raw_rayon_dispatch_diagnostic");
     for &n in &[1_000usize, 10_000, 100_000, 1_000_000] {
         group.bench_with_input(BenchmarkId::new("sequential", n), &n, |b, &n| {
             b.iter(|| {
@@ -209,7 +209,7 @@ pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
     use crate::implicit_dispatch::sequential_vs_parallel;
     use oxiflow::solver::methods::backward_euler::BackwardEulerSolver;
 
-    let mut group = c.benchmark_group("diffusion_1d_implicit_jacobian_dispatch");
+    let mut group = crate::log_scaled_group(c, "diffusion_1d_implicit_jacobian_dispatch");
     group.sample_size(20);
 
     for &n in &[64usize, 128, 256, 512] {
@@ -388,7 +388,7 @@ fn bounded_run(
 /// whatever `n` ([#201](https://github.com/biface/oxiflow/issues/201)). Not tied to the `parallel` feature: the Laplacian
 /// stays below its dispatch threshold at these sizes.
 pub fn boundary_condition_overhead(c: &mut Criterion) {
-    let mut group = c.benchmark_group("diffusion_1d_boundary_condition_overhead");
+    let mut group = crate::log_scaled_group(c, "diffusion_1d_boundary_condition_overhead");
     group.sample_size(20);
 
     for &n in &[101usize, 1001] {

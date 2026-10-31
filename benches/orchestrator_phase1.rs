@@ -461,7 +461,7 @@ fn configured_group<'a>(
     inner: &str,
 ) -> BenchmarkGroup<'a, WallTime> {
     let name = checked_name(format!("{GROUP_PREFIX}/{scenario}/{integrator}/{inner}"));
-    let mut group = c.benchmark_group(name);
+    let mut group = crate::log_scaled_group(c, name);
     group
         .sample_size(10)
         .measurement_time(Duration::from_secs(3))

@@ -245,6 +245,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   intermediate list of entries, its conversion to faer triplets and the
   sort done by `SparseColMat::try_new_from_triplets` are gone. Matrices and
   steps are bit-for-bit unchanged ([#199](https://github.com/biface/oxiflow/issues/199)).
+- `benches/oxiflow_parallel` draws the summary plots of its parameterised
+  groups on logarithmic axes. The groups sweep their size over several
+  decades, and on linear axes every point but the largest sat against the
+  origin, where the sequential/parallel crossover lies. Measurements and
+  saved data are unchanged; existing results can be redrawn without new
+  sampling through Criterion's `--load-baseline`
+  ([#214](https://github.com/biface/oxiflow/issues/214)).
 - `Cargo.toml` sets `autobenches = false`: `oxiflow_parallel` is the only
   bench target, as intended. Cargo no longer also builds each module of
   `benches/` as an empty standalone target ([#199](https://github.com/biface/oxiflow/issues/199)).

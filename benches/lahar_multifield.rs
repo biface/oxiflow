@@ -152,7 +152,7 @@ pub fn source_dispatch_diagnostic(c: &mut Criterion) {
     let p = m * u;
     let s = h * psi;
 
-    let mut group = c.benchmark_group("lahar_multifield_source_dispatch");
+    let mut group = crate::log_scaled_group(c, "lahar_multifield_source_dispatch");
     for &n in &[100usize, 1_000, 10_000, 100_000] {
         let mesh = UniformGrid1D::new(n, -50.0, 50.0).unwrap();
         let mut state = DMatrix::zeros(n, 4);
@@ -211,7 +211,7 @@ pub fn flux_dispatch_diagnostic(c: &mut Criterion) {
     let p = m * u;
     let s = h * psi;
 
-    let mut group = c.benchmark_group("lahar_multifield_flux_dispatch");
+    let mut group = crate::log_scaled_group(c, "lahar_multifield_flux_dispatch");
     for &n in &[100usize, 1_000, 10_000, 100_000, 1_000_000] {
         let mesh = UniformGrid1D::new(n, 0.0, dx * (n as f64 - 1.0)).unwrap();
         let mut state = DMatrix::zeros(n, 4);

@@ -89,7 +89,7 @@ pub fn full_run(c: &mut Criterion) {
 /// compare against without it.
 #[cfg(feature = "parallel")]
 pub fn row_dispatch_diagnostic(c: &mut Criterion) {
-    let mut group = c.benchmark_group("langmuir_multi_row_dispatch");
+    let mut group = crate::log_scaled_group(c, "langmuir_multi_row_dispatch");
     for &n_points in &[100usize, 1_000, 10_000, 100_000] {
         let mut model = make_model(column_spacing(N_POINTS));
         let n_species = model.n_species();
@@ -151,7 +151,7 @@ pub fn implicit_jacobian_dispatch(c: &mut Criterion) {
     use crate::implicit_dispatch::sequential_vs_parallel;
     use oxiflow::solver::methods::backward_euler::BackwardEulerSolver;
 
-    let mut group = c.benchmark_group("langmuir_multi_implicit_jacobian_dispatch");
+    let mut group = crate::log_scaled_group(c, "langmuir_multi_implicit_jacobian_dispatch");
     group.sample_size(20);
 
     for &n_points in &[32usize, 64, 128, 256] {

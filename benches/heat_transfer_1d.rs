@@ -66,7 +66,7 @@ fn layered(x: f64) -> f64 {
 /// more. Both feed the dispatch charts of [DA-048](https://github.com/biface/oxiflow/issues/140); the default threshold
 /// (10 000 nodes) stays indicative.
 pub fn coefficient_dispatch(c: &mut Criterion) {
-    let mut group = c.benchmark_group("heat_transfer_1d_coefficient_dispatch");
+    let mut group = crate::log_scaled_group(c, "heat_transfer_1d_coefficient_dispatch");
     let profiles: [(&str, Profile); 2] = [("graded", |x| GRADED.value(x)), ("layered", layered)];
 
     for &n in &[

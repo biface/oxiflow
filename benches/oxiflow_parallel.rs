@@ -36,7 +36,28 @@ mod langmuir_multi;
 mod orchestrator_phase1;
 mod viscous_burgers;
 
-use criterion::{criterion_group, criterion_main};
+use criterion::measurement::WallTime;
+use criterion::{
+    criterion_group, criterion_main, AxisScale, BenchmarkGroup, Criterion, PlotConfiguration,
+};
+
+/// A benchmark group whose summary plots use logarithmic axes.
+///
+/// The groups of this binary sweep their parameter over several decades
+/// (often 10² to 10⁵ nodes). On Criterion's default linear axes, every
+/// point but the largest is squeezed against the origin, where the
+/// sequential/parallel crossover lies; on logarithmic axes, a constant
+/// ratio between two curves is a constant vertical gap and the crossover
+/// reads where they cross. Only the plots change: the measurements and
+/// their saved data do not depend on the scale.
+pub(crate) fn log_scaled_group<'a>(
+    c: &'a mut Criterion,
+    name: impl Into<String>,
+) -> BenchmarkGroup<'a, WallTime> {
+    let mut group = c.benchmark_group(name);
+    group.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+    group
+}
 
 #[cfg(feature = "parallel")]
 criterion_group!(
