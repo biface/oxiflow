@@ -23,6 +23,7 @@ use crate::model::traits::RequiresContext;
 /// no milestone assigned; it would require a `spline` feature flag.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum Interpolation {
     /// Piecewise linear interpolation: `f(t) = f_i + (f_{i+1} − f_i) · (t − t_i) / (t_{i+1} − t_i)`.
     Linear,

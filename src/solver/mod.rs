@@ -48,7 +48,7 @@ pub mod sparse;
 pub mod spec;
 
 pub use config::{IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration};
-pub use scenario::{Domain, DomainId, Scenario};
+pub use scenario::{Domain, DomainId, DomainSpec, Scenario};
 pub use snapshot::SimulationSnapshot;
 #[cfg(feature = "sparse")]
 pub use spec::IntegratorSpec;

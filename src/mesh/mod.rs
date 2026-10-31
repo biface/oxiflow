@@ -36,6 +36,7 @@
 //! neighbour. Both methods have a default for 1D meshes whose nodes are
 //! ordered along the axis.
 
+pub mod spec;
 pub mod structured;
 
 // unstructured/ — RESERVED v0.11.0 (J11)
@@ -43,6 +44,7 @@ pub mod structured;
 
 // ── Public re-exports ─────────────────────────────────────────────────────────
 
+pub use spec::MeshSpec;
 pub use structured::UniformGrid1D;
 
 use crate::context::error::OxiflowError;

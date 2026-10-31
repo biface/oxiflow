@@ -10,11 +10,13 @@
 pub mod composite;
 pub mod discretized;
 pub mod initial_condition;
+pub mod spec;
 pub mod traits;
 
 pub use composite::CompositeModel;
 pub use discretized::DiscretizedModel;
 pub use initial_condition::PrescribedInitialState;
+pub use spec::{InitialStateSpec, ModelSpec};
 pub use traits::PhysicalModel;
 pub use traits::RequiresContext;
 

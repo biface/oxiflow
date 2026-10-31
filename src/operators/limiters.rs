@@ -133,6 +133,7 @@ fn ratio(numer: f64, denom: f64) -> f64 {
 /// criterion, checked directly in the tests below.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum Limiter {
     /// `φ(r) = max(0, min(1, r))` — most diffusive of the three.
     MinMod,

@@ -96,6 +96,9 @@ pub use dirichlet::Dirichlet;
 pub mod injection;
 pub use injection::{dirac_initial_state, InjectionInlet, TemporalInjection};
 
+pub mod spec;
+pub use spec::{BoundaryConditionSpec, TimeFunctionSpec};
+
 // ── BoundaryType ──────────────────────────────────────────────────────────────
 
 /// Mathematical classification of a boundary condition.

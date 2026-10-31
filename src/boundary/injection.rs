@@ -38,6 +38,7 @@ use nalgebra::DVector;
 /// change (mirrors `FluxBoundary`'s own convention in `operators::mod`).
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum TemporalInjection {
     /// Constant `concentration` on `[start, end)`, zero outside — a single
     /// rectangular pulse.

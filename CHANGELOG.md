@@ -11,6 +11,25 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Domains described by data ([#108](https://github.com/biface/oxiflow/issues/108),
+  amendment 1 of [DT-027](https://github.com/biface/oxiflow/issues/75)):
+  `DomainSpec` holds a mesh, a model, boundary conditions and an optional
+  initial state, each given by its own spec, and `Domain::try_from` builds
+  the domain, with its mesh built once and shared. The specs are
+  `MeshSpec` (`UniformGrid1D`); `ModelSpec` (`Discretized` over a
+  `FluxSchemeSpec`: `FVCentered`, `FVUpwind`, `WENO3`, `WENO5`, `Limited`,
+  `Adaptive`, closed by a `FluxBoundarySpec`, `Periodic` or `Truncation`);
+  `BoundaryConditionSpec` (`Dirichlet`, whose value is a `TimeFunctionSpec`:
+  a constant, a `TemporalInjection` profile or a tabulated series;
+  `DanckwertsInlet`, `DanckwertsOutlet`, `InjectionInlet`); and
+  `InitialStateSpec` (`Uniform`, `Values`, `Dirac`). All are
+  `#[non_exhaustive]`. With the `serde` feature they derive `Deserialize`, as
+  do `Interpolation`, `Limiter` and `TemporalInjection`, so that a domain
+  reads from a configuration file. A domain built from its spec runs
+  bit-for-bit as the same domain built in code. Not covered yet:
+  `CompositeModel`, `FluxBoundary::GhostCell` and values given as closures;
+  functions given as closed-form expressions are planned by
+  [DD-072](https://github.com/biface/oxiflow/issues/215).
 - `Mesh` is implemented for `Arc<M>`, for any `M: Mesh` including
   `dyn Mesh`. Every method forwards to the shared mesh, those with a default
   implementation included, so a mesh that overrides them keeps its own

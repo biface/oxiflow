@@ -45,7 +45,10 @@ pub mod adaptive;
 pub mod fd;
 pub mod fv;
 pub mod limiters;
+pub mod spec;
 pub mod weno;
+
+pub use spec::{FluxBoundarySpec, FluxSchemeSpec};
 
 use crate::boundary::BoundaryCondition;
 use crate::context::compute::ComputeContext;

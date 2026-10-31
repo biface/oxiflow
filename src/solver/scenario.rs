@@ -10,13 +10,16 @@
 //! case without verbosity; additional domains and coupling operators are added
 //! without any API change ([DD-020](https://github.com/biface/oxiflow/issues/57)).
 
-use crate::boundary::BoundaryCondition;
+use std::sync::Arc;
+
+use crate::boundary::{BoundaryCondition, BoundaryConditionSpec};
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::variable::ContextVariable;
 use crate::coupling::{CouplingOperator, Interface};
-use crate::mesh::Mesh;
+use crate::mesh::{Mesh, MeshSpec, UniformGrid1D};
 use crate::model::traits::PhysicalModel;
+use crate::model::{InitialStateSpec, ModelSpec, PrescribedInitialState};
 
 // ── DomainId ──────────────────────────────────────────────────────────────────
 
@@ -160,6 +163,151 @@ impl Domain {
     pub fn with_boundary_conditions(mut self, bcs: Vec<Box<dyn BoundaryCondition>>) -> Self {
         self.boundary_conditions = bcs;
         self
+    }
+}
+
+// ── DomainSpec ────────────────────────────────────────────────────────────────
+
+/// External, serialisable description of a [`Domain`]: its mesh, model,
+/// boundary conditions and initial state, each given by its own spec
+/// ([DT-027](https://github.com/biface/oxiflow/issues/75) amendment 1,
+/// [#108](https://github.com/biface/oxiflow/issues/108)).
+///
+/// A `DomainSpec` is consumed once, by `TryFrom<DomainSpec> for Domain`:
+/// the mesh is built once and shared between the domain and the model that
+/// needs it (a flux scheme), the model is wrapped in a
+/// [`PrescribedInitialState`] when `initial_state` is given, and the domain
+/// is checked against its mesh as [`Scenario::validate`] would. `Domain`
+/// itself stays non-serialisable ([DT-025](https://github.com/biface/oxiflow/issues/66)):
+/// the spec is the external form, never a serialised domain.
+///
+/// With the `serde` feature, a domain reads from a configuration file:
+///
+/// ```text
+/// id: column
+/// mesh:
+///   UniformGrid1D: { n_points: 200, x_start: 0.0, x_end: 0.25 }
+/// model:
+///   Discretized:
+///     scheme:
+///       FVUpwind: { velocity: 1.0e-3, diffusion: 1.0e-6, boundary: Truncation }
+/// boundary_conditions:
+///   - DanckwertsInlet: { dispersion: 1.0e-6, velocity: 1.0e-3, feed_variable: { External: { name: feed } } }
+///   - DanckwertsOutlet: {}
+/// initial_state: { Uniform: 0.0 }   # optional, the model's own state otherwise
+/// ```
+///
+/// # Examples
+///
+/// ```rust
+/// use oxiflow::boundary::{BoundaryConditionSpec, TimeFunctionSpec};
+/// use oxiflow::mesh::{BoundaryRegion, FaceSide, MeshSpec};
+/// use oxiflow::model::{InitialStateSpec, ModelSpec};
+/// use oxiflow::operators::{FluxBoundarySpec, FluxSchemeSpec};
+/// use oxiflow::solver::{Domain, DomainSpec};
+///
+/// let spec = DomainSpec::new(
+///     "column",
+///     MeshSpec::UniformGrid1D { n_points: 51, x_start: 0.0, x_end: 1.0 },
+///     ModelSpec::Discretized {
+///         scheme: FluxSchemeSpec::FVUpwind {
+///             velocity: 1.0,
+///             diffusion: 1e-3,
+///             boundary: FluxBoundarySpec::Truncation,
+///         },
+///         name: None,
+///     },
+/// )
+/// .with_boundary_conditions(vec![BoundaryConditionSpec::Dirichlet {
+///     region: BoundaryRegion::Face { axis: 0, side: FaceSide::Lower },
+///     value: TimeFunctionSpec::Constant(1.0),
+/// }])
+/// .with_initial_state(InitialStateSpec::Uniform(0.0));
+///
+/// let domain = Domain::try_from(spec)?;
+/// assert_eq!(domain.mesh.n_dof(), 51);
+/// assert_eq!(domain.model.name(), "fv_upwind");
+/// # Ok::<(), oxiflow::context::OxiflowError>(())
+/// ```
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
+pub struct DomainSpec {
+    /// Identifier of the domain.
+    pub id: DomainId,
+    /// The mesh.
+    pub mesh: MeshSpec,
+    /// The physical model.
+    pub model: ModelSpec,
+    /// Boundary conditions, none when absent.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub boundary_conditions: Vec<BoundaryConditionSpec>,
+    /// Initial state; the model's own when absent.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub initial_state: Option<InitialStateSpec>,
+}
+
+impl DomainSpec {
+    /// A domain `id` with `mesh` and `model`, no boundary condition, and the
+    /// model's own initial state.
+    pub fn new(id: impl Into<DomainId>, mesh: MeshSpec, model: ModelSpec) -> Self {
+        Self {
+            id: id.into(),
+            mesh,
+            model,
+            boundary_conditions: vec![],
+            initial_state: None,
+        }
+    }
+
+    /// Sets the boundary conditions, replacing any set before.
+    pub fn with_boundary_conditions(mut self, conditions: Vec<BoundaryConditionSpec>) -> Self {
+        self.boundary_conditions = conditions;
+        self
+    }
+
+    /// Sets the initial state.
+    pub fn with_initial_state(mut self, state: InitialStateSpec) -> Self {
+        self.initial_state = Some(state);
+        self
+    }
+}
+
+impl TryFrom<DomainSpec> for Domain {
+    type Error = OxiflowError;
+
+    /// Builds the domain `spec` describes.
+    ///
+    /// # Errors
+    ///
+    /// - `OxiflowError::PreconditionFailed` if the mesh parameters are
+    ///   invalid (see [`UniformGrid1D::new`]);
+    /// - `OxiflowError::ExternalData` if a tabulated value of a boundary
+    ///   condition has fewer than two points or unordered times;
+    /// - `OxiflowError::InvalidDomain` if the initial state does not have one
+    ///   value per node of the mesh.
+    fn try_from(spec: DomainSpec) -> Result<Self, OxiflowError> {
+        let grid = match spec.mesh {
+            MeshSpec::UniformGrid1D {
+                n_points,
+                x_start,
+                x_end,
+            } => Arc::new(UniformGrid1D::new(n_points, x_start, x_end)?),
+        };
+        let mut model = spec.model.into_model(Arc::clone(&grid));
+        if let Some(initial_state) = spec.initial_state {
+            let state = initial_state.into_state(grid.n_dof());
+            model = Box::new(PrescribedInitialState::new(model, state));
+        }
+        let boundary_conditions = spec
+            .boundary_conditions
+            .into_iter()
+            .map(BoundaryConditionSpec::into_condition)
+            .collect::<Result<Vec<_>, _>>()?;
+        let domain = Domain::new(spec.id, model, Box::new(grid))
+            .with_boundary_conditions(boundary_conditions);
+        check_domain(&domain)?;
+        Ok(domain)
     }
 }
 
@@ -421,7 +569,7 @@ impl Scenario {
     /// the mesh and are left unchecked. The initial state is checked here
     /// because [`PhysicalModel::initial_state`] cannot report an error, and a
     /// state prescribed from outside the model
-    /// ([`PrescribedInitialState`](crate::model::PrescribedInitialState)) can
+    /// ([`PrescribedInitialState`]) can
     /// be of any size. Interface consistency and coupling coverage are not
     /// checked (finding of the [#172](https://github.com/biface/oxiflow/issues/172) audit).
     ///
@@ -441,28 +589,33 @@ impl Scenario {
                 "Scenario has no domains".into(),
             ));
         }
-        for domain in &self.domains {
-            let n_dof = domain.mesh.n_dof();
-            if n_dof == 0 {
-                return Err(OxiflowError::InvalidDomain(format!(
-                    "domain '{}' has empty mesh",
-                    domain.id
-                )));
-            }
-            let rows = match domain.model.initial_state(domain.mesh.as_ref()) {
-                ContextValue::ScalarField(field) => Some(field.len()),
-                ContextValue::VectorField(field) => Some(field.nrows()),
-                _ => None,
-            };
-            if let Some(rows) = rows.filter(|&rows| rows != n_dof) {
-                return Err(OxiflowError::InvalidDomain(format!(
-                    "domain '{}': initial state has {rows} rows, its mesh has {n_dof} nodes",
-                    domain.id
-                )));
-            }
-        }
-        Ok(())
+        self.domains.iter().try_for_each(check_domain)
     }
+}
+
+/// Checks that `domain` has a non-empty mesh and an initial state sized by
+/// it: the per-domain part of [`Scenario::validate`], also run on a domain
+/// built from a [`DomainSpec`].
+fn check_domain(domain: &Domain) -> Result<(), OxiflowError> {
+    let n_dof = domain.mesh.n_dof();
+    if n_dof == 0 {
+        return Err(OxiflowError::InvalidDomain(format!(
+            "domain '{}' has empty mesh",
+            domain.id
+        )));
+    }
+    let rows = match domain.model.initial_state(domain.mesh.as_ref()) {
+        ContextValue::ScalarField(field) => Some(field.len()),
+        ContextValue::VectorField(field) => Some(field.nrows()),
+        _ => None,
+    };
+    if let Some(rows) = rows.filter(|&rows| rows != n_dof) {
+        return Err(OxiflowError::InvalidDomain(format!(
+            "domain '{}': initial state has {rows} rows, its mesh has {n_dof} nodes",
+            domain.id
+        )));
+    }
+    Ok(())
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
