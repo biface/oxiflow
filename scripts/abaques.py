@@ -51,6 +51,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import os
 import subprocess
 import sys
@@ -67,7 +68,10 @@ REQUIREMENTS = ["matplotlib>=3.8"]
 
 # Set by load_matplotlib(), once the environment provides it.
 plt: Any = None
+FixedLocator: Any = None
 FuncFormatter: Any = None
+LogLocator: Any = None
+NullFormatter: Any = None
 
 ORCHESTRATOR_PREFIX = "orchestrator/"
 SEQUENTIAL, PARALLEL = "sequential", "parallel"
@@ -144,17 +148,81 @@ def slug(name: str) -> str:
     return name.replace("/", "_")
 
 
-def ratio_axes(ax: Axes, xlabel: str, ylabel: str) -> None:
-    """Logarithmic axes, the line at 1, labels and grid."""
+# Smallest distance between two labels on the ratio axis, as a fraction of
+# the axis span in decades: on the charts' heights, about one and a half
+# times the height of a label.
+LABEL_GAP = 0.06
+
+
+def label_priority(value: float) -> int:
+    """Rank of a tick in the choice of labels: 5, 2 and 3 times a power of
+    ten first, then the other whole multiples, then halves, then the rest."""
+    scaled = round(value / 10 ** math.floor(math.log10(value) + 1e-9), 6)
+    ranks = {5.0: 0, 2.0: 1, 3.0: 2}
+    if scaled in ranks:
+        return ranks[scaled]
+    if scaled.is_integer():
+        return 3
+    return 4 if (2 * scaled).is_integer() else 5
+
+
+def spaced_minor_labels(ax: Axes) -> Any:
+    """Formatter for the minor ticks of the ratio axis. Ticks are taken by
+    `label_priority`, and each one is labelled only if it lies at least
+    `LABEL_GAP` away from the major ticks and from every tick already
+    labelled, so that labels never overlap, whatever the span of the axis."""
+    formatter = FuncFormatter(lambda value, _: f"{value:g}")
+
+    def format_ticks(values: list[float]) -> list[str]:
+        low, high = ax.get_ylim()
+        gap = LABEL_GAP * math.log10(high / low)
+        taken = [
+            math.log10(m) for m in ax.yaxis.get_majorticklocs() if low <= m <= high
+        ]
+        shown = set()
+        visible = [v for v in values if low <= v <= high]
+        for value in sorted(visible, key=label_priority):
+            position = math.log10(value)
+            if all(abs(position - t) >= gap for t in taken):
+                taken.append(position)
+                shown.add(value)
+        return [f"{v:g}" if v in shown else "" for v in values]
+
+    formatter.format_ticks = format_ticks
+    return formatter
+
+
+def ratio_axes(
+    ax: Axes, xlabel: str, ylabel: str, xticks: list[float] | None = None
+) -> None:
+    """Logarithmic axes, the line at 1, labels and grid.
+
+    On the ratio axis, a minor tick gets a label only where it leaves room
+    for its neighbours (`spaced_minor_labels`); an axis spanning less than
+    a decade also gets ticks at 1.5 times a power of ten. On the size axis,
+    the powers of ten carry the labels, or, given `xticks`, the measured
+    values themselves, for axes too narrow to show more than one power of
+    ten.
+    """
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.axhline(1.0, color="black", linewidth=0.8)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.grid(True, which="both", linewidth=0.3)
-    plain = FuncFormatter(lambda value, _: f"{value:g}")
-    ax.yaxis.set_major_formatter(plain)
-    ax.yaxis.set_minor_formatter(plain)
+    low, high = ax.get_ylim()
+    if math.log10(high / low) < 1 and all(
+        label_priority(v) <= 3 for v in ax.yaxis.get_minorticklocs()
+    ):
+        # Under a decade, whole multiples alone can leave a ratio such as
+        # 1.66 with no tick between 1 and the top of the axis.
+        ax.yaxis.set_minor_locator(LogLocator(subs=(1.5, 2, 3, 4, 5, 6, 7, 8, 9)))
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
+    ax.yaxis.set_minor_formatter(spaced_minor_labels(ax))
+    if xticks:
+        ax.xaxis.set_major_locator(FixedLocator(sorted(set(xticks))))
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: fmt_size(value)))
+    ax.xaxis.set_minor_formatter(NullFormatter())
 
 
 # ── Diagnostics ─────────────────────────────────────────────────────────────
@@ -296,6 +364,7 @@ def write_orchestrator(
         volumes = sorted({v for _, _, _, v in table})
         colours = {k: f"C{i}" for i, k in enumerate(counts)}
 
+        per_domain = sorted({v / k for _, k, _, v in table})
         fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), sharey=True)
         for ax, mode in zip(axes, (SEQUENTIAL, PARALLEL)):
             for k in counts:
@@ -314,7 +383,7 @@ def write_orchestrator(
                             linestyle=INNER_STYLE[inner],
                             label=f"K{k} {inner}",
                         )
-            ratio_axes(ax, "nodes per domain", f"time / {INNER_REFERENCE}")
+            ratio_axes(ax, "nodes per domain", f"time / {INNER_REFERENCE}", per_domain)
             ax.set_title(f"orchestrator {mode}")
         axes[0].legend(fontsize="x-small")
         fig.suptitle(f"{name}: inner dispatch modes")
@@ -340,7 +409,9 @@ def write_orchestrator(
                         linestyle=INNER_STYLE[inner],
                         label=f"K{k} {inner}",
                     )
-        ratio_axes(ax, "aggregate mesh volume (nodes)", "parallel / sequential time")
+        ratio_axes(
+            ax, "aggregate mesh volume (nodes)", "parallel / sequential time", volumes
+        )
         ax.set_title(f"{name}: orchestrator dispatch")
         ax.legend(fontsize="x-small")
         fig.tight_layout()
@@ -439,7 +510,7 @@ def run_in_own_venv(env: Path) -> int:
 
 
 def load_matplotlib() -> None:
-    global plt, FuncFormatter
+    global plt, FixedLocator, FuncFormatter, LogLocator, NullFormatter
     import matplotlib
 
     matplotlib.use("Agg")
@@ -447,7 +518,10 @@ def load_matplotlib() -> None:
     import matplotlib.ticker
 
     plt = matplotlib.pyplot
+    FixedLocator = matplotlib.ticker.FixedLocator
     FuncFormatter = matplotlib.ticker.FuncFormatter
+    LogLocator = matplotlib.ticker.LogLocator
+    NullFormatter = matplotlib.ticker.NullFormatter
 
 
 # ── Entry point ─────────────────────────────────────────────────────────────
