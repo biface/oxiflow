@@ -12,14 +12,12 @@
 //! never computed explicitly either: only the *difference*
 //! `b_i - b*_i` is needed for the error estimate.
 //!
-//! Butcher tableau coefficients verified by hand before writing this file
-//! (no compiler available in the authoring environment): row sums
-//! `sum_j a_ij = c_i` for every stage, `sum(b) = 1`, `sum(b*) = 1`. These
-//! are necessary consistency conditions for any valid RK tableau — they
-//! don't guarantee every individual coefficient is correct, but they
-//! would catch most transcription errors. Cross-check against a
-//! published source (Hairer/Nørsett/Wanner, or Dormand & Prince 1980)
-//! before trusting this in production.
+//! The coefficients are those of Dormand & Prince (1980). The tests check
+//! them against the Runge-Kutta order conditions (one condition per rooted
+//! tree, Butcher): the weights `b` satisfy all 17 conditions up to order
+//! 5, and the embedded weights `b* = b - e` satisfy the 8 conditions up to
+//! order 4 and miss order 5, as the lower-order member of an embedded pair
+//! should. The row sums `sum_j a_ij = c_i` are checked as well.
 //!
 //! ## Step-size control ([DD-036](https://github.com/biface/oxiflow/issues/89))
 //!
@@ -114,8 +112,8 @@ const A74: f64 = 125.0 / 192.0;
 const A75: f64 = -2187.0 / 6784.0;
 const A76: f64 = 11.0 / 84.0;
 
-/// Error weights `b_i - b*_i` (5th-order minus 4th-order), precomputed by
-/// hand (see module docs for the derivation and consistency check).
+/// Error weights `b_i - b*_i` (5th-order minus 4th-order), from the
+/// published tableau (see the module docs for how they are checked).
 const E1: f64 = 71.0 / 57600.0;
 const E2: f64 = 0.0;
 const E3: f64 = -71.0 / 16695.0;
@@ -420,6 +418,107 @@ mod tests {
         // b7 = 0 (FSAL), b2 = 0 -- only b1,b3,b4,b5,b6 are nonzero.
         let sum = A71 + A73 + A74 + A75 + A76; // == b1+b3+b4+b5+b6 by FSAL
         assert!((sum - 1.0).abs() < 1e-12);
+    }
+
+    /// Butcher tableau of the pair as arrays: stage nodes `c`, stage
+    /// matrix `a` (strictly lower triangular), 5th-order weights `b`
+    /// (stage 7 row, FSAL) and error weights `e = b - b*`.
+    fn tableau() -> ([f64; 7], [[f64; 7]; 7], [f64; 7], [f64; 7]) {
+        let c = [0.0, C2, C3, C4, C5, C6, C7];
+        let a = [
+            [0.0; 7],
+            [A21, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [A31, A32, 0.0, 0.0, 0.0, 0.0, 0.0],
+            [A41, A42, A43, 0.0, 0.0, 0.0, 0.0],
+            [A51, A52, A53, A54, 0.0, 0.0, 0.0],
+            [A61, A62, A63, A64, A65, 0.0, 0.0],
+            [A71, 0.0, A73, A74, A75, A76, 0.0],
+        ];
+        let b = [A71, 0.0, A73, A74, A75, A76, 0.0];
+        let e = [E1, E2, E3, E4, E5, E6, E7];
+        (c, a, b, e)
+    }
+
+    /// Residuals `sum_i w_i * phi_i - 1 / gamma` of the 17 Runge-Kutta order
+    /// conditions up to order 5, in increasing order (1, 1, 2, 4 and 9
+    /// conditions for orders 1 to 5), for the weights `w`.
+    fn order_condition_residuals(w: &[f64; 7], c: &[f64; 7], a: &[[f64; 7]; 7]) -> Vec<f64> {
+        let apply = |v: &[f64; 7]| -> [f64; 7] {
+            let mut out = [0.0; 7];
+            for (o, row) in out.iter_mut().zip(a) {
+                *o = row.iter().zip(v).map(|(x, y)| x * y).sum();
+            }
+            out
+        };
+        let pow = |k: i32| -> [f64; 7] { c.map(|x| x.powi(k)) };
+        let mul = |u: &[f64; 7], v: &[f64; 7]| -> [f64; 7] {
+            let mut out = [0.0; 7];
+            for (o, (x, y)) in out.iter_mut().zip(u.iter().zip(v)) {
+                *o = x * y;
+            }
+            out
+        };
+        let ones = [1.0; 7];
+        let ac = apply(c);
+        let ac2 = apply(&pow(2));
+        let aac = apply(&ac);
+        let conditions: [(f64, [f64; 7]); 17] = [
+            (1.0, ones),
+            (2.0, *c),
+            (3.0, pow(2)),
+            (6.0, ac),
+            (4.0, pow(3)),
+            (8.0, mul(c, &ac)),
+            (12.0, ac2),
+            (24.0, aac),
+            (5.0, pow(4)),
+            (10.0, mul(&pow(2), &ac)),
+            (15.0, mul(c, &ac2)),
+            (30.0, mul(c, &aac)),
+            (20.0, mul(&ac, &ac)),
+            (20.0, apply(&pow(3))),
+            (40.0, apply(&mul(c, &ac))),
+            (60.0, apply(&ac2)),
+            (120.0, apply(&aac)),
+        ];
+        conditions
+            .iter()
+            .map(|(gamma, phi)| w.iter().zip(phi).map(|(x, y)| x * y).sum::<f64>() - 1.0 / gamma)
+            .collect()
+    }
+
+    #[test]
+    fn fifth_order_weights_satisfy_every_condition_up_to_order_five() {
+        let (c, a, b, _) = tableau();
+        for (k, r) in order_condition_residuals(&b, &c, &a).iter().enumerate() {
+            assert!(
+                r.abs() < 1e-13,
+                "order condition {k} not met by b: residual {r:e}"
+            );
+        }
+    }
+
+    #[test]
+    fn embedded_weights_are_exactly_fourth_order() {
+        let (c, a, b, e) = tableau();
+        let mut b_star = [0.0; 7];
+        for (s, (x, y)) in b_star.iter_mut().zip(b.iter().zip(&e)) {
+            *s = x - y;
+        }
+        let residuals = order_condition_residuals(&b_star, &c, &a);
+        // Orders 1 to 4: the first 8 conditions hold.
+        for (k, r) in residuals[..8].iter().enumerate() {
+            assert!(
+                r.abs() < 1e-13,
+                "order condition {k} not met by b*: residual {r:e}"
+            );
+        }
+        // Order 5: at least one condition fails, otherwise the error
+        // estimate b - b* would not measure the leading error term.
+        assert!(
+            residuals[8..].iter().any(|r| r.abs() > 1e-6),
+            "b* unexpectedly satisfies every order-5 condition"
+        );
     }
 
     #[test]
