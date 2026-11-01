@@ -295,3 +295,8 @@ You may use, distribute and modify this software freely, including for commercia
 provided you retain the copyright notice and the `NOTICE` file in any redistribution.
 The license includes a patent retaliation clause protecting the author — see the full
 text for details.
+
+The [oxiflow wiki](https://github.com/biface/oxiflow/wiki) is not covered by this license:
+its text and figures are licensed under
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Any reuse must credit the
+source, and commercial use is not permitted.

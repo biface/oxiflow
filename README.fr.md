@@ -301,3 +301,8 @@ Ce logiciel peut être utilisé, distribué et modifié librement, y compris à 
 commerciales, à condition de conserver la notice de copyright et le fichier `NOTICE`
 dans toute redistribution. La licence inclut une clause de représailles brevets
 protégeant l'auteur — voir le texte complet pour les détails.
+
+Le [wiki oxiflow](https://github.com/biface/oxiflow/wiki) n'est pas couvert par cette licence :
+ses textes et ses figures sont distribués sous licence
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/deed.fr). Toute réutilisation
+doit citer la source, et l'usage commercial n'est pas autorisé.
