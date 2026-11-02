@@ -154,15 +154,16 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
 /// or lacks enough neighbors for a wide stencil at the edges (WENO) unless
 /// the domain wraps around.
 ///
-/// Three families of treatment exist: periodic wrap (exact conservation by
-/// telescoping for FV; the only one implemented so far); ghost cells via the
-/// existing [`crate::boundary::BoundaryCondition`] system (a real
-/// integration, scheduled later this sprint, after `#49`); and FD-style
-/// one-sided truncation at the boundary (breaks FV's conservation property).
+/// Three treatments exist, one variant each: periodic wrap
+/// ([`FluxBoundary::Periodic`], exact conservation by telescoping),
+/// FD-style one-sided truncation at the boundary
+/// ([`FluxBoundary::Truncation`], breaks FV's conservation property), and
+/// ghost cells supplied by the [`crate::boundary::BoundaryCondition`]s of
+/// the domain ([`FluxBoundary::GhostCell`], [DD-042](https://github.com/biface/oxiflow/issues/100)).
 /// Rather than picking one silently, `FluxBoundary` makes the choice an
 /// explicit constructor parameter on every operator that needs it.
 /// `#[non_exhaustive]` ([DQ-022](https://github.com/biface/oxiflow/issues/59)) signals this is an extension point, not a
-/// closed set — only [`FluxBoundary::Periodic`] exists today.
+/// closed set.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum FluxBoundary {
@@ -210,7 +211,9 @@ pub enum FluxBoundary {
     /// returns `None`), `apply()` fails explicitly via
     /// [`OxiflowError::PreconditionFailed`] rather than silently
     /// substituting an approximation — see [DD-042](https://github.com/biface/oxiflow/issues/100) for why no generic
-    /// per-`BoundaryType` fallback is attempted here.
+    /// per-`BoundaryType` fallback is attempted here. Among the boundary
+    /// conditions of this crate, [`crate::boundary::InjectionInlet`]
+    /// overrides it.
     GhostCell(
         std::sync::Arc<dyn crate::boundary::BoundaryCondition>,
         std::sync::Arc<dyn crate::boundary::BoundaryCondition>,
