@@ -79,10 +79,10 @@ use crate::solver::linear::LinearSolver;
 /// `tol_rel = 1e-6` — starting points, not fixed constants; tune via the
 /// solver builders once this lands ([#111](https://github.com/biface/oxiflow/issues/111)/[#112](https://github.com/biface/oxiflow/issues/112)).
 ///
-/// Note: this default is *not* what
-/// `theta_method_step` or the
-/// implicit solvers' own zero-config constructors use internally — those
-/// need a looser, explicitly named tolerance to guarantee the pre-[DD-044](https://github.com/biface/oxiflow/issues/109)
+/// Note: this default is *not* what the implicit solvers' zero-config
+/// constructors and the defaults of `IntegratorSpec` use — both take
+/// `stiff_jacobian_convergence`, a looser, explicitly named tolerance
+/// needed to guarantee the pre-[DD-044](https://github.com/biface/oxiflow/issues/109)
 /// single-correction contract on very stiff affine problems (see
 /// [`super::implicit`]'s module docs for why). This `Default` impl is a
 /// general starting point for callers configuring the loop themselves,
