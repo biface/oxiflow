@@ -666,105 +666,82 @@ mod tests {
     /// (dx²/24)·f'' + O(dx⁴)`, standard midpoint-rule correction). For a
     /// scheme whose own truncation error is `O(dx³)` (WENO3) that `O(dx²)`
     /// sampling artifact in the *test data itself* dominates and masks the
-    /// scheme's real convergence — this is what happened here: switching
-    /// the nonlinear weighting formula (Jiang-Shu → WENO-Z) barely moved the
-    /// measured ratio (2.76 → 2.73), which was the tell that the bottleneck
-    /// wasn't the scheme at all, but the test's input data. WENO5's own
-    /// `O(dx⁵)` error is small enough that this `O(dx²)` artifact apparently
-    /// stayed under its test's older threshold, masking the same underlying
-    /// issue there too — fixed for both, uniformly, below.
+    /// scheme's real convergence. The correction applies to both WENO
+    /// schemes alike. It is necessary but not sufficient for WENO3, whose
+    /// coarse-grid convergence is also slowed by its nonlinear weights (see
+    /// [`weno3_reaches_third_order_on_fine_grids`]).
     fn sinc_factor(dx: f64) -> f64 {
         let arg = PI * dx;
         arg.sin() / arg
     }
 
-    #[test]
-    fn weno3_smooth_periodic_solution_converges_faster_than_first_order() {
-        let errors: Vec<f64> = [21usize, 41]
+    /// RMS error of `op`'s flux divergence on `n` cells for the advected
+    /// wave `sin(2πx)` (unit velocity, no diffusion), sampled and compared
+    /// as exact cell averages (see [`sinc_factor`]).
+    fn smooth_wave_error<O>(op: &O, n: usize) -> f64
+    where
+        O: FluxDivergenceOperator<MeshType = UniformGrid1D>,
+    {
+        let m = periodic_mesh(n);
+        let dx = m.characteristic_length();
+        let sinc = sinc_factor(dx);
+        let x: Vec<f64> = (0..n).map(|i| i as f64 * dx).collect();
+        let u = DVector::from_vec(x.iter().map(|&xi| (2.0 * PI * xi).sin() * sinc).collect());
+        let result = op
+            .apply(&ContextValue::ScalarField(u), &m, &ctx(1e-6))
+            .unwrap();
+        let div = result.as_scalar_field().unwrap().clone();
+        // Analytical ∇·F = v·du/dx = 2π·cos(2πx), cell-averaged with the
+        // same sinc factor as the input.
+        let analytical: Vec<f64> = x
             .iter()
-            .map(|&n| {
-                let m = periodic_mesh(n);
-                let dx = m.characteristic_length();
-                let sinc = sinc_factor(dx);
-                let x: Vec<f64> = (0..n).map(|i| i as f64 * dx).collect();
-                let u =
-                    DVector::from_vec(x.iter().map(|&xi| (2.0 * PI * xi).sin() * sinc).collect());
-                let op = WENO3::new(1.0, 0.0, FluxBoundary::Periodic);
-                let field = ContextValue::ScalarField(u);
-                let result = op.apply(&field, &m, &ctx(1e-6)).unwrap();
-                let div = result.as_scalar_field().unwrap().clone();
-                // Analytical ∇·F = v * du/dx = v * 2π * cos(2π x), cell-averaged
-                // with the same sinc factor as the input, for consistency.
-                let analytical: Vec<f64> = x
-                    .iter()
-                    .map(|&xi| 2.0 * PI * (2.0 * PI * xi).cos() * sinc)
-                    .collect();
-                rms_error(&div, &analytical)
-            })
+            .map(|&xi| 2.0 * PI * (2.0 * PI * xi).cos() * sinc)
             .collect();
+        rms_error(&div, &analytical)
+    }
 
-        let ratio = errors[0] / errors[1];
-        // Measured consistently in the range ~2.72–2.76 across three
-        // independently-verified corrections (ideal-weight fix, WENO-Z
-        // reweighting, true-cell-average test data) that each rigorously
-        // should have mattered and barely moved the number — ruling out a
-        // formula bug (confirmed three times over by direct Taylor
-        // expansion of the fully-assembled scheme, not just the isolated
-        // reconstruction). What remains is a known, literature-documented
-        // property of WENO3 specifically: combining two ~2nd-order
-        // substencils only buys *one* extra order (up to 3rd), which needs
-        // a much tighter weight-perturbation tolerance (`w_k - d_k`) than
-        // WENO5 does (combining three ~3rd-order substencils buys *three*
-        // extra orders, up to 5th, with a correspondingly looser tolerance).
-        // Standard nonlinear weight formulas (Jiang-Shu or WENO-Z alike)
-        // don't meet WENO3's tighter requirement in general — WENO3 is
-        // routinely observed to behave closer to 2nd order than 3rd order
-        // in practice for this reason, not a defect of this implementation.
-        // Threshold set to what's actually, repeatedly measured, with a
-        // small margin — not aspirational.
+    /// Apparent order of convergence of `op` between `n_coarse` and
+    /// `n_fine` cells, from [`smooth_wave_error`].
+    fn apparent_order<O>(op: &O, n_coarse: usize, n_fine: usize) -> f64
+    where
+        O: FluxDivergenceOperator<MeshType = UniformGrid1D>,
+    {
+        let ratio = smooth_wave_error(op, n_coarse) / smooth_wave_error(op, n_fine);
+        ratio.ln() / (n_fine as f64 / n_coarse as f64).ln()
+    }
+
+    /// WENO3 reaches its third order only once the grid is fine enough.
+    ///
+    /// On coarse grids the nonlinear weights stay far from their ideal
+    /// values `(1/3, 2/3)`, and that deviation dominates the error: the
+    /// apparent order is 1.5 between 21 and 41 cells, 1.65 between 41 and
+    /// 81, 2.8 between 81 and 161. The deviation then vanishes faster than
+    /// the third-order truncation error, so the apparent order overshoots
+    /// (above 5 between 161 and 1 281 cells) before settling back towards
+    /// 3 (3.2 between 1 281 and 2 561 cells). A refinement test therefore
+    /// has to sit in that last regime; one on the coarse grids measures the
+    /// weights, not the scheme.
+    #[test]
+    fn weno3_reaches_third_order_on_fine_grids() {
+        let order = apparent_order(&WENO3::new(1.0, 0.0, FluxBoundary::Periodic), 1281, 2561);
         assert!(
-            ratio > 2.5,
-            "expected order clearly better than 1st (ratio > 2.5) — see comment above on WENO3's known weight-tolerance limitation, got {ratio}"
+            order > 2.8,
+            "expected an apparent order close to 3, got {order}"
         );
     }
 
+    /// WENO5 shows its fifth order from coarse grids on: the apparent order
+    /// is 5.1 between 21 and 41 cells and 5.0 between 41 and 81.
     #[test]
-    fn weno5_smooth_periodic_solution_converges_faster_than_third_order() {
-        let errors: Vec<f64> = [21usize, 41]
-            .iter()
-            .map(|&n| {
-                let m = periodic_mesh(n);
-                let dx = m.characteristic_length();
-                let sinc = sinc_factor(dx);
-                let x: Vec<f64> = (0..n).map(|i| i as f64 * dx).collect();
-                let u =
-                    DVector::from_vec(x.iter().map(|&xi| (2.0 * PI * xi).sin() * sinc).collect());
-                let op = WENO5::new(1.0, 0.0, FluxBoundary::Periodic);
-                let field = ContextValue::ScalarField(u);
-                let result = op.apply(&field, &m, &ctx(1e-6)).unwrap();
-                let div = result.as_scalar_field().unwrap().clone();
-                let analytical: Vec<f64> = x
-                    .iter()
-                    .map(|&xi| 2.0 * PI * (2.0 * PI * xi).cos() * sinc)
-                    .collect();
-                rms_error(&div, &analytical)
-            })
-            .collect();
-
-        let ratio = errors[0] / errors[1];
-        // Previously passed (>8, then >12) even with plain point-sampled
-        // test data and/or Jiang-Shu weighting — WENO5's own O(dx⁵) error
-        // was apparently small enough to stay under those thresholds
-        // despite the same O(dx²) cell-average/point-sample test-data
-        // artifact that was masking WENO3's convergence. Now that the test
-        // data is a true cell average (see `sinc_factor`), expect this to
-        // pass even more comfortably (theoretical ratio ≈28 for a clean 5th
-        // order at this refinement) — not run locally to confirm, please
-        // tighten once you have.
-        assert!(
-            ratio > 15.0,
-            "expected clearly better than 3rd order (ratio > 15), got {ratio}"
-        );
+    fn weno5_reaches_fifth_order_on_coarse_grids() {
+        let op = WENO5::new(1.0, 0.0, FluxBoundary::Periodic);
+        for (n_coarse, n_fine) in [(21, 41), (41, 81)] {
+            let order = apparent_order(&op, n_coarse, n_fine);
+            assert!(
+                order > 4.8,
+                "expected an apparent order close to 5 between {n_coarse} and {n_fine} cells, got {order}"
+            );
+        }
     }
 
     // ── No spurious oscillations on a step profile ────────────────────────
