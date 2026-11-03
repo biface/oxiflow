@@ -23,6 +23,7 @@
 //! | [`Dirichlet`] | `Dirichlet` | `None` |
 //! | [`DanckwertsInlet`] | `Robin` | `Some(Inlet)` |
 //! | [`DanckwertsOutlet`] | `Neumann` | `Some(Outlet)` |
+//! | [`InjectionInlet`] | `Dirichlet` | `None` |
 //!
 //! Each acts on a boundary region of the mesh
 //! ([`BoundaryRegion`](crate::mesh::BoundaryRegion), [DA-071](https://github.com/biface/oxiflow/issues/203)), resolved by
@@ -248,8 +249,11 @@ pub enum BoundaryLocation {
 ///
 /// `BoundaryCondition` does not implement `serde::Serialize` / `serde::Deserialize`.
 /// Concrete implementations may hold arbitrary state that cannot be serialised
-/// generically. If persistence is required, provide a dedicated configuration
-/// type and reconstruct the BC from it — see `SimulationSnapshot` ([DT-025](https://github.com/biface/oxiflow/issues/66)).
+/// generically (a closure, for a time-dependent [`Dirichlet`] value). The
+/// conditions of this crate are described as data by [`BoundaryConditionSpec`]
+/// ([#108](https://github.com/biface/oxiflow/issues/108)), which builds them from a configuration; a condition defined
+/// outside the crate provides its own configuration type and reconstructs
+/// itself from it, as `SimulationSnapshot` ([DT-025](https://github.com/biface/oxiflow/issues/66)) expects.
 ///
 /// # Examples
 ///
@@ -383,8 +387,8 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
     /// interior node `k−1` (so `depth = 1` pairs with the nearest interior
     /// neighbor, `depth = 2` with the next one, etc.). Each layer is derived
     /// directly from this real interior value, not from a previously
-    /// computed ghost layer — deliberately, so a Robin condition (e.g.
-    /// [`DanckwertsInlet`]) stays exact at every depth instead of eroding
+    /// computed ghost layer — deliberately, so that a Robin condition
+    /// stays exact at every depth instead of eroding
     /// through repeated extrapolation. A chained scheme (each ghost derived
     /// from the previous one) was considered and rejected for exactly this
     /// reason — see [DD-042](https://github.com/biface/oxiflow/issues/100), amendment 1.

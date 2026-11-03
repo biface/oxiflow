@@ -152,8 +152,9 @@ impl TemporalInjection {
 /// profile only supplies the ghost value `FluxBoundary::GhostCell` needs to
 /// close its face-flux/gradient stencil at the boundary. Interior evolution
 /// (including the boundary node itself) proceeds through the normal
-/// transport equation, same posture as `DanckwertsInlet`'s `apply()`
-/// leaving interior dynamics to `compute_physics`.
+/// transport equation. It therefore declares no constrained node, unlike
+/// [`DanckwertsInlet`](crate::boundary::DanckwertsInlet), whose `apply()`
+/// sets the inlet node ([DD-070](https://github.com/biface/oxiflow/issues/200)).
 #[derive(Debug, Clone)]
 pub struct InjectionInlet {
     profile: TemporalInjection,
