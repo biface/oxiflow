@@ -10,6 +10,13 @@
 # One matrix entry per flag declared in .codecov.yml; Codecov waits for all
 # of them (`after_n_builds`) before reporting. `gpu` is not measured: CI
 # runners have no GPU, its code paths cannot run (#184).
+#
+# Measured: unit tests (`--lib`) and integration tests (`--tests`). Benchmarks
+# and examples are left out: `--all-targets` ran the Criterion benches in test
+# mode, unoptimised and instrumented, the most expensive part of the run, for
+# code that tests/ is there to cover. Lines reached only by a bench or an
+# example are no longer counted, so the rate may come out slightly lower than
+# before this change.
 # =============================================================================
 
 name: Coverage
@@ -39,23 +46,23 @@ jobs:
       matrix:
         include:
           - flag: default
-            args: --all-targets
+            args: --lib --tests
           # faer sparse backend — DT-013 (#13), DA-043 (#103), #50.
           - flag: sparse
-            args: --all-targets --features sparse
+            args: --lib --tests --features sparse
           # ExternalTabulated reads HDF5 files — DT-027 (#75), #79.
           - flag: hdf5
-            args: --all-targets --features hdf5
+            args: --lib --tests --features hdf5
             hdf5: true
           # Rayon dispatch branches — DT-014 (#14), DA-048 (#140).
           - flag: parallel
-            args: --all-targets --features parallel
+            args: --lib --tests --features parallel
           # SimulationResult::write_vtk — DT-027 (#75), #78.
           - flag: vtk
-            args: --all-targets --features vtk
+            args: --lib --tests --features vtk
           # Serialisation and SimulationSnapshot — DT-025 (#66), #71.
           - flag: serde
-            args: --all-targets --features serde
+            args: --lib --tests --features serde
           # INV-1/2/3 guards, meshes implemented outside the crate (#172).
           - flag: fem
             args: --test fem_invariants

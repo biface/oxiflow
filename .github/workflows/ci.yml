@@ -73,8 +73,14 @@ jobs:
         run: sh scripts/check-version.sh pr "$BASE" "$HEAD"
 
   # ──────────────────────────────────────────────────────────────────────────
-  # Clippy — zero warnings, every target (lib, tests, examples, benches), one
-  # matrix entry per feature declared in Cargo.toml plus --all-features
+  # Clippy — zero warnings, one matrix entry per feature declared in
+  # Cargo.toml plus --all-features. Every entry checks the library, the
+  # binaries, the tests and the examples. The benches are checked only where
+  # their `cfg` attributes change what compiles: without `parallel`, with
+  # `parallel`, and with `parallel` and `sparse` together (`all-features`).
+  # Their `sparse` items all sit inside `parallel` ones, and no other feature
+  # appears in them, so a bench check in any other entry would repeat one of
+  # these three (`benches: true`).
   # ──────────────────────────────────────────────────────────────────────────
   clippy:
     name: Clippy (${{ matrix.name }})
@@ -86,6 +92,7 @@ jobs:
         include:
           - name: default
             args: ""
+            benches: true
           # faer sparse backend — DT-013 (#13), DA-043 (#103), #50.
           - name: sparse
             args: --features sparse
@@ -99,6 +106,7 @@ jobs:
           # Rayon dispatch behind the threshold — DT-014 (#14), DA-048 (#140).
           - name: parallel
             args: --features parallel
+            benches: true
           # Public types serialisation, SimulationSnapshot — DT-025 (#66), #71.
           - name: serde
             args: --features serde
@@ -108,6 +116,9 @@ jobs:
           - name: all-features
             args: --all-features
             hdf5: true
+            benches: true
+    env:
+      TARGETS: ${{ matrix.benches && '--all-targets' || '--lib --bins --tests --examples' }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-rust
@@ -115,8 +126,8 @@ jobs:
           components: clippy
           hdf5: ${{ matrix.hdf5 || false }}
           cache-key: clippy-${{ matrix.name }}
-      - name: cargo clippy --all-targets ${{ matrix.args }}
-        run: cargo clippy --locked --all-targets ${{ matrix.args }} -- -D warnings
+      - name: cargo clippy ${{ env.TARGETS }} ${{ matrix.args }}
+        run: cargo clippy --locked $TARGETS ${{ matrix.args }} -- -D warnings
 
   # ──────────────────────────────────────────────────────────────────────────
   # Test — unit tests and doctests, default features, every push.
@@ -262,10 +273,10 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   # Reference examples — each one checks itself and exits with an error
   # beyond its tolerance (#173). Names are added to REFERENCE_EXAMPLES as
-  # #174–#180 land; prototypes such as lahar_lake_proto stay out. Examples
-  # that only serve benchmarks are compile-checked by clippy --all-targets.
-  # The job always exists, so it can be a required check before the list
-  # has its first entry.
+  # #174–#180 land; prototypes such as lahar_lake_proto stay out. The other
+  # examples are compile-checked by every clippy entry (`--examples` or
+  # `--all-targets`). The job always exists, so it can be a required check
+  # before the list has its first entry.
   # ──────────────────────────────────────────────────────────────────────────
   examples:
     name: Reference examples
