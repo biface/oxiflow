@@ -89,7 +89,7 @@
 //!
 //! Values: c1* = 0.12861 mol/L (1.29 c1F), shock 1 at the outlet at
 //! t = 423.46 s and shock 2 at t = 489.06 s. In the dilute limit, the two
-//! fronts would arrive at 447.8 s and 555.1 s, with no plateau above c1F.
+//! fronts would arrive at 448.0 s and 556.0 s, with no plateau above c1F.
 //!
 //! ## Grid and integrator
 //!
