@@ -81,8 +81,10 @@
 //! ## Grid and integrator
 //!
 //! The scenario (constants, grids, initial states, domain models, coupling)
-//! is defined in `rsc/models/lahar_outfall.rs`, with dx as a parameter; this
-//! file holds the run settings, the diagnostics and the checks.
+//! and the settings of this run (`REFERENCE_RUN`) are defined in
+//! `rsc/models/lahar_outfall.rs`, shared with the animation
+//! `examples/lahar_lake_wave_simul.rs`; this file holds the diagnostics and
+//! the checks.
 //!
 //! 801 channel nodes and 601 lake nodes, dx = 5 m. Explicit Euler, the
 //! integrator the overshoot guards of the source term were written for,
@@ -136,14 +138,7 @@
 use std::error::Error;
 
 use nalgebra::DMatrix;
-use oxiflow::{
-    context::error::OxiflowError,
-    mesh::Mesh,
-    solver::{
-        config::{StepControl, TimeConfiguration},
-        orchestrator::{MultiDomainSimulationResult, OrchestratorConfig},
-    },
-};
+use oxiflow::{context::error::OxiflowError, mesh::Mesh};
 
 #[path = "../rsc/models/lahar_flux.rs"]
 mod lahar_flux;
@@ -155,20 +150,17 @@ mod lahar_physics;
 mod lahar_source;
 
 use lahar_outfall::{
-    bed_gradient, channel_grid, channel_id, deposit_density, field, initial_states, injection,
-    lake_grid, lake_id, orchestrator, physics, scenario, CHANNEL_LENGTH, CHANNEL_SLOPE_DEG,
-    DEPOSIT_PACKING, INFLOW, INFLOW_SOLIDS, LAKE_DEPTH, LAKE_LENGTH,
+    channel_grid, channel_id, deposit_density, field, initial_states, injection, lake_grid,
+    lake_id, physics, run, CHANNEL_LENGTH, CHANNEL_SLOPE_DEG, DEPOSIT_PACKING, INFLOW,
+    INFLOW_SOLIDS, LAKE_DEPTH, LAKE_LENGTH, REFERENCE_RUN,
 };
 use lahar_physics::{COL_B, COL_M, COL_P, COL_S, G, H_MIN};
 
 // ── Run settings ──────────────────────────────────────────────────────────
 
-/// Spacing shared by both grids (see the module documentation).
-const DX: f64 = 5.0;
-const DT: f64 = 0.1;
-const END_TIME: f64 = 600.0;
-/// Steps between saved states (5 s).
-const SAVE_EVERY: usize = 50;
+/// Spacing shared by both grids, and time step, of the reference run.
+const DX: f64 = REFERENCE_RUN.dx;
+const DT: f64 = REFERENCE_RUN.dt;
 
 /// Bore measurement: start time, toe threshold above h0, and the window
 /// behind the toe over which h1 and u1 are averaged.
@@ -180,30 +172,6 @@ const TOL_MASS_EXCHANGE: f64 = 1e-13;
 const TOL_SOLIDS_EXCHANGE: f64 = 1e-13;
 const TOL_CELERITY: f64 = 2.5e-3;
 const TOL_MASS_RELATION: f64 = 4e-3;
-
-// ── Run ───────────────────────────────────────────────────────────────────
-
-fn run(
-    channel0: &DMatrix<f64>,
-    lake0: &DMatrix<f64>,
-) -> Result<MultiDomainSimulationResult, OxiflowError> {
-    let scenario = scenario(
-        DX,
-        channel0,
-        lake0,
-        #[cfg(feature = "parallel")]
-        None,
-    )?;
-    let config = OrchestratorConfig::new(
-        TimeConfiguration::new(END_TIME, StepControl::Fixed { dt: DT }).saving_every(SAVE_EVERY),
-    )
-    .with_calculator(Box::new(bed_gradient(
-        DX,
-        #[cfg(feature = "parallel")]
-        None,
-    )?));
-    orchestrator().run(&scenario, &config)
-}
 
 // ── Diagnostics ───────────────────────────────────────────────────────────
 
@@ -266,7 +234,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         "Lahar of {INFLOW} m²/s (psi = {INFLOW_SOLIDS}) down {CHANNEL_LENGTH} m at {CHANNEL_SLOPE_DEG}°, \
          into a lake {LAKE_DEPTH} m deep and {LAKE_LENGTH} m long, dx = {DX} m, dt = {DT} s, explicit Euler"
     );
-    let result = run(&channel0, &lake0)?;
+    let result = run(&REFERENCE_RUN, &channel0, &lake0)?;
 
     let channel_xs = channel_grid(DX)?;
     let source_rate: f64 = (0..channel_xs.n_dof())

@@ -2,13 +2,14 @@
 //! and over a lip into a lake at rest, each a shallow-layer domain, coupled
 //! by the outflow of the channel's last cell (`OutfallExchange`).
 //!
-//! Single definition used by `examples/lahar_lake_wave.rs` and
-//! `benches/orchestrator_phase1.rs`, each of which includes this file as a
-//! module with `#[path]`; the example documents the physics, the coupling
-//! and the validation. The grid spacing `dx`, shared by both grids,
-//! is a parameter of every function that builds a grid, a state or the
-//! coupling; the run settings (time step, end time, saving) stay in each
-//! consumer.
+//! Single definition used by `examples/lahar_lake_wave.rs`, its animation
+//! `examples/lahar_lake_wave_simul.rs` and `benches/orchestrator_phase1.rs`,
+//! each of which includes this file as a module with `#[path]`; the example
+//! documents the physics, the coupling and the validation. The grid spacing
+//! `dx`, shared by both grids, is a parameter of every function that builds
+//! a grid, a state or the coupling. The settings of the reference run, which
+//! the example validates and its animation replays, are [`REFERENCE_RUN`];
+//! the benchmark sets its own.
 //!
 //! Requires `rsc/models/lahar_physics.rs`, `rsc/models/lahar_source.rs` and
 //! `rsc/models/lahar_flux.rs` as sibling modules named `lahar_physics`,
@@ -47,8 +48,9 @@ use oxiflow::{
     model::{CompositeModel, DiscretizedModel, PrescribedInitialState, RequiresContext},
     operators::limiters::Limiter,
     solver::{
+        config::{StepControl, TimeConfiguration},
         methods::ForwardEulerSolver,
-        orchestrator::MultiDomainOrchestrator,
+        orchestrator::{MultiDomainOrchestrator, MultiDomainSimulationResult, OrchestratorConfig},
         scenario::{Domain, DomainId, Scenario},
     },
 };
@@ -374,4 +376,56 @@ pub(crate) fn bed_gradient(
         None => calculator,
     };
     Ok(calculator)
+}
+
+// ── Reference run ─────────────────────────────────────────────────────────
+
+/// Settings of a run: grid spacing, time step, end time and saving.
+// The benchmark sets its own runs and reads none of this section.
+#[allow(dead_code)]
+pub(crate) struct RunSettings {
+    /// Spacing shared by both grids.
+    pub(crate) dx: f64,
+    pub(crate) dt: f64,
+    pub(crate) end_time: f64,
+    /// Steps between saved states.
+    pub(crate) save_every: usize,
+}
+
+/// The run `examples/lahar_lake_wave.rs` validates: dx = 5 m, dt = 0.1 s
+/// (largest wave speed times dt / dx about 0.3), a state every 5 s up to
+/// t = 600 s, before the bore reaches the far shore.
+#[allow(dead_code)]
+pub(crate) const REFERENCE_RUN: RunSettings = RunSettings {
+    dx: 5.0,
+    dt: 0.1,
+    end_time: 600.0,
+    save_every: 50,
+};
+
+/// Runs the scenario with `settings`, from `channel0` and `lake0`, with
+/// explicit Euler on both domains and the shared bed gradient.
+#[allow(dead_code)]
+pub(crate) fn run(
+    settings: &RunSettings,
+    channel0: &DMatrix<f64>,
+    lake0: &DMatrix<f64>,
+) -> Result<MultiDomainSimulationResult, OxiflowError> {
+    let scenario = scenario(
+        settings.dx,
+        channel0,
+        lake0,
+        #[cfg(feature = "parallel")]
+        None,
+    )?;
+    let config = OrchestratorConfig::new(
+        TimeConfiguration::new(settings.end_time, StepControl::Fixed { dt: settings.dt })
+            .saving_every(settings.save_every),
+    )
+    .with_calculator(Box::new(bed_gradient(
+        settings.dx,
+        #[cfg(feature = "parallel")]
+        None,
+    )?));
+    orchestrator().run(&scenario, &config)
 }
