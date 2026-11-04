@@ -54,7 +54,7 @@ pub(crate) struct ShallowLayerFlux {
 /// which times this operator's `apply` on a uniform synthetic flow, on the
 /// design machine (12 logical cores) for v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)), and measured
 /// again once `apply` no longer checked the advective stability condition
-/// itself ([#228](https://github.com/biface/oxiflow/issues/228)): parallel is 1.10x slower than sequential at
+/// itself ([#228](https://github.com/biface/oxiflow/issues/228)): parallel is 1.05x slower than sequential at
 /// 10,000 nodes and 0.69x its time at 100,000, so the default sits at
 /// 100,000. Each node reads and writes more memory than it computes, which
 /// puts the crossover well beyond `LaharSource`'s.
