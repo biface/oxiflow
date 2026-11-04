@@ -415,8 +415,8 @@ modern CPU, with and without `parallel`.
 Seven multi-domain reference examples, one per domain of the README table: binary frontal
 analysis with competitive adsorption; 1D transient conduction in a bar (uniform and graded);
 Gray–Scott in 1D: Turing instability, pulse splitting; 1D viscous boundary layer at a wall
-(Burgers); 1D consolidation of a clay layer (Terzaghi); 1D magnetic diffusion into a
-conductor (proto); lahar–lake wave generation. Each one checks itself against its validation
+(Burgers); 1D consolidation of a clay layer (Terzaghi); 1D magnetic diffusion into a conductor
+(proto); a lahar front running into a lake. Each one checks itself against its validation
 reference and also runs in CI.
 
 Coefficients that depend on position and time, `(x, t)`, through `CoefficientField` ([DD-066](https://github.com/biface/oxiflow/issues/181),

@@ -1,8 +1,8 @@
-//! # Animation: lahar–lake wave generation ([#180](https://github.com/biface/oxiflow/issues/180))
+//! # Animation: a lahar front running into a lake ([#180](https://github.com/biface/oxiflow/issues/180))
 //!
 //! Replays the run of `examples/lahar_lake_wave.rs` as an animated SVG,
 //! `lahar_lake_wave_simul.svg`, written to the working directory: the lahar
-//! running down the channel, then the bore it raises across the lake. The
+//! running down the channel, then the front it pushes across the lake. The
 //! scenario and the run are those of `rsc/models/lahar_outfall.rs`, with the
 //! settings of the validated example (`REFERENCE_RUN`: dx = 5 m, explicit
 //! Euler, dt = 0.1 s, a state every 5 s up to t = 600 s); see that example
@@ -19,8 +19,8 @@
 //!   with `b` the deposit and `h0` the depth at rest. Over the first 250 m
 //!   or so, the lake holds the lahar itself (solids fraction about 0.16 at
 //!   t = 600 s): denser than the water ahead, this layer stands a little
-//!   below the level at rest while pressing harder on the bed, and the bore
-//!   it pushes stands about 1.7 m above that level.
+//!   below the level at rest while pressing harder on the bed, and the front
+//!   ahead of it stands about 1.7 m above that level.
 //!
 //! Run with: `cargo run --release --example lahar_lake_wave_simul`.
 

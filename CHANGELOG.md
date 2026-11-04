@@ -188,6 +188,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bore raised in the lake obeys the Rankine–Hugoniot conditions; it exits
   with an error beyond its tolerances and runs in CI with the reference
   examples ([#180](https://github.com/biface/oxiflow/issues/180)).
+- `examples/lahar_lake_wave_simul` replays the run of `lahar_lake_wave` as
+  an animated SVG, one frame per saved state: the depth of the lahar along
+  the channel and the free surface of the lake, with a time bar. The
+  animation uses SVG animation elements only, with no script, so it plays
+  in a web browser and on the wiki; a viewer that does not animate shows
+  the first frame. Both examples take the settings of the run from
+  `rsc/models/lahar_outfall.rs` ([#149](https://github.com/biface/oxiflow/issues/149)).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
   builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and

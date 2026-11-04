@@ -1,13 +1,15 @@
-//! # Reference example: lahar–lake wave generation on coupled grids ([#180](https://github.com/biface/oxiflow/issues/180))
+//! # Reference example: a lahar front running into a lake, on coupled grids ([#180](https://github.com/biface/oxiflow/issues/180))
 //!
 //! A lahar runs down a 4 km channel and pours over a lip into a 15 m deep
-//! lake. The inflow raises a bore that runs across the lake. Channel and
-//! lake are two domains on their own grids, advanced together by
-//! `MultiDomainOrchestrator` and coupled only through `CouplingOperator`s
-//! (INV-3). The example checks that the lake stays exactly at rest until the
-//! lahar reaches it, that the coupling moves mass and solids from one grid to
-//! the other without loss, and that the bore obeys the Rankine–Hugoniot jump
-//! conditions.
+//! lake. The inflow raises a bore, a front that runs across the lake: as
+//! long as the lahar feeds it, the lake stays raised behind the front, so
+//! what crosses the lake is a front, not a wave that would leave the inlet
+//! behind. Channel and lake are two domains on their own grids, advanced
+//! together by `MultiDomainOrchestrator` and coupled only through
+//! `CouplingOperator`s (INV-3). The example checks that the lake stays
+//! exactly at rest until the lahar reaches it, that the coupling moves mass
+//! and solids from one grid to the other without loss, and that the bore
+//! obeys the Rankine–Hugoniot jump conditions.
 //!
 //! Run with: `cargo run --example lahar_lake_wave`. The example exits with an
 //! error if a check exceeds its tolerance.

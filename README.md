@@ -198,7 +198,7 @@ See the [oxiflow wiki](https://github.com/biface/oxiflow/wiki) for introductory 
 | Fluid mechanics    | 1D viscous boundary layer at a wall (Burgers)         | engine direct    |
 | Geomechanics       | 1D consolidation of a clay layer (Terzaghi)           | engine direct    |
 | Electromagnetism   | 1D magnetic diffusion into a conductor (proto)        | `oxiflow-em`     |
-| Surface geophysics | Lahar–lake wave generation                            | `oxiflow-geo`    |
+| Surface geophysics | Lahar front running into a lake                       | `oxiflow-geo`    |
 
 ---
 

@@ -427,8 +427,8 @@ Sept exemples de référence multi-domaines, un par domaine du tableau du README
 frontale binaire en adsorption compétitive ; conduction transitoire 1D dans une barre (homogène
 et graduée) ; Gray–Scott en 1D : instabilité de Turing, réplication ; couche limite visqueuse
 1D contre une paroi (Burgers) ; consolidation 1D d'une couche d'argile (Terzaghi) ; diffusion
-magnétique 1D dans un conducteur (proto) ; génération d'une vague par un lahar dans un lac.
-Chacun se contrôle contre sa référence de validation et tourne aussi en CI.
+magnétique 1D dans un conducteur (proto) ; front d'un lahar entrant dans un lac. Chacun se
+contrôle contre sa référence de validation et tourne aussi en CI.
 
 Coefficients dépendant de la position et du temps, `(x, t)`, via `CoefficientField` ([DD-066](https://github.com/biface/oxiflow/issues/181),
 [#181](https://github.com/biface/oxiflow/issues/181)).

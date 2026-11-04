@@ -202,7 +202,7 @@ Consultez le [wiki oxiflow](https://github.com/biface/oxiflow/wiki) pour les not
 | Mécanique des fluides  | Couche limite visqueuse 1D contre une paroi (Burgers)          | moteur direct    |
 | Géomécanique           | Consolidation 1D d'une couche d'argile (Terzaghi)              | moteur direct    |
 | Électromagnétisme      | Diffusion magnétique 1D dans un conducteur (proto)             | `oxiflow-em`     |
-| Géophysique de surface | Génération d'une vague par un lahar dans un lac                | `oxiflow-geo`    |
+| Géophysique de surface | Front d'un lahar entrant dans un lac                           | `oxiflow-geo`    |
 
 ---
 
