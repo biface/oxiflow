@@ -120,13 +120,12 @@ impl RequiresContext for ShallowLayerFlux {
 }
 
 impl ShallowLayerFlux {
-    /// Largest cell wave speed `|u| + √(g·h)` of `state` (the shallow-water
-    /// eigenvalues, on the raw, unreconstructed cell values: a cheap upper
-    /// bound) and the node where it occurs. A NaN speed is kept, so that a
-    /// non-finite state is not hidden behind a finite neighbour.
-    fn fastest_cell(&self, state: &DMatrix<f64>) -> Result<(f64, usize), OxiflowError> {
+    /// Largest cell wave speed `|u| + √(g·h)` of `state`: the shallow-water
+    /// eigenvalues, on the raw, unreconstructed cell values, a cheap upper
+    /// bound. A NaN speed is kept, so that a non-finite state is not hidden
+    /// behind a finite neighbour: the explicit integrators refuse it.
+    fn max_cell_wave_speed(&self, state: &DMatrix<f64>) -> Result<f64, OxiflowError> {
         let mut max_speed = 0.0_f64;
-        let mut max_at = 0usize;
         for i in 0..state.nrows() {
             let (h, u, _) =
                 self.physics
@@ -134,10 +133,9 @@ impl ShallowLayerFlux {
             let speed = self.physics.wave_speed(h, u);
             if speed.is_nan() || speed > max_speed {
                 max_speed = speed;
-                max_at = i;
             }
         }
-        Ok((max_speed, max_at))
+        Ok(max_speed)
     }
 
     /// Flux divergence of the `(m, p, s)` system, with one treatment per
@@ -148,7 +146,6 @@ impl ShallowLayerFlux {
         &self,
         field: &ContextValue,
         mesh: &UniformGrid1D,
-        ctx: &ComputeContext,
         edges: Edges,
     ) -> Result<ContextValue, OxiflowError> {
         let state = field.as_vector_field()?;
@@ -158,34 +155,9 @@ impl ShallowLayerFlux {
                 "ShallowLayerFlux requires at least 3 nodes, got {n}"
             )));
         }
+        // No stability check here: the explicit integrators bound their
+        // step from `max_wave_speed` (DA-073).
         let dx = mesh.characteristic_length();
-        let dt = ctx.time_step();
-
-        // CFL check reproduced directly -- operators::check_cfl is
-        // pub(crate), not visible from an example. Uses the raw
-        // (unreconstructed) cell wave speeds as a cheap upper bound.
-        let (max_speed, max_at) = self.fastest_cell(state)?;
-        if max_speed * dt / dx > 1.0 {
-            let (h, u, psi) = self.physics.primitives(
-                state[(max_at, COL_M)],
-                state[(max_at, COL_P)],
-                state[(max_at, COL_S)],
-            )?;
-            return Err(OxiflowError::PreconditionFailed {
-                context: "ShallowLayerFlux::apply",
-                message: format!(
-                    "CFL condition violated: max_wave_speed*dt/dx = {:.6} > 1.0 \
-                     (max_wave_speed = {max_speed}, dt = {dt}, dx = {dx}) at node {max_at} \
-                     (x = {:.3}, t = {:.6}): h={h}, u={u}, psi={psi}, m={}, p={}, s={}",
-                    max_speed * dt / dx,
-                    mesh.coordinates(max_at)[0],
-                    ctx.time(),
-                    state[(max_at, COL_M)],
-                    state[(max_at, COL_P)],
-                    state[(max_at, COL_S)],
-                ),
-            });
-        }
 
         // Reconstructed left/right edge value per cell, per component.
         let mut left_edge = vec![[0.0_f64; 3]; n];
@@ -298,13 +270,13 @@ impl FluxDivergenceOperator for ShallowLayerFlux {
         &self,
         field: &ContextValue,
         mesh: &Self::MeshType,
-        ctx: &ComputeContext,
+        _ctx: &ComputeContext,
     ) -> Result<ContextValue, OxiflowError> {
         let edges = Edges {
             left: EdgeTreatment::NeighbourDivergence,
             right: EdgeTreatment::NeighbourDivergence,
         };
-        self.divergence(field, mesh, ctx, edges)
+        self.divergence(field, mesh, edges)
     }
 
     fn stencil_radius(&self) -> usize {
@@ -316,7 +288,7 @@ impl FluxDivergenceOperator for ShallowLayerFlux {
         field: &ContextValue,
         _ctx: &ComputeContext,
     ) -> Result<f64, OxiflowError> {
-        Ok(self.fastest_cell(field.as_vector_field()?)?.0)
+        self.max_cell_wave_speed(field.as_vector_field()?)
     }
 }
 
@@ -369,9 +341,9 @@ impl FluxDivergenceOperator for ShallowLayerFluxWithEdges {
         &self,
         field: &ContextValue,
         mesh: &Self::MeshType,
-        ctx: &ComputeContext,
+        _ctx: &ComputeContext,
     ) -> Result<ContextValue, OxiflowError> {
-        self.flux.divergence(field, mesh, ctx, self.edges)
+        self.flux.divergence(field, mesh, self.edges)
     }
 
     fn stencil_radius(&self) -> usize {

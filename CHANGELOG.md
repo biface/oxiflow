@@ -320,7 +320,9 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   step above `dt_max` instead of aborting the run, and reports the number of
   shortened steps under the metadata key `solver.cfl_limited_steps`. A model
   that declares no speed is not checked, as before for models outside
-  `DiscretizedModel`.
+  `DiscretizedModel`. The shallow-layer flux of the lahar models
+  (`rsc/models/lahar_flux.rs`) drops its own copy of the check and declares
+  its state-dependent speed, `|u| + √(g·h)` over the cells, instead.
 - Each reference model of the examples, tests and benchmarks (diffusion,
   viscous Burgers, multi-compound Langmuir, multi-field lahar, lahar–lake)
   is defined once under `rsc/models/` and included by every target that

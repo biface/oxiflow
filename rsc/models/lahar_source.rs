@@ -225,8 +225,8 @@ impl PhysicalModel for LaharSource {
             // way within a single step -- diagnosed in session as a
             // genuine instability (max_wave_speed in the thousands of
             // m/s a few nodes past the source edge, ~40 steps in), not a
-            // CFL/advective problem (the CFL check above already covers
-            // that separately). Friction can only ever brake flow to a
+            // CFL/advective problem (the advective step limit of the
+            // explicit integrators covers that separately, DA-073). Friction can only ever brake flow to a
             // stop within one step, never past it -- clip the momentum
             // contribution accordingly rather than trusting the raw
             // explicit rate. Loses accuracy only in the (rare, already

@@ -104,9 +104,15 @@
 //! locally since their `pub(crate)` helpers aren't visible from an
 //! example.
 //!
-//! `check_cfl` (operators::mod) is also `pub(crate)` -- reproduced here as
-//! a direct wave-speed check (`|u| + sqrt(g*h)`, shallow-water
-//! eigenvalues) rather than the constant-velocity form FV/WENO use.
+//! The flux checks no stability condition itself: it declares its wave
+//! speed through
+//! [`FluxDivergenceOperator::max_wave_speed`](oxiflow::operators::FluxDivergenceOperator::max_wave_speed), the largest
+//! `|u| + sqrt(g*h)` over the cells (shallow-water eigenvalues), a speed
+//! that depends on the state rather than the constant velocity FV/WENO
+//! declare. [`ForwardEulerSolver`] checks the step against
+//! `dx / max_wave_speed` at the start of every step and stops with
+//! `PreconditionFailed` if the flow outruns it
+//! ([DA-073](https://github.com/biface/oxiflow/issues/229)).
 //!
 //! [`LaharSource`] (an ordinary [`PhysicalModel`], not a flux term)
 //! computes friction, erosion/deposition, bed evolution, and the top-hat
