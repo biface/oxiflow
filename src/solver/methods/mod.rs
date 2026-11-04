@@ -80,6 +80,7 @@ pub mod imex;
 pub mod implicit;
 pub mod newton;
 pub mod rk4;
+mod stability_limits;
 mod state_layout;
 pub mod step_control;
 
@@ -265,13 +266,53 @@ pub(crate) fn evaluate_derivative(
     t: f64,
     dt: f64,
 ) -> Result<ContextValue, OxiflowError> {
+    Ok(evaluate_in_context(domain, chain, state, t, dt)?.0)
+}
+
+/// [`evaluate_derivative`], plus the advective step limit of `domain` on
+/// the same state and in the same context ([DA-073](https://github.com/biface/oxiflow/issues/229)): the explicit
+/// integrators call it for their first stage, so the calculator chain runs
+/// once per step for both.
+///
+/// The limit is `None` when the model declares no wave speed, or a zero
+/// one; see [`stability_limits`] for how it is derived and checked.
+///
+/// # Errors
+///
+/// Those of [`evaluate_derivative`] and of
+/// [`PhysicalModel::max_wave_speed`](crate::model::traits::PhysicalModel::max_wave_speed);
+/// `OxiflowError::PreconditionFailed` if the declared speed is not finite
+/// and non-negative.
+pub(crate) fn evaluate_derivative_and_step_limit(
+    domain: &Domain,
+    chain: &[&dyn ContextCalculator],
+    state: &mut ContextValue,
+    t: f64,
+    dt: f64,
+) -> Result<(ContextValue, Option<f64>), OxiflowError> {
+    let (derivative, ctx) = evaluate_in_context(domain, chain, state, t, dt)?;
+    let speed = domain.model.max_wave_speed(state, &ctx)?;
+    let limit = stability_limits::advective_step_limit(domain, speed)?;
+    Ok((derivative, limit))
+}
+
+/// Body of [`evaluate_derivative`], returning the context the derivative
+/// was computed in along with it.
+fn evaluate_in_context(
+    domain: &Domain,
+    chain: &[&dyn ContextCalculator],
+    state: &mut ContextValue,
+    t: f64,
+    dt: f64,
+) -> Result<(ContextValue, ComputeContext), OxiflowError> {
     let mut ctx = ComputeContext::new(t, dt);
 
     if domain.boundary_conditions.is_empty() {
         for calc in chain {
             run_calculator(*calc, state, &mut ctx)?;
         }
-        return domain.model.compute_physics(state, &ctx);
+        let derivative = domain.model.compute_physics(state, &ctx)?;
+        return Ok((derivative, ctx));
     }
 
     let marked = boundary_calculators(domain, chain);
@@ -285,7 +326,7 @@ pub(crate) fn evaluate_derivative(
 
     let mut derivative = domain.model.compute_physics(state, &ctx)?;
     hold_constrained_nodes(domain, &mut derivative)?;
-    Ok(derivative)
+    Ok((derivative, ctx))
 }
 
 /// Checks that every value in `state` is finite.

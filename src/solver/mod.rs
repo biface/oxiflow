@@ -117,7 +117,8 @@ pub struct SimulationResult {
     ///
     /// Keys follow the convention `"solver.<key>"` (e.g. `"solver.rejected_steps"`).
     /// Filled by `DoPri45Solver` (`solver.accepted_steps`,
-    /// `solver.rejected_steps`); empty for the fixed-step integrators.
+    /// `solver.rejected_steps`, `solver.cfl_limited_steps`); empty for the
+    /// fixed-step integrators.
     pub metadata: std::collections::HashMap<String, f64>,
 }
 

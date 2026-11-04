@@ -32,9 +32,14 @@ use crate::context::calculator::ContextCalculator;
 pub enum StepControl {
     /// Fixed time step — J1.
     ///
-    /// Stability for explicit methods requires the CFL condition:
+    /// With an advective term, an explicit method needs a Courant number
+    /// of at most 1,
     ///
-    /// $$\text{CFL} = \frac{v \, \Delta t}{\Delta x} \leq 1$$
+    /// $$C = \frac{s \cdot \Delta t}{\Delta x} \leq 1$$
+    ///
+    /// with `s` the wave speed the model declares and `Δx` the
+    /// characteristic length of the mesh; forward Euler and RK4 refuse a
+    /// larger step ([DA-073](https://github.com/biface/oxiflow/issues/229)). The implicit methods have no such limit.
     Fixed {
         /// Time step size.
         dt: f64,

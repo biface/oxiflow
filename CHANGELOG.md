@@ -306,6 +306,21 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `AdaptiveFlux`) return the absolute value of their advection velocity
   ([DA-073](https://github.com/biface/oxiflow/issues/229),
   [#228](https://github.com/biface/oxiflow/issues/228)).
+- The explicit integrators own the advective stability check
+  ([DA-073](https://github.com/biface/oxiflow/issues/229),
+  [#228](https://github.com/biface/oxiflow/issues/228)). At the start of each
+  step they evaluate the wave speed `s` the model declares, with the first
+  stage, and derive `dt_max = dx / s` from the characteristic length of the
+  mesh: a Courant limit of 1, a necessary condition only. `ForwardEulerSolver`
+  and `RK4Solver` refuse a larger fixed step with
+  `OxiflowError::PreconditionFailed`, whose context now names the solver
+  (`"ForwardEulerSolver::step"`, `"RK4Solver::step"`) instead of the scheme,
+  and whose message gives the Courant number and `dt_max`; the check is made
+  once per step instead of once per stage. `DoPri45Solver` shortens a trial
+  step above `dt_max` instead of aborting the run, and reports the number of
+  shortened steps under the metadata key `solver.cfl_limited_steps`. A model
+  that declares no speed is not checked, as before for models outside
+  `DiscretizedModel`.
 - Each reference model of the examples, tests and benchmarks (diffusion,
   viscous Burgers, multi-compound Langmuir, multi-field lahar, lahar–lake)
   is defined once under `rsc/models/` and included by every target that
@@ -357,6 +372,20 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The implicit integrators (Backward Euler, Crank–Nicolson, BDF2) run a
+  flux scheme at any Courant number. Every flux scheme checked the explicit
+  advective condition `|v|·dt/dx ≤ 1` in its own `apply()` with the step of
+  the context, which the solvers fill with the integrator's step for
+  implicit integrators too: a periodic upwind advection with Backward Euler
+  failed at a Courant number of 2. The schemes no longer check it, and
+  `operators::check_cfl` is removed; the explicit integrators check instead
+  (see *Changed*) ([DA-073](https://github.com/biface/oxiflow/issues/229),
+  [#228](https://github.com/biface/oxiflow/issues/228)).
+- The advective check no longer lets a NaN through: `check_cfl` compared
+  `|v|·dt/dx > 1`, false for a NaN speed. The explicit integrators refuse a
+  declared wave speed that is NaN, infinite or negative with
+  `OxiflowError::PreconditionFailed`, naming the model
+  ([#228](https://github.com/biface/oxiflow/issues/228)).
 - The `oxiflow_parallel` benchmark ran to its end only without the `sparse`
   feature: with `parallel,sparse`, the Jacobian dispatch diagnostic of the
   multi-compound Langmuir model stopped on `NewtonNotConverged` at 10,000

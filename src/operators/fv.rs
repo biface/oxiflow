@@ -27,18 +27,17 @@
 //! parameter rather than a hidden assumption; see its documentation for the
 //! alternatives considered.
 //!
-//! ## CFL check
+//! ## Stability
 //!
-//! Both schemes check the explicit advective stability condition
-//! `|v|·dt/dx ≤ 1` via the shared `crate::operators::check_cfl` (the
-//! condition documented for Lax–Wendroff-type explicit advection schemes)
-//! inside `apply()`, using `ctx.time_step()` — failing explicitly via
-//! [`OxiflowError::PreconditionFailed`] rather than silently returning an
-//! unstable result. This covers the *advective* stability condition only;
-//! the diffusive term has its own explicit-stability limit (Fourier number
-//! `D·dt/dx² ≤ 0.5`), not checked here — out of `#48`'s scope, and belongs
-//! conceptually to the solver's step-size control, not a spatial operator,
-//! if ever enforced.
+//! Neither scheme checks a stability condition: a limit belongs to the pair
+//! formed by a spatial scheme and a time integrator, and the scheme sees
+//! neither the integrator nor its step ([DA-073](https://github.com/biface/oxiflow/issues/229)). Both declare the
+//! speed at which they transport the field,
+//! [`FluxDivergenceOperator::max_wave_speed`], the absolute value of
+//! `velocity`; the explicit integrators derive their advective step limit
+//! `dt ≤ dx / |v|` from it, and the implicit integrators run at any
+//! Courant number. The diffusive term's own explicit limit (Fourier number
+//! `D·dt/dx² ≤ 0.5`) is not checked anywhere.
 //!
 //! [`UniformGrid1D`]: crate::mesh::structured::UniformGrid1D
 
@@ -54,7 +53,7 @@ use crate::context::variable::ContextVariable;
 use crate::mesh::structured::UniformGrid1D;
 use crate::mesh::Mesh;
 use crate::model::traits::RequiresContext;
-use crate::operators::{check_cfl, FluxBoundary, FluxDivergenceOperator};
+use crate::operators::{FluxBoundary, FluxDivergenceOperator};
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -385,7 +384,6 @@ impl FluxDivergenceOperator for FVCenteredFlux {
     ) -> Result<ContextValue, OxiflowError> {
         let u = field.as_scalar_field()?;
         let dx = mesh.characteristic_length();
-        check_cfl("FVCenteredFlux", self.velocity, ctx.time_step(), dx)?;
 
         let v = self.velocity;
         let d = self.diffusion;
@@ -488,7 +486,6 @@ impl FluxDivergenceOperator for FVUpwindFlux {
     ) -> Result<ContextValue, OxiflowError> {
         let u = field.as_scalar_field()?;
         let dx = mesh.characteristic_length();
-        check_cfl("FVUpwindFlux", self.velocity, ctx.time_step(), dx)?;
 
         let v = self.velocity;
         let d = self.diffusion;
@@ -635,7 +632,7 @@ mod tests {
         let dx = m.characteristic_length();
         let u = ContextValue::ScalarField(DVector::from_vec(vec![0.2, 1.3, -0.7, 2.1, 0.0, -1.5]));
         let op = FVCenteredFlux::new(0.8, 0.05, FluxBoundary::Periodic);
-        // dt small enough to satisfy CFL for this test's purpose.
+        // The step of the context plays no part in the result (DA-073).
         let result = op.apply(&u, &m, &ctx(0.1 * dx)).unwrap();
         let sum: f64 = result.as_scalar_field().unwrap().iter().sum();
         assert!(sum.abs() < 1e-10, "expected 0, got {sum}");
@@ -680,25 +677,25 @@ mod tests {
         }
     }
 
-    // ── CFL check ───────────────────────────────────────────────────────────
+    // ── Stability (DA-073) ──────────────────────────────────────────────────
 
     #[test]
-    fn centered_flux_rejects_cfl_violation() {
+    fn fluxes_do_not_depend_on_the_time_step() {
+        // |v|*dt/dx = 10 * 1.0 / 0.25 = 40: the schemes check no stability
+        // condition, the context's step does not reach their result.
         let m = mesh(5); // dx = 0.25
-        let op = FVCenteredFlux::new(10.0, 0.0, FluxBoundary::Periodic);
-        let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
-        // |v|*dt/dx = 10 * 1.0 / 0.25 = 40 ≫ 1
-        let err = op.apply(&u, &m, &ctx(1.0)).unwrap_err();
-        assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
-    }
-
-    #[test]
-    fn upwind_flux_accepts_cfl_within_bounds() {
-        let m = mesh(5); // dx = 0.25
-        let op = FVUpwindFlux::new(1.0, 0.0, FluxBoundary::Periodic);
-        let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
-        // |v|*dt/dx = 1.0 * 0.2 / 0.25 = 0.8 ≤ 1
-        assert!(op.apply(&u, &m, &ctx(0.2)).is_ok());
+        let u = ContextValue::ScalarField(DVector::from_vec(vec![0.2, 1.3, -0.7, 2.1, 0.0]));
+        let centered = FVCenteredFlux::new(10.0, 0.1, FluxBoundary::Periodic);
+        let upwind = FVUpwindFlux::new(10.0, 0.1, FluxBoundary::Periodic);
+        for op in [
+            &centered as &dyn FluxDivergenceOperator<MeshType = UniformGrid1D>,
+            &upwind,
+        ] {
+            assert_eq!(
+                op.apply(&u, &m, &ctx(1.0)).unwrap(),
+                op.apply(&u, &m, &ctx(1e-3)).unwrap()
+            );
+        }
     }
 
     // ── Wave speed (DA-073) ─────────────────────────────────────────────────

@@ -26,6 +26,31 @@
 //! supplies the error norm input (the RK4/5 difference) and the rejection
 //! retry loop. See [`super::step_control`] for the controller itself.
 //!
+//! ## Advective step limit ([DA-073](https://github.com/biface/oxiflow/issues/229))
+//!
+//! An advective term limits the step of an explicit method: with `s` the
+//! largest wave speed the model declares
+//! ([`PhysicalModel::max_wave_speed`](crate::model::traits::PhysicalModel::max_wave_speed))
+//! and `Δx` the characteristic length of the mesh, the Courant number
+//! `s·Δt/Δx` must not exceed 1, a necessary condition shared by all the
+//! explicit integrators of the crate. At the start of each step the solver
+//! evaluates `s` on the state, with the first stage, and shortens a trial
+//! step above `Δx / s` to that value before computing the other stages,
+//! instead of failing as forward Euler and RK4 do with their fixed step.
+//! The first stage is then evaluated again, its context carrying the
+//! shortened step.
+//!
+//! A shortened step is not a rejection: it is counted under the metadata
+//! key `"solver.cfl_limited_steps"`, at most once per step, since a
+//! rejection only shortens the step further. A count close to
+//! `"solver.accepted_steps"` means that stability, not the tolerance,
+//! sets the step: an implicit integrator is then likely the better
+//! choice. The limit applies below `dt_min` too: `dt_min` bounds the
+//! steps the controller may choose to meet the tolerance, while the limit
+//! is a stability bound, and a positive one, so the run still advances.
+//! A model that declares no speed is not limited; the diffusive (Fourier)
+//! limit is never checked.
+//!
 //! ## State variants
 //!
 //! Stage states and the error estimate are built with the crate's linear
@@ -56,7 +81,9 @@
 //!   suggest a smaller `dt`.
 //! - Accepted/rejected counts in `SimulationResult::metadata`: keys
 //!   `"solver.accepted_steps"` / `"solver.rejected_steps"`, following the
-//!   convention already documented on `SimulationResult`.
+//!   convention already documented on `SimulationResult`, plus
+//!   `"solver.cfl_limited_steps"` for the steps shortened to the advective
+//!   limit (see above).
 //! - Performance comparable to fixed-step RK4 on non-stiff problems: not
 //!   benchmarked here (no compiler in this environment) — worth checking
 //!   once this runs for real.
@@ -71,6 +98,7 @@ use crate::solver::config::StepControl;
 use crate::solver::methods::step_control::StepSizeController;
 use crate::solver::methods::{
     check_finite, divergence_snapshot, enforce_boundary_conditions, evaluate_derivative,
+    evaluate_derivative_and_step_limit,
 };
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
@@ -198,6 +226,7 @@ impl Solver for DoPri45Solver {
 
         let mut accepted_steps = 0usize;
         let mut rejected_steps = 0usize;
+        let mut cfl_limited_steps = 0usize;
 
         // Small tolerance against floating-point accumulation in `t`
         // (unavoidable here, unlike the fixed-step solvers: `dt` varies,
@@ -208,9 +237,32 @@ impl Solver for DoPri45Solver {
             let mut local_dt = dt.min(t_end - t);
             let mut rejections_this_step = 0usize;
 
+            // First stage of the first attempt, with the advective step
+            // limit of the state at the start of the step, from the same
+            // context (DA-073). A trial step above the limit is shortened
+            // to it before the other stages; k1 is then evaluated again,
+            // since the context it was computed in carried the longer step.
+            // The limit holds for every attempt of this step: u and t do
+            // not change, and a rejection only shortens the step further.
+            let mut attempt_state = u.clone();
+            let (mut k1, limit) = evaluate_derivative_and_step_limit(
+                domain,
+                &chain,
+                &mut attempt_state,
+                t,
+                local_dt,
+            )?;
+            if let Some(dt_cfl) = limit {
+                if local_dt > dt_cfl {
+                    local_dt = dt_cfl;
+                    cfl_limited_steps += 1;
+                    attempt_state = u.clone();
+                    k1 = evaluate_derivative(domain, &chain, &mut attempt_state, t, local_dt)?;
+                }
+            }
+
             loop {
-                let mut attempt_state = u.clone();
-                let (y5, error) = dopri45_stages(domain, &chain, &mut attempt_state, t, local_dt)?;
+                let (y5, error) = dopri45_stages(domain, &chain, &attempt_state, &k1, t, local_dt)?;
 
                 let error_norm = controller.state_error_norm(&error, &y5)?;
 
@@ -270,12 +322,18 @@ impl Solver for DoPri45Solver {
                 }
 
                 local_dt = suggested;
+                attempt_state = u.clone();
+                k1 = evaluate_derivative(domain, &chain, &mut attempt_state, t, local_dt)?;
             }
         }
 
         let mut metadata = HashMap::new();
         metadata.insert("solver.accepted_steps".to_string(), accepted_steps as f64);
         metadata.insert("solver.rejected_steps".to_string(), rejected_steps as f64);
+        metadata.insert(
+            "solver.cfl_limited_steps".to_string(),
+            cfl_limited_steps as f64,
+        );
 
         Ok(SimulationResult {
             states,
@@ -286,42 +344,43 @@ impl Solver for DoPri45Solver {
     }
 }
 
-/// Computes the 7 Dormand-Prince stages and returns `(y_5th_order,
-/// error_estimate)`, both of the same variant as `state` (`ScalarField` or
-/// `VectorField`, [#192](https://github.com/biface/oxiflow/issues/192)).
+/// Computes the Dormand-Prince stages 2 to 7 from `state` and its first
+/// stage `k1`, and returns `(y_5th_order, error_estimate)`, both of the
+/// same variant as `state` (`ScalarField` or `VectorField`, [#192](https://github.com/biface/oxiflow/issues/192)).
 ///
-/// `state` (`u^n`) is mutated in-place by boundary condition application
-/// at stage 1, same contract as every other solver in this crate (see
-/// [`evaluate_derivative`]). Every stage state is `u + dt Σ aᵢⱼ kⱼ` and the
-/// error is `dt Σ eᵢ kᵢ`, accumulated term by term in the order below: for
-/// a `ScalarField`, results are bit-identical to the former `DVector`
-/// expressions.
+/// `state` (`u^n`) and `k1` come from the caller, which evaluates the first
+/// stage itself, together with the advective step limit ([DA-073](https://github.com/biface/oxiflow/issues/229)):
+/// `state` is the state that evaluation corrected in-place by boundary
+/// condition application, same contract as every other solver in this crate
+/// (see [`evaluate_derivative`]). Every stage state is `u + dt Σ aᵢⱼ kⱼ`
+/// and the error is `dt Σ eᵢ kᵢ`, accumulated term by term in the order
+/// below: for a `ScalarField`, results are bit-identical to the former
+/// `DVector` expressions.
 fn dopri45_stages(
     domain: &Domain,
     chain: &[&dyn ContextCalculator],
-    state: &mut ContextValue,
+    state: &ContextValue,
+    k1: &ContextValue,
     t: f64,
     dt: f64,
 ) -> Result<(ContextValue, ContextValue), OxiflowError> {
-    // Stage 1.
-    let k1 = evaluate_derivative(domain, chain, state, t, dt)?;
-    let u = &*state;
+    let u = state;
 
     // Stage 2.
-    let mut s2 = u.linear_combination(&[(dt * A21, &k1)])?;
+    let mut s2 = u.linear_combination(&[(dt * A21, k1)])?;
     let k2 = evaluate_derivative(domain, chain, &mut s2, t + C2 * dt, dt)?;
 
     // Stage 3.
-    let mut s3 = u.linear_combination(&[(dt * A31, &k1), (dt * A32, &k2)])?;
+    let mut s3 = u.linear_combination(&[(dt * A31, k1), (dt * A32, &k2)])?;
     let k3 = evaluate_derivative(domain, chain, &mut s3, t + C3 * dt, dt)?;
 
     // Stage 4.
-    let mut s4 = u.linear_combination(&[(dt * A41, &k1), (dt * A42, &k2), (dt * A43, &k3)])?;
+    let mut s4 = u.linear_combination(&[(dt * A41, k1), (dt * A42, &k2), (dt * A43, &k3)])?;
     let k4 = evaluate_derivative(domain, chain, &mut s4, t + C4 * dt, dt)?;
 
     // Stage 5.
     let mut s5 = u.linear_combination(&[
-        (dt * A51, &k1),
+        (dt * A51, k1),
         (dt * A52, &k2),
         (dt * A53, &k3),
         (dt * A54, &k4),
@@ -330,7 +389,7 @@ fn dopri45_stages(
 
     // Stage 6.
     let mut s6 = u.linear_combination(&[
-        (dt * A61, &k1),
+        (dt * A61, k1),
         (dt * A62, &k2),
         (dt * A63, &k3),
         (dt * A64, &k4),
@@ -342,7 +401,7 @@ fn dopri45_stages(
     // this stage is evaluated at, `y7`, *is* the 5th-order solution
     // (FSAL: b_i == a7i for i=1..6, b7 == 0 -- see module docs).
     let y7 = u.linear_combination(&[
-        (dt * A71, &k1),
+        (dt * A71, k1),
         (dt * A73, &k3),
         (dt * A74, &k4),
         (dt * A75, &k5),
@@ -353,7 +412,7 @@ fn dopri45_stages(
 
     // Error estimate: dt * sum((b_i - b*_i) * k_i).
     let error = ContextValue::weighted_sum(&[
-        (dt * E1, &k1),
+        (dt * E1, k1),
         (dt * E2, &k2),
         (dt * E3, &k3),
         (dt * E4, &k4),
@@ -374,7 +433,7 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::mesh::{Mesh, UniformGrid1D};
     use crate::model::traits::{PhysicalModel, RequiresContext};
-    use crate::model::{ExponentialDecay, ZeroDerivative};
+    use crate::model::{DeclaredWaveSpeed, ExponentialDecay, ZeroDerivative};
     use crate::solver::config::{IntegratorKind, SolverConfiguration, TimeConfiguration};
     use crate::solver::scenario::Scenario;
     use nalgebra::DVector;
@@ -694,5 +753,34 @@ mod tests {
         let config = make_config(1.0, 0.1, 1e-6, 1e-9);
         let err = DoPri45Solver.solve(&scenario, &config).unwrap_err();
         assert!(matches!(err, OxiflowError::MissingCalculator(_)));
+    }
+
+    // ── Advective step limit (DA-073) ─────────────────────────────────────────
+
+    #[test]
+    fn steps_above_the_advective_limit_are_shortened_not_rejected() {
+        // 11 nodes on (0, 1): dx = 0.1; speed 10: dt_max = 0.01, against a
+        // first trial step of 0.05 and a controller free to grow up to 1.
+        let scenario = Scenario::single(Box::new(DeclaredWaveSpeed { speed: 10.0 }), make_mesh(11));
+        let result = DoPri45Solver
+            .solve(&scenario, &make_config(0.1, 0.05, 1e-6, 1e-9))
+            .unwrap();
+        assert_eq!(result.metadata["solver.rejected_steps"], 0.0);
+        // Ten steps of dt_max: each one shortened, the last one included
+        // (t_end - t lands a rounding error above dt_max or below it).
+        assert!(result.metadata["solver.cfl_limited_steps"] >= 9.0);
+        for pair in result.times.windows(2) {
+            assert!(pair[1] - pair[0] <= 0.01 * (1.0 + 1e-12));
+        }
+        assert!((result.times.last().unwrap() - 0.1).abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_model_without_wave_speed_has_no_limited_step() {
+        let scenario = Scenario::single(Box::new(ExponentialDecay { lambda: 1.0 }), make_mesh(2));
+        let result = DoPri45Solver
+            .solve(&scenario, &make_config(1.0, 0.1, 1e-6, 1e-9))
+            .unwrap();
+        assert_eq!(result.metadata["solver.cfl_limited_steps"], 0.0);
     }
 }

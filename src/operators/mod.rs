@@ -251,37 +251,6 @@ pub enum FluxBoundary {
     ),
 }
 
-// ── check_cfl ─────────────────────────────────────────────────────────────────
-
-/// Checks the explicit advective CFL stability condition `|v|·dt/dx ≤ 1`.
-///
-/// Shared by `operators::fv` and `operators::weno` — both are explicit
-/// advective schemes subject to the same necessary stability condition
-/// (documented for Lax–Wendroff-type schemes). Covers the *advective*
-/// condition only; a diffusive term's own stability limit (Fourier number
-/// `D·dt/dx² ≤ 0.5`) is a separate concern, not checked here — conceptually
-/// the solver's step-size control's responsibility, not a spatial
-/// operator's, if ever enforced.
-pub(crate) fn check_cfl(
-    context: &'static str,
-    velocity: f64,
-    dt: f64,
-    dx: f64,
-) -> Result<(), OxiflowError> {
-    let cfl = velocity.abs() * dt / dx;
-    if cfl > 1.0 {
-        return Err(OxiflowError::PreconditionFailed {
-            context,
-            message: format!(
-                "CFL condition violated: |v|*dt/dx = {cfl:.6} > 1.0 \
-                 (v = {velocity}, dt = {dt}, dx = {dx}) — explicit advection \
-                 scheme is unstable at this step size"
-            ),
-        });
-    }
-    Ok(())
-}
-
 // ── Shared wide-stencil divergence helpers ──────────────────────────────────
 //
 // Originally introduced in `operators::weno` (#49) for its multi-point

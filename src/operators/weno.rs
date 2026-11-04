@@ -55,12 +55,15 @@
 //! switching logic is needed (that would only matter for a
 //! space-varying velocity field, out of scope here).
 //!
-//! ## `FluxBoundary` and CFL
+//! ## `FluxBoundary` and stability
 //!
-//! Both reuse [`crate::operators::FluxBoundary`] and
-//! `crate::operators::check_cfl`, shared with `operators::fv` — same
-//! boundary-treatment question, same advective stability condition. See
-//! their documentation for rationale.
+//! Both reuse [`crate::operators::FluxBoundary`], shared with
+//! `operators::fv` — same boundary-treatment question; see its
+//! documentation for rationale. Like the FV schemes, they check no
+//! stability condition and declare the absolute value of `velocity` as
+//! their wave speed, from which the explicit integrators derive their
+//! advective step limit ([DA-073](https://github.com/biface/oxiflow/issues/229); see the *Stability* section of
+//! `operators::fv`).
 //!
 //! [`UniformGrid1D`]: crate::mesh::structured::UniformGrid1D
 
@@ -74,8 +77,8 @@ use crate::mesh::structured::UniformGrid1D;
 use crate::mesh::Mesh;
 use crate::model::traits::RequiresContext;
 use crate::operators::{
-    check_cfl, ghost_cell_wide_divergence, periodic_wide_divergence, truncated_wide_divergence,
-    wrap, FluxBoundary, FluxDivergenceOperator,
+    ghost_cell_wide_divergence, periodic_wide_divergence, truncated_wide_divergence, wrap,
+    FluxBoundary, FluxDivergenceOperator,
 };
 
 /// Regularization constant preventing division by zero when a smoothness
@@ -292,7 +295,6 @@ impl FluxDivergenceOperator for WENO3 {
     ) -> Result<ContextValue, OxiflowError> {
         let u = field.as_scalar_field()?;
         let dx = mesh.characteristic_length();
-        check_cfl("WENO3", self.velocity, ctx.time_step(), dx)?;
 
         let div = match &self.boundary {
             FluxBoundary::Periodic => {
@@ -459,7 +461,6 @@ impl FluxDivergenceOperator for WENO5 {
     ) -> Result<ContextValue, OxiflowError> {
         let u = field.as_scalar_field()?;
         let dx = mesh.characteristic_length();
-        check_cfl("WENO5", self.velocity, ctx.time_step(), dx)?;
 
         let div = match &self.boundary {
             FluxBoundary::Periodic => {
@@ -805,15 +806,23 @@ mod tests {
         assert!(matches!(err, OxiflowError::InvalidDomain(_)));
     }
 
-    // ── CFL check (shared helper, sanity check of the wiring) ─────────────
+    // ── Stability (DA-073) ──────────────────────────────────────────────────
 
     #[test]
-    fn weno5_rejects_cfl_violation() {
+    fn weno_schemes_do_not_depend_on_the_time_step() {
+        // Courant number 40 on this grid: no stability check in the schemes.
         let m = mesh(5);
-        let op = WENO5::new(10.0, 0.0, FluxBoundary::Periodic);
-        let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
-        let err = op.apply(&u, &m, &ctx(1.0)).unwrap_err();
-        assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
+        let u = ContextValue::ScalarField(DVector::from_vec(vec![0.2, 1.3, -0.7, 2.1, 0.0]));
+        let weno3 = WENO3::new(10.0, 0.0, FluxBoundary::Periodic);
+        let weno5 = WENO5::new(10.0, 0.0, FluxBoundary::Periodic);
+        assert_eq!(
+            weno3.apply(&u, &m, &ctx(1.0)).unwrap(),
+            weno3.apply(&u, &m, &ctx(1e-3)).unwrap()
+        );
+        assert_eq!(
+            weno5.apply(&u, &m, &ctx(1.0)).unwrap(),
+            weno5.apply(&u, &m, &ctx(1e-3)).unwrap()
+        );
     }
 
     // ── Wave speed (DA-073) ─────────────────────────────────────────────────

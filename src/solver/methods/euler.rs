@@ -28,17 +28,28 @@
 //!
 //! ## Stability
 //!
-//! For explicit methods, stability requires the CFL condition:
+//! An advective term limits the step of an explicit method: with `s` the
+//! largest wave speed the model declares
+//! ([`PhysicalModel::max_wave_speed`](crate::model::traits::PhysicalModel::max_wave_speed))
+//! and `Δx` the characteristic length of the mesh, the Courant number must
+//! satisfy
 //!
-//! $$\text{CFL} = \frac{v \, \Delta t}{\Delta x} \leq 1$$
+//! $$C = \frac{s \cdot \Delta t}{\Delta x} \leq 1$$
 //!
-//! The solver does not enforce this automatically — the caller is responsible
-//! for choosing a stable `dt`.
+//! [`SteppableSolver::step`] evaluates `s` on the state at the start of the
+//! step and fails with `OxiflowError::PreconditionFailed` (context
+//! `"ForwardEulerSolver::step"`) before advancing when `dt` exceeds
+//! `Δx / s`, the message giving the Courant number and the limit
+//! ([DA-073](https://github.com/biface/oxiflow/issues/229)). The condition is necessary, not sufficient: forward
+//! Euler with a centred flux is unstable at any step in pure advection. A
+//! model that declares no speed is not checked; the diffusive (Fourier)
+//! limit is never checked.
 
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
-use crate::solver::methods::{evaluate_derivative, SteppableSolver};
+use crate::solver::methods::stability_limits::require_within_advective_limit;
+use crate::solver::methods::{evaluate_derivative_and_step_limit, SteppableSolver};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -115,7 +126,9 @@ impl SteppableSolver for ForwardEulerSolver {
         // once, for every integrator — see
         // `solver::methods::evaluate_derivative`. `state` is corrected
         // in-place by boundary conditions before the derivative is taken.
-        let du_dt = evaluate_derivative(domain, chain, state, t, dt)?;
+        // The advective step limit comes from the same context (DA-073).
+        let (du_dt, limit) = evaluate_derivative_and_step_limit(domain, chain, state, t, dt)?;
+        require_within_advective_limit("ForwardEulerSolver::step", dt, limit)?;
 
         // Euler step: u_next = u + dt * du_dt
         euler_step(state, &du_dt, dt)
@@ -149,7 +162,7 @@ mod tests {
     use crate::context::value::ContextValue;
     use crate::mesh::{Mesh, UniformGrid1D};
     use crate::model::traits::{PhysicalModel, RequiresContext};
-    use crate::model::{ExponentialDecay, ZeroDerivative};
+    use crate::model::{DeclaredWaveSpeed, ExponentialDecay, ZeroDerivative};
     use crate::solver::config::{
         IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration,
     };
@@ -471,5 +484,32 @@ mod tests {
         let u = ContextValue::ScalarField(DVector::from_element(3, 1.0));
         let du = ContextValue::ScalarField(DVector::from_element(2, 0.1));
         assert!(euler_step(&u, &du, 0.1).is_err());
+    }
+
+    // ── Advective step limit (DA-073) ─────────────────────────────────────────
+
+    #[test]
+    fn a_step_above_the_advective_limit_is_refused() {
+        // 11 nodes on (0, 1): dx = 0.1; speed 10: dt_max = 0.01.
+        let scenario = Scenario::single(Box::new(DeclaredWaveSpeed { speed: 10.0 }), make_mesh(11));
+        let err = ForwardEulerSolver
+            .solve(&scenario, &make_config(0.1, 0.02))
+            .unwrap_err();
+        match err {
+            OxiflowError::PreconditionFailed { context, message } => {
+                assert_eq!(context, "ForwardEulerSolver::step");
+                assert!(message.contains("Courant number 2."), "{message}");
+            }
+            other => panic!("unexpected error {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_step_within_the_advective_limit_runs() {
+        let scenario = Scenario::single(Box::new(DeclaredWaveSpeed { speed: 10.0 }), make_mesh(11));
+        let result = ForwardEulerSolver
+            .solve(&scenario, &make_config(0.1, 0.005))
+            .unwrap();
+        assert_eq!(result.n_steps, 20);
     }
 }

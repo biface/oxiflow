@@ -59,14 +59,30 @@
 //! ## Stability
 //!
 //! Classical RK4 has a larger stability region than forward Euler along the
-//! imaginary axis, but is still explicit: the CFL condition
-//! $\text{CFL} = v\,\Delta t / \Delta x \leq 1$ still bounds the usable
-//! step size. The solver does not enforce this automatically.
+//! imaginary axis, but is still explicit: an advective term limits its
+//! step. With `s` the largest wave speed the model declares
+//! ([`PhysicalModel::max_wave_speed`](crate::model::traits::PhysicalModel::max_wave_speed))
+//! and `Δx` the characteristic length of the mesh, the Courant number must
+//! satisfy
+//!
+//! $$C = \frac{s \cdot \Delta t}{\Delta x} \leq 1$$
+//!
+//! [`SteppableSolver::step`] evaluates `s` on the state at the start of the
+//! step, with the first stage, and fails with
+//! `OxiflowError::PreconditionFailed` (context `"RK4Solver::step"`) before
+//! advancing when `dt` exceeds `Δx / s`, the message giving the Courant
+//! number and the limit ([DA-073](https://github.com/biface/oxiflow/issues/229)). The limit of 1 is a necessary
+//! condition, the same for all explicit integrators of the crate; RK4 with
+//! an upwind flux would tolerate about 1.4. A model that declares no speed
+//! is not checked; the diffusive (Fourier) limit is never checked.
 
 use crate::context::error::OxiflowError;
 use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
-use crate::solver::methods::{evaluate_derivative, SteppableSolver};
+use crate::solver::methods::stability_limits::require_within_advective_limit;
+use crate::solver::methods::{
+    evaluate_derivative, evaluate_derivative_and_step_limit, SteppableSolver,
+};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -140,8 +156,10 @@ impl SteppableSolver for RK4Solver {
         let half_dt = dt / 2.0;
 
         // Stage 1: k1 = f(t, u). BCs are applied to `state` itself here —
-        // it is the persisted solution state, same contract as Euler.
-        let k1 = evaluate_derivative(domain, chain, state, t, dt)?;
+        // it is the persisted solution state, same contract as Euler. The
+        // advective step limit comes from the same context (DA-073).
+        let (k1, limit) = evaluate_derivative_and_step_limit(domain, chain, state, t, dt)?;
+        require_within_advective_limit("RK4Solver::step", dt, limit)?;
 
         // Stage 2: k2 = f(t + dt/2, u + dt/2 * k1)
         let mut u2 = state.add_scaled(half_dt, &k1)?;
@@ -194,7 +212,7 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::mesh::{Mesh, UniformGrid1D};
     use crate::model::traits::{PhysicalModel, RequiresContext};
-    use crate::model::{ExponentialDecay, ZeroDerivative};
+    use crate::model::{DeclaredWaveSpeed, ExponentialDecay, ZeroDerivative};
     use crate::solver::config::{
         IntegratorKind, SolverConfiguration, StepControl, TimeConfiguration,
     };
@@ -521,5 +539,32 @@ mod tests {
         let k_ok = ContextValue::ScalarField(DVector::from_element(3, 0.1));
         let k_bad = ContextValue::ScalarField(DVector::from_element(2, 0.1));
         assert!(rk4_combine(&u, &k_ok, &k_ok, &k_bad, &k_ok, 0.1).is_err());
+    }
+
+    // ── Advective step limit (DA-073) ─────────────────────────────────────────
+
+    #[test]
+    fn a_step_above_the_advective_limit_is_refused() {
+        // 11 nodes on (0, 1): dx = 0.1; speed 10: dt_max = 0.01.
+        let scenario = Scenario::single(Box::new(DeclaredWaveSpeed { speed: 10.0 }), make_mesh(11));
+        let err = RK4Solver
+            .solve(&scenario, &make_config(0.1, 0.02))
+            .unwrap_err();
+        match err {
+            OxiflowError::PreconditionFailed { context, message } => {
+                assert_eq!(context, "RK4Solver::step");
+                assert!(message.contains("Courant number 2."), "{message}");
+            }
+            other => panic!("unexpected error {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_step_within_the_advective_limit_runs() {
+        let scenario = Scenario::single(Box::new(DeclaredWaveSpeed { speed: 10.0 }), make_mesh(11));
+        let result = RK4Solver
+            .solve(&scenario, &make_config(0.1, 0.005))
+            .unwrap();
+        assert_eq!(result.n_steps, 20);
     }
 }

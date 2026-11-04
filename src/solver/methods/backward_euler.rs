@@ -14,8 +14,9 @@
 //!
 //! ## Stability
 //!
-//! Unconditionally A-stable for `f` affine in `u` — no CFL-style
-//! restriction on `dt`, unlike the explicit methods. This is the whole
+//! Unconditionally A-stable for `f` affine in `u` — no Courant-number
+//! restriction on `dt`, unlike the explicit methods, and none is checked:
+//! a flux scheme runs at any Courant number here ([DA-073](https://github.com/biface/oxiflow/issues/229)). This is the whole
 //! point: stiff problems (`λΔt ≫ 1`) that would blow up under
 //! `ForwardEulerSolver` remain bounded here.
 //!

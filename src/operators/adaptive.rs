@@ -78,8 +78,8 @@ use crate::model::traits::RequiresContext;
 use crate::operators::limiters::{LimitedFlux, Limiter};
 use crate::operators::weno::WENO3;
 use crate::operators::{
-    check_cfl, ghost_cell_wide_divergence, periodic_wide_divergence, truncated_wide_divergence,
-    FluxBoundary, FluxDivergenceOperator,
+    ghost_cell_wide_divergence, periodic_wide_divergence, truncated_wide_divergence, FluxBoundary,
+    FluxDivergenceOperator,
 };
 
 /// Adaptive blend of [`WENO3`] and [`LimitedFlux`], gated by a global
@@ -156,7 +156,6 @@ impl FluxDivergenceOperator for AdaptiveFlux {
     ) -> Result<ContextValue, OxiflowError> {
         let u = field.as_scalar_field()?;
         let dx = mesh.characteristic_length();
-        check_cfl("AdaptiveFlux", self.velocity, ctx.time_step(), dx)?;
 
         let gate_active = self.peclet(dx) > self.peclet_threshold;
         let face = |u: &DVector<f64>, n: usize, i: usize| self.face_flux(dx, u, n, i, gate_active);
@@ -377,15 +376,18 @@ mod tests {
         assert!(matches!(err, OxiflowError::InvalidDomain(_)));
     }
 
-    // ── CFL check ───────────────────────────────────────────────────────────
+    // ── Stability (DA-073) ──────────────────────────────────────────────────
 
     #[test]
-    fn rejects_cfl_violation() {
+    fn does_not_depend_on_the_time_step() {
+        // Courant number 40 on this grid: no stability check in the scheme.
         let m = mesh(5);
         let op = AdaptiveFlux::new(10.0, 0.0, Limiter::VanLeer, 1.0, FluxBoundary::Periodic);
-        let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
-        let err = op.apply(&u, &m, &ctx(1.0)).unwrap_err();
-        assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
+        let u = ContextValue::ScalarField(DVector::from_vec(vec![0.2, 1.3, -0.7, 2.1, 0.0]));
+        assert_eq!(
+            op.apply(&u, &m, &ctx(1.0)).unwrap(),
+            op.apply(&u, &m, &ctx(1e-3)).unwrap()
+        );
     }
 
     // ── Wave speed (DA-073) ─────────────────────────────────────────────────
