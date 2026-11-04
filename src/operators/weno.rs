@@ -387,6 +387,15 @@ impl FluxDivergenceOperator for WENO3 {
         // treatments is 2 cells (see the GhostCell margins above).
         2
     }
+
+    fn max_wave_speed(
+        &self,
+        _field: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError> {
+        // Constant advection velocity: the same speed on any field.
+        Ok(self.velocity.abs())
+    }
 }
 
 // ── WENO5 operator ────────────────────────────────────────────────────────────
@@ -538,6 +547,15 @@ impl FluxDivergenceOperator for WENO5 {
         // Widest reach across both upwind directions and all three boundary
         // treatments is 3 cells (see the GhostCell margins above).
         3
+    }
+
+    fn max_wave_speed(
+        &self,
+        _field: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError> {
+        // Constant advection velocity: the same speed on any field.
+        Ok(self.velocity.abs())
     }
 }
 
@@ -796,6 +814,17 @@ mod tests {
         let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
         let err = op.apply(&u, &m, &ctx(1.0)).unwrap_err();
         assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
+    }
+
+    // ── Wave speed (DA-073) ─────────────────────────────────────────────────
+
+    #[test]
+    fn weno_schemes_declare_the_absolute_advection_velocity() {
+        let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
+        let weno3 = WENO3::new(-3.0, 0.1, FluxBoundary::Periodic);
+        let weno5 = WENO5::new(-3.0, 0.1, FluxBoundary::Periodic);
+        assert_eq!(weno3.max_wave_speed(&u, &ctx(0.01)).unwrap(), 3.0);
+        assert_eq!(weno5.max_wave_speed(&u, &ctx(0.01)).unwrap(), 3.0);
     }
 
     // ── Truncation boundary treatment (#DD-042 amendment scope) ───────────

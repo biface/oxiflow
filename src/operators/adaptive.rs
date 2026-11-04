@@ -241,6 +241,15 @@ impl FluxDivergenceOperator for AdaptiveFlux {
         // repeat the literal, so the two can never drift apart.
         self.weno.stencil_radius()
     }
+
+    fn max_wave_speed(
+        &self,
+        _field: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError> {
+        // Constant advection velocity: the same speed on any field.
+        Ok(self.velocity.abs())
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -377,5 +386,14 @@ mod tests {
         let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
         let err = op.apply(&u, &m, &ctx(1.0)).unwrap_err();
         assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
+    }
+
+    // ── Wave speed (DA-073) ─────────────────────────────────────────────────
+
+    #[test]
+    fn declares_the_absolute_advection_velocity() {
+        let op = AdaptiveFlux::new(-3.0, 0.1, Limiter::VanLeer, 1.0, FluxBoundary::Periodic);
+        let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
+        assert_eq!(op.max_wave_speed(&u, &ctx(0.01)).unwrap(), 3.0);
     }
 }

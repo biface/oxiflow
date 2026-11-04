@@ -182,6 +182,24 @@ impl PhysicalModel for CompositeModel {
     fn description(&self) -> Option<&str> {
         Some("composite model — sums multiple PhysicalModel contributions (DA-037)")
     }
+
+    /// The sum of the speeds the contributions declare
+    /// ([DA-073](https://github.com/biface/oxiflow/issues/229)), `None` if none declares
+    /// one. Each advective term moves information at most at its own speed,
+    /// so their sum bounds the speed of the summed flux.
+    fn max_wave_speed(
+        &self,
+        state: &ContextValue,
+        ctx: &ComputeContext,
+    ) -> Result<Option<f64>, OxiflowError> {
+        let mut total = None;
+        for op in &self.operators {
+            if let Some(speed) = op.max_wave_speed(state, ctx)? {
+                *total.get_or_insert(0.0) += speed;
+            }
+        }
+        Ok(total)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -190,6 +208,7 @@ impl PhysicalModel for CompositeModel {
 mod tests {
     use super::*;
     use crate::mesh::structured::UniformGrid1D;
+    use crate::model::DeclaredWaveSpeed;
     use nalgebra::DVector;
 
     struct ConstantSource(f64);
@@ -287,5 +306,51 @@ mod tests {
         .unwrap();
         assert_eq!(model.len(), 2);
         assert!(!model.is_empty());
+    }
+
+    // ── max_wave_speed (DA-073) ───────────────────────────────────────────────
+
+    fn wave_speed_of(model: &CompositeModel) -> Option<f64> {
+        let state = ContextValue::ScalarField(DVector::from_element(4, 1.0));
+        let ctx = ComputeContext::new(0.0, 0.01);
+        model.max_wave_speed(&state, &ctx).unwrap()
+    }
+
+    #[test]
+    fn max_wave_speed_sums_the_declared_speeds() {
+        let model = CompositeModel::new(
+            vec![
+                Box::new(DeclaredWaveSpeed { speed: 2.0 }),
+                Box::new(ConstantSource(1.0)),
+                Box::new(DeclaredWaveSpeed { speed: 0.5 }),
+            ],
+            "speed_sum_test",
+        )
+        .unwrap();
+        assert_eq!(wave_speed_of(&model), Some(2.5));
+    }
+
+    #[test]
+    fn max_wave_speed_is_none_when_no_contribution_declares_one() {
+        let model = CompositeModel::new(
+            vec![Box::new(ConstantSource(1.0)), Box::new(NeedsTime)],
+            "no_speed_test",
+        )
+        .unwrap();
+        assert_eq!(wave_speed_of(&model), None);
+    }
+
+    #[test]
+    fn max_wave_speed_keeps_a_declared_zero() {
+        // Zero is a declared speed (no limit), not an absent one.
+        let model = CompositeModel::new(
+            vec![
+                Box::new(ConstantSource(1.0)),
+                Box::new(DeclaredWaveSpeed { speed: 0.0 }),
+            ],
+            "zero_speed_test",
+        )
+        .unwrap();
+        assert_eq!(wave_speed_of(&model), Some(0.0));
     }
 }

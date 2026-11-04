@@ -11,6 +11,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `PhysicalModel::max_wave_speed` returns the largest advective wave speed
+  of a model on a state, `None` by default for a model without an advective
+  term ([DA-073](https://github.com/biface/oxiflow/issues/229),
+  [#228](https://github.com/biface/oxiflow/issues/228)). `DiscretizedModel`
+  returns the speed of its scheme, `CompositeModel` the sum of the speeds
+  its contributions declare, and `PrescribedInitialState` the speed of the
+  model it wraps. A model that wraps another one must forward the method.
 - Domains described by data ([#108](https://github.com/biface/oxiflow/issues/108),
   amendment 1 of [DT-027](https://github.com/biface/oxiflow/issues/75)):
   `DomainSpec` holds a mesh, a model, boundary conditions and an optional
@@ -290,6 +297,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Such a state used to be integrated without any error when no calculator
   or boundary condition reads the mesh: a run on a 10-node mesh from a
   7-value state returned 7-value states ([#212](https://github.com/biface/oxiflow/issues/212)).
+- **Breaking:** `FluxDivergenceOperator` gains a required method,
+  `max_wave_speed`, returning the largest absolute wave speed of the scheme
+  on a field, from the field and the context. Like `stencil_radius`, it has
+  no default: a scheme implemented outside the crate must state its speed,
+  `0.0` for a flux that transports nothing. The schemes of the crate
+  (`FVCenteredFlux`, `FVUpwindFlux`, `WENO3`, `WENO5`, `LimitedFlux`,
+  `AdaptiveFlux`) return the absolute value of their advection velocity
+  ([DA-073](https://github.com/biface/oxiflow/issues/229),
+  [#228](https://github.com/biface/oxiflow/issues/228)).
 - Each reference model of the examples, tests and benchmarks (diffusion,
   viscous Burgers, multi-compound Langmuir, multi-field lahar, lahar–lake)
   is defined once under `rsc/models/` and included by every target that

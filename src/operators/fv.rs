@@ -435,6 +435,15 @@ impl FluxDivergenceOperator for FVCenteredFlux {
         // Two-point face flux — one neighbor on each side.
         1
     }
+
+    fn max_wave_speed(
+        &self,
+        _field: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError> {
+        // Constant advection velocity: the same speed on any field.
+        Ok(self.velocity.abs())
+    }
 }
 
 // ── FVUpwindFlux ──────────────────────────────────────────────────────────────
@@ -527,6 +536,15 @@ impl FluxDivergenceOperator for FVUpwindFlux {
     fn stencil_radius(&self) -> usize {
         // Two-point face flux — one neighbor on each side.
         1
+    }
+
+    fn max_wave_speed(
+        &self,
+        _field: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError> {
+        // Constant advection velocity: the same speed on any field.
+        Ok(self.velocity.abs())
     }
 }
 
@@ -681,6 +699,17 @@ mod tests {
         let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
         // |v|*dt/dx = 1.0 * 0.2 / 0.25 = 0.8 ≤ 1
         assert!(op.apply(&u, &m, &ctx(0.2)).is_ok());
+    }
+
+    // ── Wave speed (DA-073) ─────────────────────────────────────────────────
+
+    #[test]
+    fn fluxes_declare_the_absolute_advection_velocity() {
+        let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
+        let centered = FVCenteredFlux::new(-3.0, 0.1, FluxBoundary::Periodic);
+        let upwind = FVUpwindFlux::new(-3.0, 0.1, FluxBoundary::Periodic);
+        assert_eq!(centered.max_wave_speed(&u, &ctx(0.01)).unwrap(), 3.0);
+        assert_eq!(upwind.max_wave_speed(&u, &ctx(0.01)).unwrap(), 3.0);
     }
 
     // ── Truncation boundary treatment (#DD-042 amendment scope) ───────────────

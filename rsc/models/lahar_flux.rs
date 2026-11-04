@@ -120,6 +120,26 @@ impl RequiresContext for ShallowLayerFlux {
 }
 
 impl ShallowLayerFlux {
+    /// Largest cell wave speed `|u| + √(g·h)` of `state` (the shallow-water
+    /// eigenvalues, on the raw, unreconstructed cell values: a cheap upper
+    /// bound) and the node where it occurs. A NaN speed is kept, so that a
+    /// non-finite state is not hidden behind a finite neighbour.
+    fn fastest_cell(&self, state: &DMatrix<f64>) -> Result<(f64, usize), OxiflowError> {
+        let mut max_speed = 0.0_f64;
+        let mut max_at = 0usize;
+        for i in 0..state.nrows() {
+            let (h, u, _) =
+                self.physics
+                    .primitives(state[(i, COL_M)], state[(i, COL_P)], state[(i, COL_S)])?;
+            let speed = self.physics.wave_speed(h, u);
+            if speed.is_nan() || speed > max_speed {
+                max_speed = speed;
+                max_at = i;
+            }
+        }
+        Ok((max_speed, max_at))
+    }
+
     /// Flux divergence of the `(m, p, s)` system, with one treatment per
     /// domain edge (see [`EdgeTreatment`]). [`FluxDivergenceOperator::apply`]
     /// is this method with [`EdgeTreatment::NeighbourDivergence`] on both
@@ -144,18 +164,7 @@ impl ShallowLayerFlux {
         // CFL check reproduced directly -- operators::check_cfl is
         // pub(crate), not visible from an example. Uses the raw
         // (unreconstructed) cell wave speeds as a cheap upper bound.
-        let mut max_speed = 0.0_f64;
-        let mut max_at = 0usize;
-        for i in 0..n {
-            let (h, u, _) =
-                self.physics
-                    .primitives(state[(i, COL_M)], state[(i, COL_P)], state[(i, COL_S)])?;
-            let speed = self.physics.wave_speed(h, u);
-            if speed > max_speed {
-                max_speed = speed;
-                max_at = i;
-            }
-        }
+        let (max_speed, max_at) = self.fastest_cell(state)?;
         if max_speed * dt / dx > 1.0 {
             let (h, u, psi) = self.physics.primitives(
                 state[(max_at, COL_M)],
@@ -301,6 +310,14 @@ impl FluxDivergenceOperator for ShallowLayerFlux {
     fn stencil_radius(&self) -> usize {
         1
     }
+
+    fn max_wave_speed(
+        &self,
+        field: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError> {
+        Ok(self.fastest_cell(field.as_vector_field()?)?.0)
+    }
 }
 
 // ── Edge treatments ───────────────────────────────────────────────────────────
@@ -359,5 +376,13 @@ impl FluxDivergenceOperator for ShallowLayerFluxWithEdges {
 
     fn stencil_radius(&self) -> usize {
         self.flux.stencil_radius()
+    }
+
+    fn max_wave_speed(
+        &self,
+        field: &ContextValue,
+        ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError> {
+        self.flux.max_wave_speed(field, ctx)
     }
 }

@@ -243,3 +243,49 @@ impl PhysicalModel for TridiagonalDiffusion {
         "tridiagonal_diffusion"
     }
 }
+
+/// `du/dt = 0` from `u = 1` at every node, declaring an advective wave
+/// speed `speed` without transporting anything: exercises the forwarding
+/// of [`PhysicalModel::max_wave_speed`] and the advective step limit of
+/// the explicit integrators on a field that does not move
+/// ([DA-073](https://github.com/biface/oxiflow/issues/229)).
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct DeclaredWaveSpeed {
+    pub(crate) speed: f64,
+}
+
+#[cfg(test)]
+impl RequiresContext for DeclaredWaveSpeed {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl PhysicalModel for DeclaredWaveSpeed {
+    fn compute_physics(
+        &self,
+        state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let u = state.as_scalar_field()?;
+        Ok(ContextValue::ScalarField(DVector::zeros(u.len())))
+    }
+
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+    }
+
+    fn name(&self) -> &str {
+        "declared_wave_speed"
+    }
+
+    fn max_wave_speed(
+        &self,
+        _state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<Option<f64>, OxiflowError> {
+        Ok(Some(self.speed))
+    }
+}

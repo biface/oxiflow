@@ -184,6 +184,14 @@ impl PhysicalModel for PrescribedInitialState {
     fn description(&self) -> Option<&str> {
         self.model.description()
     }
+
+    fn max_wave_speed(
+        &self,
+        state: &ContextValue,
+        ctx: &ComputeContext,
+    ) -> Result<Option<f64>, OxiflowError> {
+        self.model.max_wave_speed(state, ctx)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -216,6 +224,18 @@ mod tests {
         let model = prescribed();
         assert_eq!(model.name(), FullModel.name());
         assert_eq!(model.description(), FullModel.description());
+    }
+
+    #[test]
+    fn wave_speed_is_that_of_the_wrapped_model() {
+        let ctx = ComputeContext::new(0.0, 0.01);
+        let state = ContextValue::ScalarField(DVector::from_vec(vec![1.0, 2.0, 3.0]));
+        let declared = PrescribedInitialState::new(
+            Box::new(crate::model::DeclaredWaveSpeed { speed: 3.0 }),
+            state.clone(),
+        );
+        assert_eq!(declared.max_wave_speed(&state, &ctx).unwrap(), Some(3.0));
+        assert_eq!(prescribed().max_wave_speed(&state, &ctx).unwrap(), None);
     }
 
     #[test]

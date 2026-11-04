@@ -135,6 +135,40 @@ pub trait PhysicalModel: RequiresContext + Send + Sync {
     fn description(&self) -> Option<&str> {
         None
     }
+
+    /// Maximum absolute wave speed of the advective terms of the model on
+    /// `state`, if the model declares one ([DA-073](https://github.com/biface/oxiflow/issues/229)).
+    ///
+    /// The explicit integrators derive their advective step limit from it.
+    /// `None` by default: a model without an advective term, or one that
+    /// does not declare it, has no advective limit. The value, when given,
+    /// must be finite and non-negative.
+    ///
+    /// The models of this crate that wrap or combine other models forward
+    /// it: [`DiscretizedModel`](crate::model::DiscretizedModel) returns the
+    /// speed of its scheme
+    /// ([`FluxDivergenceOperator::max_wave_speed`](crate::operators::FluxDivergenceOperator::max_wave_speed)),
+    /// [`CompositeModel`](crate::model::CompositeModel) the sum of the speeds
+    /// its contributions declare, a bound for a sum of advective terms, and
+    /// [`PrescribedInitialState`](crate::model::PrescribedInitialState) the
+    /// speed of the model it wraps.
+    ///
+    /// # Decorators
+    ///
+    /// A model that wraps another `PhysicalModel` must forward this method,
+    /// as it forwards `compute_physics`. The default would hide the speed of
+    /// the wrapped model, whose advective limit would then not be checked.
+    ///
+    /// # Errors
+    ///
+    /// Whatever reading `state` or `ctx` raises.
+    fn max_wave_speed(
+        &self,
+        _state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<Option<f64>, OxiflowError> {
+        Ok(None)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -144,6 +144,37 @@ pub trait FluxDivergenceOperator: RequiresContext + Send + Sync {
     /// [DA-043](https://github.com/biface/oxiflow/issues/103), amendment 1, for the rejected alternative
     /// (`PhysicalModel::jacobian_bandwidth`) and why it was rejected.
     fn stencil_radius(&self) -> usize;
+
+    /// Maximum absolute wave speed of the scheme on `field`: the largest
+    /// speed at which `F` carries information, i.e. the largest absolute
+    /// eigenvalue of `∂F/∂u` over the field ([DA-073](https://github.com/biface/oxiflow/issues/229)).
+    ///
+    /// This is physics, not a time-integration setting (INV-8): the scheme
+    /// states how fast its flux transports the field, and the explicit
+    /// integrators derive their advective step limit from it. A scheme with
+    /// a constant advection velocity returns its absolute value; `field`
+    /// and `ctx` are given so that a speed depending on the state (shallow
+    /// water, `|u| + √(g·h)`) or on a variable declared in
+    /// [`RequiresContext::required_variables`] can be computed the same
+    /// way.
+    ///
+    /// No default, the same posture as [`Self::stencil_radius`]: every
+    /// implementation states its speed, `0.0` for a flux that transports
+    /// nothing. The value must be finite and non-negative. It reaches the
+    /// solver through
+    /// [`PhysicalModel::max_wave_speed`](crate::model::traits::PhysicalModel::max_wave_speed),
+    /// which [`DiscretizedModel`](crate::model::DiscretizedModel) forwards
+    /// to its scheme.
+    ///
+    /// # Errors
+    ///
+    /// Whatever reading `field` or `ctx` raises, e.g.
+    /// `OxiflowError::TypeMismatch` for a field of the wrong variant.
+    fn max_wave_speed(
+        &self,
+        field: &ContextValue,
+        ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError>;
 }
 
 // ── FluxBoundary ──────────────────────────────────────────────────────────────

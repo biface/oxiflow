@@ -188,6 +188,17 @@ impl<Op: FluxDivergenceOperator> PhysicalModel for DiscretizedModel<Op> {
     fn description(&self) -> Option<&str> {
         Some("discretized model — wraps a FluxDivergenceOperator as -∇·F(u, ∇u) (DA-038)")
     }
+
+    /// The speed of the wrapped scheme
+    /// ([DA-073](https://github.com/biface/oxiflow/issues/229)): always declared, since every
+    /// [`FluxDivergenceOperator`] states one.
+    fn max_wave_speed(
+        &self,
+        state: &ContextValue,
+        ctx: &ComputeContext,
+    ) -> Result<Option<f64>, OxiflowError> {
+        self.scheme.max_wave_speed(state, ctx).map(Some)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -196,6 +207,8 @@ impl<Op: FluxDivergenceOperator> PhysicalModel for DiscretizedModel<Op> {
 mod tests {
     use super::*;
     use crate::mesh::structured::UniformGrid1D;
+    use crate::operators::fv::FVUpwindFlux;
+    use crate::operators::FluxBoundary;
 
     /// Minimal `FluxDivergenceOperator` fixture: returns a constant field,
     /// declares one required variable to exercise delegation.
@@ -224,6 +237,15 @@ mod tests {
             // Constant output, no neighbor access at all.
             0
         }
+
+        fn max_wave_speed(
+            &self,
+            _field: &ContextValue,
+            _ctx: &ComputeContext,
+        ) -> Result<f64, OxiflowError> {
+            // Constant output, nothing is transported.
+            Ok(0.0)
+        }
     }
 
     fn fixture(value: f64) -> DiscretizedModel<ConstantFlux> {
@@ -242,6 +264,16 @@ mod tests {
             .unwrap()
             .iter()
             .all(|&v| (v + 3.0).abs() < 1e-12));
+    }
+
+    #[test]
+    fn max_wave_speed_is_that_of_the_scheme() {
+        let mesh = Arc::new(UniformGrid1D::new(4, 0.0, 1.0).unwrap());
+        let scheme = Arc::new(FVUpwindFlux::new(-2.0, 0.1, FluxBoundary::Periodic));
+        let model = DiscretizedModel::new(scheme, mesh, "upwind_speed_test");
+        let state = ContextValue::ScalarField(DVector::from_element(4, 1.0));
+        let ctx = ComputeContext::new(0.0, 0.01);
+        assert_eq!(model.max_wave_speed(&state, &ctx).unwrap(), Some(2.0));
     }
 
     #[test]
