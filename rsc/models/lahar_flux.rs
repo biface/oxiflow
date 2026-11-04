@@ -52,11 +52,12 @@ pub(crate) struct ShallowLayerFlux {
 
 /// Measured: `benches/lahar_multifield.rs`'s `flux_dispatch_diagnostic`,
 /// which times this operator's `apply` on a uniform synthetic flow, on the
-/// design machine (12 logical cores) for v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)): parallel is
-/// 1.16x slower than sequential at 10,000 nodes and 0.76x its time at
-/// 100,000, so the default sits at 100,000. Each node reads and writes more
-/// memory than it computes, which puts the crossover well beyond
-/// `LaharSource`'s.
+/// design machine (12 logical cores) for v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)), and measured
+/// again once `apply` no longer checked the advective stability condition
+/// itself ([#228](https://github.com/biface/oxiflow/issues/228)): parallel is 1.10x slower than sequential at
+/// 10,000 nodes and 0.69x its time at 100,000, so the default sits at
+/// 100,000. Each node reads and writes more memory than it computes, which
+/// puts the crossover well beyond `LaharSource`'s.
 #[cfg(feature = "parallel")]
 pub(crate) fn default_flux_parallel_threshold() -> usize {
     100_000
