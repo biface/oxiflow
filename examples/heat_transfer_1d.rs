@@ -127,7 +127,7 @@ use nalgebra::DVector;
 use oxiflow::solver::{
     config::IntegratorKind,
     methods::{BDF2Solver, BackwardEulerSolver, CrankNicolsonSolver},
-    SimulationResult, Solver,
+    Solver,
 };
 
 #[path = "../rsc/models/graded_conductivity.rs"]
@@ -136,7 +136,7 @@ mod graded_conductivity;
 mod heat_transfer_1d;
 
 use heat_transfer_1d::{
-    bar, cooling_run, fourier_cooling, graded_run, graded_steady, positions, solve, Run,
+    bar, cooling_run, fourier_cooling, graded_run, graded_steady, positions, solve, state_at, Run,
     COOLING_DT, COOLING_ENDS, COOLING_INITIAL, GRADED_COLD, GRADED_DT, GRADED_END_TIME, GRADED_HOT,
     LENGTH, NEWTON_ITERATIONS,
 };
@@ -150,20 +150,6 @@ const COOLING_EARLY_TIME: f64 = 10.0;
 const COOLING_TOLERANCE: f64 = 1e-2;
 /// Case (b): tolerance at the end of the run, against the steady profile.
 const GRADED_TOLERANCE: f64 = 5e-4;
-
-/// The saved state at `time`, or an error naming the run.
-fn state_at<'a>(
-    result: &'a SimulationResult,
-    time: f64,
-    label: &str,
-) -> Result<&'a DVector<f64>, Box<dyn Error>> {
-    let index = result
-        .times
-        .iter()
-        .position(|&t| (t - time).abs() <= 1e-9 * time.max(1.0))
-        .ok_or_else(|| format!("{label}: no state saved at t = {time} s"))?;
-    Ok(result.states[index].as_scalar_field()?)
-}
 
 /// max |numerical - exact| over the nodes.
 fn max_error(numerical: &DVector<f64>, xs: &[f64], exact: impl Fn(f64) -> f64) -> f64 {

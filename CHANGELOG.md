@@ -195,6 +195,15 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   in a web browser and on the wiki; a viewer that does not animate shows
   the first frame. Both examples take the settings of the run from
   `rsc/models/lahar_outfall.rs` ([#149](https://github.com/biface/oxiflow/issues/149)).
+- `examples/heat_transfer_1d_plot` draws the two runs of
+  `heat_transfer_1d` against their exact solutions:
+  `heat_transfer_1d_cooling.svg`, the cooling bar at four times against the
+  Fourier series, and `heat_transfer_1d_graded.svg`, the approach of the
+  graded bar to its steady profile, with the linear profile of a
+  homogeneous bar for comparison. The model, the runs and the exact
+  solutions move to `rsc/models/heat_transfer_1d.rs`, shared by both
+  examples; the output of `heat_transfer_1d` is unchanged
+  ([#149](https://github.com/biface/oxiflow/issues/149)).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
   builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and

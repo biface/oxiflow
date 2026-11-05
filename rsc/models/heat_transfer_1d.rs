@@ -12,6 +12,7 @@
 //! Requires `rsc/models/graded_conductivity.rs` as a sibling module named
 //! `graded_conductivity`.
 
+use std::error::Error;
 use std::f64::consts::PI;
 use std::sync::Arc;
 
@@ -267,6 +268,20 @@ pub(crate) fn solve(run: &Run, solver: &dyn Solver) -> Result<SimulationResult, 
         move |_| lambda.slope(),
     )?));
     solver.solve(&scenario, &config)
+}
+
+/// The state saved at `time`, or an error naming the run `label`.
+pub(crate) fn state_at<'a>(
+    result: &'a SimulationResult,
+    time: f64,
+    label: &str,
+) -> Result<&'a DVector<f64>, Box<dyn Error>> {
+    let index = result
+        .times
+        .iter()
+        .position(|&t| (t - time).abs() <= 1e-9 * time.max(1.0))
+        .ok_or_else(|| format!("{label}: no state saved at t = {time} s"))?;
+    Ok(result.states[index].as_scalar_field()?)
 }
 
 // ── Exact solutions ───────────────────────────────────────────────────────
