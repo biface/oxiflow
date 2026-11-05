@@ -19,7 +19,7 @@
 //! full HOW pole (`TimeConfiguration` + calculators); see [#104](https://github.com/biface/oxiflow/issues/104)'s closing
 //! comment for the rationale.
 //!
-//! ## Scope of this first increment
+//! ## Scope
 //!
 //! [`IntegratorSpec::BackwardEuler`], [`IntegratorSpec::CrankNicolson`]
 //! ([#115](https://github.com/biface/oxiflow/issues/115)), and [`IntegratorSpec::BDF2`] ([#116](https://github.com/biface/oxiflow/issues/116), sparse fields since [#133](https://github.com/biface/oxiflow/issues/133)),
@@ -27,10 +27,20 @@
 //! gated behind the `sparse` feature:
 //! without it, a config DTO for these integrators adds nothing over the
 //! existing [`super::IntegratorKind`] labels, since the dense path takes
-//! no parameters. Remaining integrators (`RK4`, `DoPri45`) and the WHAT
-//! axis (`ModelConfig`/`MeshConfig`/`BoundaryConditionConfig`) are tracked
-//! as follow-up, not blocking this issue's closure (per [#104](https://github.com/biface/oxiflow/issues/104)'s own stated
-//! scope). `newton_convergence`/`jacobian_strategy`/`max_iterations`
+//! no parameters. The explicit integrators (`ForwardEulerSolver`,
+//! `RK4Solver`, `DoPri45Solver`) take none either — the tolerances of
+//! `DoPri45Solver` belong to [`super::StepControl`] — so their
+//! `IntegratorKind` label describes them fully and `IntegratorSpec` has no
+//! variant for them.
+//!
+//! The WHAT axis has its own specs since [#108](https://github.com/biface/oxiflow/issues/108):
+//! [`DomainSpec`](super::DomainSpec) builds a
+//! [`Domain`](super::Domain) from a
+//! [`MeshSpec`](crate::mesh::MeshSpec), a
+//! [`ModelSpec`](crate::model::ModelSpec), its
+//! [`BoundaryConditionSpec`](crate::boundary::BoundaryConditionSpec)s and an
+//! optional [`InitialStateSpec`](crate::model::InitialStateSpec), each in the
+//! module of what it describes. `newton_convergence`/`jacobian_strategy`/`max_iterations`
 //! ([DD-044](https://github.com/biface/oxiflow/issues/109), [#114](https://github.com/biface/oxiflow/issues/114)/[#115](https://github.com/biface/oxiflow/issues/115)/[#116](https://github.com/biface/oxiflow/issues/116)) extend all three variants — the Newton
 //! configuration is orthogonal to which integrator carries it.
 //!

@@ -15,9 +15,14 @@
 //! **Priority path (fast path)** — no calculator declares a non-empty `depends_on()`.
 //! Calculators are sorted by ascending `priority()` (stable sort, O(n log n)).
 //! A total order by priority cannot contain a cycle. Priority ranges:
-//! - **0–49**: system variables (`Time`, `TimeStep`) — injected directly by the solver
-//! - **50–99**: external data providers
-//! - **100+**: derived quantities (default)
+//! - **0–49**: values that read nothing but the state or the time: the
+//!   system variables (`Time`, `TimeStep`, injected directly by the solver,
+//!   or provided by `TimeCalculator`/`TimeStepCalculator` at 0) and the
+//!   finite-difference derivatives of the state (`FDGradientCalculator`,
+//!   `FDLaplacianCalculator`, at 10)
+//! - **50–99**: external data providers (`ExternalTabulated`,
+//!   `CoefficientField`)
+//! - **100+**: derived quantities (default; `TrapezoidalIntegral`)
 //!
 //! **Topological path (Kahn)** — at least one calculator declares a non-empty
 //! `depends_on()`. A directed acyclic graph is built from the declared dependencies:

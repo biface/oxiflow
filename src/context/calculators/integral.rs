@@ -103,7 +103,7 @@ impl ContextCalculator for TrapezoidalIntegral {
             return Err(OxiflowError::PreconditionFailed {
                 context: "TrapezoidalIntegral",
                 message: format!(
-                    "only 1D meshes are supported at J2, got spatial_dimension = {}",
+                    "only 1D meshes are supported, got spatial_dimension = {}",
                     self.mesh.spatial_dimension()
                 ),
             });
