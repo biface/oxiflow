@@ -230,6 +230,17 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bar) move from `lahar_lake_wave_simul` to `rsc/render/svg_animation.rs`,
   shared by both; the animation of `lahar_lake_wave_simul` is unchanged
   ([#149](https://github.com/biface/oxiflow/issues/149)).
+- `examples/burgers_boundary_layer_plot` draws the steady layers of
+  `burgers_boundary_layer` at Re = 50, 100 and 200 against the exact
+  profile: `burgers_boundary_layer_profiles.svg`, the velocity against the
+  distance from the wall with the 99 % thicknesses, and
+  `burgers_boundary_layer_collapse.svg`, the three layers against
+  `(1 - x) / nu`, where they fall on one curve.
+  `examples/burgers_boundary_layer_simul` animates the three runs, the shock
+  reaching the wall and the layer relaxing. The scenario, the runs and the
+  steady solution move to `rsc/models/burgers_boundary_layer.rs`, shared by
+  the three examples; the output of `burgers_boundary_layer` is unchanged
+  ([#149](https://github.com/biface/oxiflow/issues/149)).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
   builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and
