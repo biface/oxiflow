@@ -437,7 +437,7 @@ impl Scenario {
     ///
     /// ```rust
     /// # use oxiflow::context::MultiDomainState;
-    /// # use oxiflow::coupling::{CouplingOperator, Interface};
+    /// # use oxiflow::coupling::{CouplingContext, CouplingOperator, Interface};
     /// use oxiflow::mesh::UniformGrid1D;
     /// use oxiflow::solver::{Domain, DomainId, Scenario};
     /// # use nalgebra::DVector;
@@ -469,7 +469,7 @@ impl Scenario {
     /// #     fn apply(
     /// #         &self,
     /// #         states: &MultiDomainState,
-    /// #         _ctx: &ComputeContext,
+    /// #         _ctx: &CouplingContext,
     /// #         _interface: &Interface,
     /// #     ) -> Result<MultiDomainState, OxiflowError> {
     /// #         Ok(states.clone())

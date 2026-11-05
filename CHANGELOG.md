@@ -313,6 +313,17 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `AdaptiveFlux`) return the absolute value of their advection velocity
   ([DA-073](https://github.com/biface/oxiflow/issues/229),
   [#228](https://github.com/biface/oxiflow/issues/228)).
+- **Breaking:** `CouplingOperator::apply` takes a `&CouplingContext`
+  instead of a `&ComputeContext`. `CouplingContext`, in `coupling`, holds one
+  `ComputeContext` per side of the interface, read through `source()` and
+  `target()`; `time()` and `time_step()` read the time and step both share.
+  `MultiDomainOrchestrator` fills each side with the variables the operator
+  requires, and the calculators these depend on, computed on that domain's
+  current state, after the operators declared before it. An implementation
+  outside the crate changes the type of its `ctx` parameter, and reads
+  `ctx.time_step()` as before; a unit test of a coupling builds its context
+  with `CouplingContext::new(t, dt)` ([DA-011](https://github.com/biface/oxiflow/issues/11)
+  amendment 1, [#231](https://github.com/biface/oxiflow/issues/231)).
 - The explicit integrators own the advective stability check
   ([DA-073](https://github.com/biface/oxiflow/issues/229),
   [#228](https://github.com/biface/oxiflow/issues/228)). At the start of each
@@ -381,6 +392,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A coupling operator receives the values of the variables it requires.
+  The orchestrator checked that a calculator provides each of them, then
+  passed the operator a context holding only the time and the step: a
+  coupling reading a gradient failed at the first step. None of the
+  couplings of the crate, its examples or its tests declares a requirement,
+  so no result changes (see *Changed*,
+  [#231](https://github.com/biface/oxiflow/issues/231)).
 - `Scenario` refuses two domains with the same identifier and a coupling
   interface that names a domain it does not hold. `Scenario::multi`
   accepted both; the orchestrator keys states, histories and solvers by

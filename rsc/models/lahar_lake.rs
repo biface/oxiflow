@@ -14,7 +14,7 @@ use oxiflow::{
         compute::ComputeContext, error::OxiflowError, quantity::PhysicalQuantity,
         state::MultiDomainState, value::ContextValue, variable::ContextVariable,
     },
-    coupling::{CouplingOperator, Interface},
+    coupling::{CouplingContext, CouplingOperator, Interface},
     mesh::Mesh,
     model::traits::{PhysicalModel, RequiresContext},
 };
@@ -107,7 +107,7 @@ impl CouplingOperator for MassTransfer {
     fn apply(
         &self,
         states: &MultiDomainState,
-        ctx: &ComputeContext,
+        ctx: &CouplingContext,
         interface: &Interface,
     ) -> Result<MultiDomainState, OxiflowError> {
         let dt = ctx.time_step();

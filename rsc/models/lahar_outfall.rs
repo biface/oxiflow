@@ -36,14 +36,13 @@ use nalgebra::DMatrix;
 use oxiflow::{
     context::{
         calculators::{FDGradientCalculator, FDScheme},
-        compute::ComputeContext,
         error::OxiflowError,
         quantity::PhysicalQuantity,
         state::MultiDomainState,
         value::ContextValue,
         variable::ContextVariable,
     },
-    coupling::{CouplingOperator, Interface},
+    coupling::{CouplingContext, CouplingOperator, Interface},
     mesh::{Mesh, UniformGrid1D},
     model::{CompositeModel, DiscretizedModel, PrescribedInitialState, RequiresContext},
     operators::limiters::Limiter,
@@ -267,7 +266,7 @@ impl CouplingOperator for OutfallExchange {
     fn apply(
         &self,
         states: &MultiDomainState,
-        ctx: &ComputeContext,
+        ctx: &CouplingContext,
         interface: &Interface,
     ) -> Result<MultiDomainState, OxiflowError> {
         let flux = outfall_flux(states)?;

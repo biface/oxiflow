@@ -22,10 +22,10 @@ use std::sync::Arc;
 
 use oxiflow::{
     context::{
-        compute::ComputeContext, error::OxiflowError, quantity::PhysicalQuantity,
-        state::MultiDomainState, variable::ContextVariable,
+        error::OxiflowError, quantity::PhysicalQuantity, state::MultiDomainState,
+        variable::ContextVariable,
     },
-    coupling::{CouplingOperator, Interface},
+    coupling::{CouplingContext, CouplingOperator, Interface},
     mesh::{Mesh, UniformGrid1D},
     model::traits::RequiresContext,
     solver::{
@@ -70,7 +70,7 @@ impl CouplingOperator for CountingCoupling {
     fn apply(
         &self,
         states: &MultiDomainState,
-        ctx: &ComputeContext,
+        ctx: &CouplingContext,
         interface: &Interface,
     ) -> Result<MultiDomainState, OxiflowError> {
         self.calls.fetch_add(1, Ordering::SeqCst);

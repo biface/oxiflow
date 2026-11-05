@@ -147,20 +147,18 @@ fn run_calculator(
     Ok(())
 }
 
-/// Marks the calculators of `chain` that run before the boundary conditions
-/// of `domain` ([DD-070](https://github.com/biface/oxiflow/issues/200)): those providing a variable a condition
-/// requires, and, through `depends_on()`, the calculators these depend on.
+/// Marks the calculators of `chain` that provide a variable of `needed`,
+/// and, through `depends_on()`, the calculators these depend on.
 ///
 /// `chain` is in execution order, so a calculator's dependencies come
 /// before it; scanning it backwards collects them transitively in one pass.
 /// The relative order of the marked calculators, and of the others, is the
-/// order of `chain`.
-fn boundary_calculators(domain: &Domain, chain: &[&dyn ContextCalculator]) -> Vec<bool> {
-    let mut needed: Vec<ContextVariable> = domain
-        .boundary_conditions
-        .iter()
-        .flat_map(|bc| bc.required_variables())
-        .collect();
+/// order of `chain`. Built-in variables (`Time`, `TimeStep`) have no
+/// calculator and mark nothing.
+fn required_calculators(
+    mut needed: Vec<ContextVariable>,
+    chain: &[&dyn ContextCalculator],
+) -> Vec<bool> {
     let mut marked = vec![false; chain.len()];
     for (i, calc) in chain.iter().enumerate().rev() {
         if needed.contains(&calc.provides()) {
@@ -169,6 +167,46 @@ fn boundary_calculators(domain: &Domain, chain: &[&dyn ContextCalculator]) -> Ve
         }
     }
     marked
+}
+
+/// The variables the boundary conditions of `domain` require.
+fn boundary_requirements(domain: &Domain) -> Vec<ContextVariable> {
+    domain
+        .boundary_conditions
+        .iter()
+        .flat_map(|bc| bc.required_variables())
+        .collect()
+}
+
+/// Marks the calculators of `chain` that run before the boundary conditions
+/// of `domain` ([DD-070](https://github.com/biface/oxiflow/issues/200)): those providing a variable a condition
+/// requires, with their dependencies (see [`required_calculators`]).
+fn boundary_calculators(domain: &Domain, chain: &[&dyn ContextCalculator]) -> Vec<bool> {
+    required_calculators(boundary_requirements(domain), chain)
+}
+
+/// Builds the context at time `t`, step `dt`, holding the values of
+/// `requirements` computed on `state`: only the calculators of `chain` that
+/// provide them, with their dependencies, run, in the order of `chain`.
+///
+/// Used for the boundary conditions of a domain
+/// ([`enforce_boundary_conditions`]) and for each side of a coupling
+/// ([DA-011](https://github.com/biface/oxiflow/issues/11) amendment 1,
+/// [#231](https://github.com/biface/oxiflow/issues/231)). No calculator runs
+/// when `requirements` holds only built-in variables, or nothing.
+pub(crate) fn context_for(
+    requirements: Vec<ContextVariable>,
+    chain: &[&dyn ContextCalculator],
+    state: &ContextValue,
+    t: f64,
+    dt: f64,
+) -> Result<ComputeContext, OxiflowError> {
+    let mut ctx = ComputeContext::new(t, dt);
+    let marked = required_calculators(requirements, chain);
+    for (calc, _) in chain.iter().zip(&marked).filter(|(_, &m)| m) {
+        run_calculator(*calc, state, &mut ctx)?;
+    }
+    Ok(ctx)
 }
 
 /// Runs the calculators marked by [`boundary_calculators`], then applies
@@ -188,11 +226,7 @@ pub(crate) fn enforce_boundary_conditions(
     if domain.boundary_conditions.is_empty() {
         return Ok(());
     }
-    let mut ctx = ComputeContext::new(t, dt);
-    let marked = boundary_calculators(domain, chain);
-    for (calc, _) in chain.iter().zip(&marked).filter(|(_, &m)| m) {
-        run_calculator(*calc, state, &mut ctx)?;
-    }
+    let ctx = context_for(boundary_requirements(domain), chain, state, t, dt)?;
     apply_boundary_conditions(domain, state, &ctx)
 }
 
@@ -1379,5 +1413,36 @@ mod boundary_condition_tests {
         let derivative = evaluate_derivative(&domain, &chain, &mut state, 0.0, 0.01).unwrap();
         assert_eq!(field(&state)[0], 1.5);
         assert_eq!(field(&derivative)[0], 0.0);
+    }
+
+    #[test]
+    fn context_for_runs_only_the_required_calculators_and_their_dependencies() {
+        let unrelated = Scaled {
+            name: "unrelated",
+            source: None,
+            factor: 7.0,
+        };
+        let base = Scaled {
+            name: "base",
+            source: None,
+            factor: 3.0,
+        };
+        let inlet = Scaled {
+            name: "inlet",
+            source: Some("base"),
+            factor: 0.5,
+        };
+        let chain: Vec<&dyn ContextCalculator> = vec![&unrelated, &base, &inlet];
+        let external = |name: &'static str| ContextVariable::External { name: name.into() };
+        let state = ContextValue::ScalarField(DVector::zeros(3));
+
+        let ctx = context_for(vec![external("inlet")], &chain, &state, 1.0, 0.1).unwrap();
+        assert_eq!(ctx.scalar(external("inlet")).unwrap(), 1.5);
+        assert_eq!(ctx.scalar(external("base")).unwrap(), 3.0);
+        assert!(ctx.try_get(external("unrelated")).is_none());
+
+        let ctx = context_for(vec![ContextVariable::Time], &chain, &state, 1.0, 0.1).unwrap();
+        assert_eq!(ctx.time(), 1.0);
+        assert!(chain.iter().all(|c| ctx.try_get(c.provides()).is_none()));
     }
 }

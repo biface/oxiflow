@@ -9,7 +9,7 @@
 //! time range. Coupled scenarios
 //! (lahar–lake, [#40](https://github.com/biface/oxiflow/issues/40)) need several domains advancing together, each
 //! exchanging state with the others via
-//! [`CouplingOperator`](crate::coupling::CouplingOperator) (INV-3,
+//! [`CouplingOperator`] (INV-3,
 //! [DA-011](https://github.com/biface/oxiflow/issues/11)) between steps.
 //!
 //! Rather than generalising `Solver`/`SimulationResult` for this — which
@@ -46,19 +46,27 @@
 //! 2. **Apply every registered `CouplingOperator`**, in declaration order,
 //!    each reading the just-updated [`MultiDomainState`] and returning an
 //!    updated one. Always sequential, and always after every domain's
-//!    Phase-1 write has completed (INV-3).
+//!    Phase-1 write has completed (INV-3). Before each operator, the
+//!    variables it requires are computed on the current state of each side
+//!    of its interface and passed in a
+//!    [`CouplingContext`] ([DA-011](https://github.com/biface/oxiflow/issues/11)
+//!    amendment 1, [#231](https://github.com/biface/oxiflow/issues/231)): an
+//!    operator sees the values of the state the previous one returned. The
+//!    calculators are those of the shared chain.
 //! 3. **Guard against divergence** across all domains.
 
 use std::collections::HashMap;
 
-use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
 use crate::context::quantity::PhysicalQuantity;
 use crate::context::state::MultiDomainState;
 use crate::context::{ContextCalculator, ContextValue};
+use crate::coupling::{CouplingContext, CouplingOperator};
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::{StepControl, TimeConfiguration};
-use crate::solver::methods::{check_finite, enforce_boundary_conditions, SteppableSolver};
+use crate::solver::methods::{
+    check_finite, context_for, enforce_boundary_conditions, SteppableSolver,
+};
 #[cfg(feature = "parallel")]
 use crate::solver::parallel::ParallelThreshold;
 use crate::solver::scenario::{Domain, DomainId, Scenario};
@@ -444,9 +452,10 @@ impl MultiDomainOrchestrator {
 
             // 2. Exchange state across every coupling interface, in
             //    declaration order -- each operator sees the result of the
-            //    previous one.
-            let ctx = ComputeContext::new(t_next, dt);
+            //    previous one, and so do the values of its context.
             for coupling in scenario.couplings() {
+                let ctx =
+                    self.coupling_context(coupling.as_ref(), &multi_state, &chain, t_next, dt)?;
                 multi_state = coupling.apply(&multi_state, &ctx, coupling.interface())?;
             }
 
@@ -478,6 +487,45 @@ impl MultiDomainOrchestrator {
                 "no PhysicalQuantity key registered for domain '{domain_id}' -- call with_domain() for it"
             ))
         })
+    }
+
+    /// Borrows the state of `domain_id` in `multi_state`, under its
+    /// registered quantity.
+    fn domain_state<'a>(
+        &self,
+        multi_state: &'a MultiDomainState,
+        domain_id: &DomainId,
+    ) -> Result<&'a ContextValue, OxiflowError> {
+        let quantity = self.quantity_for(domain_id)?;
+        multi_state.get(domain_id, &quantity).ok_or_else(|| {
+            OxiflowError::InvalidDomain(format!(
+                "domain '{domain_id}' has no state for its registered quantity"
+            ))
+        })
+    }
+
+    /// Builds the context of `coupling` at time `t`, step `dt`: on each side
+    /// of its interface, the variables it requires computed on that
+    /// domain's current state in `multi_state` ([DA-011](https://github.com/biface/oxiflow/issues/11) amendment 1,
+    /// [#231](https://github.com/biface/oxiflow/issues/231)).
+    fn coupling_context(
+        &self,
+        coupling: &dyn CouplingOperator,
+        multi_state: &MultiDomainState,
+        chain: &[&dyn ContextCalculator],
+        t: f64,
+        dt: f64,
+    ) -> Result<CouplingContext, OxiflowError> {
+        let requirements = coupling.required_variables();
+        let interface = coupling.interface();
+        let side = |domain_id: &DomainId| {
+            let state = self.domain_state(multi_state, domain_id)?;
+            context_for(requirements.clone(), chain, state, t, dt)
+        };
+        Ok(CouplingContext::from_sides(
+            side(interface.source())?,
+            side(interface.target())?,
+        ))
     }
 
     /// Phase 1a: computes every domain's next state, independently, and
@@ -517,15 +565,7 @@ impl MultiDomainOrchestrator {
             let quantity = self.quantity_for(&domain.id)?;
             let solver = &self.solvers[&domain.id];
 
-            let mut state = multi_state
-                .get(&domain.id, &quantity)
-                .ok_or_else(|| {
-                    OxiflowError::InvalidDomain(format!(
-                        "domain '{}' has no state for its registered quantity",
-                        domain.id
-                    ))
-                })?
-                .clone();
+            let mut state = self.domain_state(multi_state, &domain.id)?.clone();
 
             let mut next_state = {
                 let history = &histories[&domain.id];
@@ -622,7 +662,7 @@ mod tests {
         fn apply(
             &self,
             states: &MultiDomainState,
-            _ctx: &ComputeContext,
+            _ctx: &CouplingContext,
             interface: &Interface,
         ) -> Result<MultiDomainState, OxiflowError> {
             self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -789,6 +829,142 @@ mod tests {
             .as_scalar_field()
             .unwrap();
         assert!(target_field.iter().all(|v| *v > 0.0));
+    }
+
+    // ── Coupling context (DA-011 amendment 1, #231) ──────────────────────────────
+
+    /// Requires the gradient of the state and records, at each call, its
+    /// value at node 1 on the source side and on the target side; returns
+    /// the state unchanged.
+    struct SlopeProbe {
+        interface: Interface,
+        seen: std::sync::Arc<std::sync::Mutex<Vec<(f64, f64)>>>,
+    }
+
+    impl RequiresContext for SlopeProbe {
+        fn required_variables(&self) -> Vec<ContextVariable> {
+            vec![ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None,
+            }]
+        }
+    }
+
+    impl CouplingOperator for SlopeProbe {
+        fn apply(
+            &self,
+            states: &MultiDomainState,
+            ctx: &CouplingContext,
+            _interface: &Interface,
+        ) -> Result<MultiDomainState, OxiflowError> {
+            let source = ctx.source().gradient(0)?[1];
+            let target = ctx.target().gradient(0)?[1];
+            self.seen.lock().unwrap().push((source, target));
+            Ok(states.clone())
+        }
+
+        fn interface(&self) -> &Interface {
+            &self.interface
+        }
+    }
+
+    #[test]
+    fn coupling_reads_its_requirements_on_each_side_after_the_previous_coupling() {
+        use crate::context::calculators::{FDGradientCalculator, FDScheme};
+        use crate::model::PrescribedInitialState;
+        use std::sync::{Arc, Mutex};
+
+        // Three nodes on [0, 1]: dx = 0.5. Both domains keep their state
+        // (zero derivative); the source holds u = 2x, slope 2, the target
+        // u = 6x, slope 6.
+        let linear = |slope: f64| {
+            let state = ContextValue::ScalarField(nalgebra::DVector::from_vec(vec![
+                0.0,
+                0.5 * slope,
+                slope,
+            ]));
+            Box::new(PrescribedInitialState::new(
+                Box::new(ZeroDerivative { initial: 0.0 }),
+                state,
+            ))
+        };
+        let interface = Interface::new(source_id(), target_id());
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        // The transfer runs first and writes 0.1 * source into the target:
+        // the probe must see the target slope it returns, 0.2, not 6.
+        let scenario = Scenario::multi(vec![
+            Domain::new(source_id(), linear(2.0), make_mesh(3)),
+            Domain::new(target_id(), linear(6.0), make_mesh(3)),
+        ])
+        .unwrap()
+        .with_coupling(Box::new(CountingMassTransfer {
+            alpha: 0.1,
+            interface: interface.clone(),
+            calls,
+        }))
+        .with_coupling(Box::new(SlopeProbe {
+            interface,
+            seen: seen.clone(),
+        }));
+
+        let mesh: Arc<dyn Mesh> = Arc::new(UniformGrid1D::new(3, 0.0, 1.0).unwrap());
+        let config = make_config(0.2, 0.1).with_calculator(Box::new(FDGradientCalculator::new(
+            mesh,
+            0,
+            None,
+            FDScheme::Central,
+        )));
+        let orchestrator = MultiDomainOrchestrator::new()
+            .with_domain(
+                source_id(),
+                Box::new(ForwardEulerSolver),
+                PhysicalQuantity::concentration(),
+            )
+            .with_domain(
+                target_id(),
+                Box::new(ForwardEulerSolver),
+                PhysicalQuantity::concentration(),
+            );
+        orchestrator.run(&scenario, &config).unwrap();
+
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 2);
+        for &(source, target) in seen.iter() {
+            assert!((source - 2.0).abs() < 1e-12, "source slope {source}");
+            assert!((target - 0.2).abs() < 1e-12, "target slope {target}");
+        }
+    }
+
+    #[test]
+    fn coupling_context_carries_the_time_of_the_exchange() {
+        let (scenario, _calls) = make_scenario();
+        let orchestrator = MultiDomainOrchestrator::new()
+            .with_domain(
+                source_id(),
+                Box::new(ForwardEulerSolver),
+                PhysicalQuantity::concentration(),
+            )
+            .with_domain(
+                target_id(),
+                Box::new(ForwardEulerSolver),
+                PhysicalQuantity::concentration(),
+            );
+        let mut multi_state = MultiDomainState::new();
+        for id in [source_id(), target_id()] {
+            multi_state.set(
+                id,
+                PhysicalQuantity::concentration(),
+                ContextValue::ScalarField(nalgebra::DVector::zeros(3)),
+            );
+        }
+        let coupling = &scenario.couplings()[0];
+        let ctx = orchestrator
+            .coupling_context(coupling.as_ref(), &multi_state, &[], 0.3, 0.1)
+            .unwrap();
+        assert_eq!(ctx.time(), 0.3);
+        assert_eq!(ctx.time_step(), 0.1);
+        assert_eq!(ctx.target().time(), 0.3);
     }
 
     // ── Mixed integrators per domain ─────────────────────────────────────────────
