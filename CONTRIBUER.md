@@ -139,6 +139,9 @@ demande un adaptateur graphique est ignoré ; le lancer avec
 - `cargo test --all-features` passe.
 - Toute nouvelle fonction publique a au moins un test.
 - `cargo test --test fem_invariants` passe.
+- `scripts/run-examples.sh` exécute tous les exemples en release, exemples de
+  référence compris, et rassemble les figures qu'ils tracent ; il se termine
+  en erreur si l'un d'eux échoue.
 
 **Qualité du code**
 - `cargo fmt --all -- --check` ne signale rien.

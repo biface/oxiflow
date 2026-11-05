@@ -130,6 +130,9 @@ that has one.
 - `cargo test --all-features` passes.
 - New public functions have at least one test.
 - `cargo test --test fem_invariants` passes.
+- `scripts/run-examples.sh` runs every example in release, the reference
+  examples included, and collects the figures they draw; it exits with an
+  error if one of them fails.
 
 **Code quality**
 - `cargo fmt --all -- --check` reports nothing.
