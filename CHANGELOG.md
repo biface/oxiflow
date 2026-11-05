@@ -204,6 +204,14 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   solutions move to `rsc/models/heat_transfer_1d.rs`, shared by both
   examples; the output of `heat_transfer_1d` is unchanged
   ([#149](https://github.com/biface/oxiflow/issues/149)).
+- `examples/consolidation_1d_plot` draws the run of `consolidation_1d`
+  against Terzaghi's series: `consolidation_1d_isochrones.svg`, the excess
+  pore pressure across the layer at five time factors, and
+  `consolidation_1d_degree.svg`, the average degree of consolidation
+  against the time factor on a logarithmic axis. The model, the run and the
+  series move to `rsc/models/consolidation_1d.rs`, shared by both examples;
+  the output of `consolidation_1d` is unchanged
+  ([#149](https://github.com/biface/oxiflow/issues/149)).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
   builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and
