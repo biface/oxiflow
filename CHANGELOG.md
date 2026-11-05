@@ -223,6 +223,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `rsc/models/magnetic_diffusion_1d.rs`, shared by both examples; the
   output of `magnetic_diffusion_1d` is unchanged
   ([#149](https://github.com/biface/oxiflow/issues/149)).
+- `examples/magnetic_diffusion_1d_simul` replays the runs of
+  `magnetic_diffusion_1d` as an animated SVG, one frame per step: the field
+  entering copper and aluminium on the same axes, with a time bar. The
+  drawing pieces of the animations (panels, animated curves, legend, time
+  bar) move from `lahar_lake_wave_simul` to `rsc/render/svg_animation.rs`,
+  shared by both; the animation of `lahar_lake_wave_simul` is unchanged
+  ([#149](https://github.com/biface/oxiflow/issues/149)).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
   builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and
