@@ -9,6 +9,11 @@
 //! Run with: `cargo run --example burgers_boundary_layer`. The example exits
 //! with an error if a check exceeds its tolerance.
 //!
+//! The scenario, the runs and the steady solution are defined once in
+//! `rsc/models/burgers_boundary_layer.rs`, included below as the
+//! `burgers_boundary_layer` module and shared with the examples that plot
+//! and animate the runs.
+//!
 //! ## Physics
 //!
 //! Viscous Burgers, a model equation of fluid mechanics with no material
@@ -90,48 +95,23 @@
 //! x through (1 - x) / nu alone.
 
 use std::error::Error;
-use std::sync::Arc;
 
 use nalgebra::DVector;
-use oxiflow::{
-    boundary::{BoundaryCondition, Dirichlet},
-    context::{
-        calculators::{FDGradientCalculator, FDLaplacianCalculator, FDScheme},
-        error::OxiflowError,
-    },
-    mesh::{BoundaryRegion, FaceSide, Mesh, UniformGrid1D},
-    solver::{
-        config::{IntegratorKind, StepControl, TimeConfiguration},
-        methods::RK4Solver,
-        scenario::{Domain, Scenario},
-        SimulationResult, Solver, SolverConfiguration,
-    },
-};
 
+#[path = "../rsc/models/burgers_boundary_layer.rs"]
+mod burgers_boundary_layer;
 #[path = "../rsc/models/viscous_burgers.rs"]
 mod viscous_burgers_model;
 
-use viscous_burgers_model::{laplacian_variable, ViscousBurgers};
+use burgers_boundary_layer::{
+    grid, outer_velocity, positions, solve, state_at, steady_thickness, steady_velocity, steps,
+    END_TIME, INFLOW, N_NODES, REYNOLDS, SAVES, SHOCK_CENTRE, THICKNESS_LEVEL,
+};
 
-// ── Scenario ──────────────────────────────────────────────────────────────
+// ── Checks ────────────────────────────────────────────────────────────────
 
-/// Inflow velocity, in units of U.
-const INFLOW: f64 = 1.0;
-/// Initial centre of the viscous shock.
-const SHOCK_CENTRE: f64 = 0.6;
-/// Grid nodes, both ends included (dx = 1/400).
-const N_NODES: usize = 401;
-const END_TIME: f64 = 2.4;
-/// Bound on nu * dt / dx² for RK4 (see the module documentation).
-const DIFFUSION_NUMBER: f64 = 0.6;
-/// Saved states per run, after the initial one.
-const SAVES: usize = 8;
-/// Level of the 99 % thickness, as a fraction of A.
-const THICKNESS_LEVEL: f64 = 0.99;
-
-/// One Reynolds number and its tolerances.
+/// Tolerances at one Reynolds number, in the order of `REYNOLDS`.
 struct Case {
-    reynolds: f64,
     /// Tolerance on max abs(u - steady) over the nodes.
     profile_tolerance: f64,
     /// Tolerance on the relative error of delta99.
@@ -140,120 +120,18 @@ struct Case {
 
 const CASES: [Case; 3] = [
     Case {
-        reynolds: 50.0,
         profile_tolerance: 1.2e-3,
         thickness_tolerance: 2e-3,
     },
     Case {
-        reynolds: 100.0,
         profile_tolerance: 5e-3,
         thickness_tolerance: 1e-2,
     },
     Case {
-        reynolds: 200.0,
         profile_tolerance: 2e-2,
         thickness_tolerance: 3e-2,
     },
 ];
-
-fn grid() -> Result<UniformGrid1D, OxiflowError> {
-    UniformGrid1D::new(N_NODES, 0.0, 1.0)
-}
-
-/// x of every node.
-fn positions(mesh: &dyn Mesh) -> Vec<f64> {
-    (0..mesh.n_dof()).map(|i| mesh.coordinates(i)[0]).collect()
-}
-
-fn face(side: FaceSide) -> BoundaryRegion {
-    BoundaryRegion::Face { axis: 0, side }
-}
-
-/// Number of steps: the smallest multiple of `SAVES` that keeps
-/// nu * dt / dx² at or below `DIFFUSION_NUMBER`.
-fn steps(nu: f64) -> usize {
-    let dx = 1.0 / (N_NODES - 1) as f64;
-    let least = (END_TIME * nu / (DIFFUSION_NUMBER * dx * dx)).ceil() as usize;
-    least.div_ceil(SAVES) * SAVES
-}
-
-/// Runs the shock into the wall at viscosity `nu`.
-fn solve(nu: f64) -> Result<SimulationResult, OxiflowError> {
-    let conditions: Vec<Box<dyn BoundaryCondition>> = vec![
-        Box::new(Dirichlet::constant(face(FaceSide::Lower), INFLOW)),
-        Box::new(Dirichlet::constant(face(FaceSide::Upper), 0.0)),
-    ];
-    let model = ViscousBurgers {
-        nu,
-        u_l: INFLOW,
-        u_r: 0.0,
-        x0: SHOCK_CENTRE,
-    };
-    let domain = Domain::new("channel", Box::new(model), Box::new(grid()?))
-        .with_boundary_conditions(conditions);
-    let scenario = Scenario::multi(vec![domain])?;
-
-    let n_steps = steps(nu);
-    let mesh: Arc<dyn Mesh> = Arc::new(grid()?);
-    let config = SolverConfiguration::new(
-        TimeConfiguration::new(
-            END_TIME,
-            StepControl::Fixed {
-                dt: END_TIME / n_steps as f64,
-            },
-        )
-        .saving_every(n_steps / SAVES),
-        IntegratorKind::RK4,
-    )
-    .with_calculator(Box::new(FDGradientCalculator::new(
-        Arc::clone(&mesh),
-        0,
-        None,
-        FDScheme::Central,
-    )))
-    .with_calculator(Box::new(FDLaplacianCalculator::new(
-        mesh,
-        laplacian_variable(),
-    )));
-    RK4Solver.solve(&scenario, &config)
-}
-
-// ── Steady solution ───────────────────────────────────────────────────────
-
-/// Outer velocity A of the steady layer: A tanh(A / (2 nu)) = 1, by Newton
-/// from A = 1.
-fn outer_velocity(nu: f64) -> f64 {
-    let mut a = INFLOW;
-    for _ in 0..50 {
-        let z = a / (2.0 * nu);
-        let residual = a * z.tanh() - INFLOW;
-        let slope = z.tanh() + z / z.cosh().powi(2);
-        a -= residual / slope;
-    }
-    a
-}
-
-/// Steady velocity at `x`.
-fn steady_velocity(x: f64, a: f64, nu: f64) -> f64 {
-    a * (a * (1.0 - x) / (2.0 * nu)).tanh()
-}
-
-/// delta99 of the steady layer.
-fn steady_thickness(a: f64, nu: f64) -> f64 {
-    2.0 * nu / a * THICKNESS_LEVEL.atanh()
-}
-
-// ── Checks ────────────────────────────────────────────────────────────────
-
-/// The state saved at `time`, or an error naming it.
-fn state_at(result: &SimulationResult, time: f64) -> Result<&DVector<f64>, Box<dyn Error>> {
-    let index = result
-        .times
-        .iter()
-        .position(|&t| (t - time).abs() <= 1e-9 * time)
-        .ok_or_else(|| format!("no state saved at t = {time}"))?;
-    Ok(result.states[index].as_scalar_field()?)
-}
 
 /// max abs(u - steady) over the nodes.
 fn profile_error(velocity: &DVector<f64>, xs: &[f64], a: f64, nu: f64) -> f64 {
@@ -296,9 +174,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!(
         "Viscous shock from x0 = {SHOCK_CENTRE} into a wall at x = 1, {N_NODES} nodes, RK4, steady layer at t = {END_TIME}"
     );
-    for case in &CASES {
-        let nu = 1.0 / case.reynolds;
-        let result = solve(nu)?;
+    for (&reynolds, case) in REYNOLDS.iter().zip(&CASES) {
+        let nu = 1.0 / reynolds;
+        let result = solve(nu, SAVES)?;
         let velocity = state_at(&result, END_TIME)?;
         let previous = state_at(&result, END_TIME * (SAVES - 1) as f64 / SAVES as f64)?;
         let a = outer_velocity(nu);
@@ -309,21 +187,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         let thickness_error = (thickness - expected).abs() / expected;
         println!(
             "  Re = {:<3} (nu = {nu}, dt = {:.3e}): |A - 1| = {:.1e}, max |u - steady| = {profile:.3e}, delta99 = {thickness:.5} (exact {expected:.5}, relative error {thickness_error:.2e}), change since t = {:.1} {:.1e} (reported)",
-            case.reynolds,
+            reynolds,
             END_TIME / steps(nu) as f64,
             (a - INFLOW).abs(),
             END_TIME * (SAVES - 1) as f64 / SAVES as f64,
             (velocity - previous).amax()
         );
-        check(
-            "steady profile",
-            case.reynolds,
-            profile,
-            case.profile_tolerance,
-        )?;
+        check("steady profile", reynolds, profile, case.profile_tolerance)?;
         check(
             "99 % thickness (relative)",
-            case.reynolds,
+            reynolds,
             thickness_error,
             case.thickness_tolerance,
         )?;
