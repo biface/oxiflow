@@ -212,6 +212,17 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   series move to `rsc/models/consolidation_1d.rs`, shared by both examples;
   the output of `consolidation_1d` is unchanged
   ([#149](https://github.com/biface/oxiflow/issues/149)).
+- `examples/magnetic_diffusion_1d_plot` draws the runs of
+  `magnetic_diffusion_1d` in copper and aluminium against the exact
+  half-space solution: `magnetic_diffusion_1d_profiles.svg`, the field at
+  three times, one panel per metal; `magnetic_diffusion_1d_depth.svg`, the
+  depth where the field reaches half its surface value against
+  `sqrt(eta t)`, on which both metals fall on the same line; and
+  `magnetic_diffusion_1d_current.svg`, the induced current density against
+  its exact Gaussian. The model, the runs and the exact solution move to
+  `rsc/models/magnetic_diffusion_1d.rs`, shared by both examples; the
+  output of `magnetic_diffusion_1d` is unchanged
+  ([#149](https://github.com/biface/oxiflow/issues/149)).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
   builders: `with_sparse_solver`, `with_sparse_threshold` (default 100) and
