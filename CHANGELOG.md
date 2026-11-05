@@ -381,6 +381,13 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `Scenario` refuses two domains with the same identifier and a coupling
+  interface that names a domain it does not hold. `Scenario::multi`
+  accepted both; the orchestrator keys states, histories and solvers by
+  identifier, so the second of two domains named alike overwrote the first
+  at every step, with no error. `Scenario::multi` and `Scenario::validate`
+  now return `OxiflowError::InvalidDomain`, naming the identifier or the
+  interface ([#230](https://github.com/biface/oxiflow/issues/230)).
 - The implicit integrators (Backward Euler, Crank–Nicolson, BDF2) run a
   flux scheme at any Courant number. Every flux scheme checked the explicit
   advective condition `|v|·dt/dx ≤ 1` in its own `apply()` with the step of

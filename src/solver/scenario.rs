@@ -10,6 +10,7 @@
 //! case without verbosity; additional domains and coupling operators are added
 //! without any API change ([DD-020](https://github.com/biface/oxiflow/issues/57)).
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::boundary::{BoundaryCondition, BoundaryConditionSpec};
@@ -399,13 +400,21 @@ impl Scenario {
 
     /// Creates a multi-domain scenario from a list of domains (J3 path).
     ///
-    /// Domains are provided as pre-built `Domain` instances.
+    /// Domains are provided as pre-built `Domain` instances, each under its
+    /// own identifier: the solvers and the orchestrator key states, histories
+    /// and couplings by [`DomainId`].
+    ///
+    /// # Errors
+    ///
+    /// `OxiflowError::InvalidDomain` if `domains` is empty or if two domains
+    /// share an identifier ([#230](https://github.com/biface/oxiflow/issues/230)).
     pub fn multi(domains: Vec<Domain>) -> Result<Self, OxiflowError> {
         if domains.is_empty() {
             return Err(OxiflowError::InvalidDomain(
                 "Scenario requires at least one domain".into(),
             ));
         }
+        check_unique_ids(&domains)?;
         Ok(Self {
             domains,
             couplings: vec![],
@@ -562,16 +571,20 @@ impl Scenario {
 
     /// Validates scenario consistency before solving.
     ///
-    /// Verifies that at least one domain is present, that no domain has an
-    /// empty mesh, and that each domain's initial state has one row per mesh
-    /// node: the length of a `ScalarField`, the row count of a `VectorField`,
-    /// against `mesh.n_dof()`. Other `ContextValue` variants are not sized by
-    /// the mesh and are left unchecked. The initial state is checked here
-    /// because [`PhysicalModel::initial_state`] cannot report an error, and a
-    /// state prescribed from outside the model
-    /// ([`PrescribedInitialState`]) can
-    /// be of any size. Interface consistency and coupling coverage are not
-    /// checked (finding of the [#172](https://github.com/biface/oxiflow/issues/172) audit).
+    /// Verifies that at least one domain is present, that no two domains
+    /// share an identifier, that every coupling interface names two domains
+    /// of the scenario ([#230](https://github.com/biface/oxiflow/issues/230)),
+    /// that no domain has an empty mesh, and that each domain's initial state
+    /// has one row per mesh node: the length of a `ScalarField`, the row
+    /// count of a `VectorField`, against `mesh.n_dof()`. Other `ContextValue`
+    /// variants are not sized by the mesh and are left unchecked. The initial
+    /// state is checked here because [`PhysicalModel::initial_state`] cannot
+    /// report an error, and a state prescribed from outside the model
+    /// ([`PrescribedInitialState`]) can be of any size.
+    ///
+    /// Context requirements are not checked here: a requirement that no
+    /// calculator provides is reported when the calculator chain is built
+    /// ([`build_calculator_chain`](crate::solver::chain::build_calculator_chain)).
     ///
     /// [`Solver::solve`](crate::solver::Solver::solve) and the orchestrator
     /// call it before the first step; a caller that drives
@@ -580,17 +593,50 @@ impl Scenario {
     ///
     /// # Errors
     ///
-    /// `OxiflowError::InvalidDomain` if the scenario has no domain, if a
-    /// domain's mesh is empty, or if a domain's initial state does not match
-    /// its mesh.
+    /// `OxiflowError::InvalidDomain` if the scenario has no domain, if two
+    /// domains share an identifier, if an interface names a domain the
+    /// scenario does not hold, if a domain's mesh is empty, or if a domain's
+    /// initial state does not match its mesh.
     pub fn validate(&self) -> Result<(), OxiflowError> {
         if self.domains.is_empty() {
             return Err(OxiflowError::InvalidDomain(
                 "Scenario has no domains".into(),
             ));
         }
+        check_unique_ids(&self.domains)?;
+        self.check_interfaces()?;
         self.domains.iter().try_for_each(check_domain)
     }
+
+    /// Checks that every coupling interface names two domains of the
+    /// scenario: the orchestrator reads and writes the coupled states under
+    /// these identifiers.
+    fn check_interfaces(&self) -> Result<(), OxiflowError> {
+        for interface in &self.interfaces {
+            for id in [interface.source(), interface.target()] {
+                if !self.domains.iter().any(|domain| &domain.id == id) {
+                    return Err(OxiflowError::InvalidDomain(format!(
+                        "{interface} names domain '{id}', which the scenario does not hold"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Checks that no two of `domains` share an identifier.
+fn check_unique_ids(domains: &[Domain]) -> Result<(), OxiflowError> {
+    let mut seen = HashSet::with_capacity(domains.len());
+    for domain in domains {
+        if !seen.insert(&domain.id) {
+            return Err(OxiflowError::InvalidDomain(format!(
+                "two domains share the identifier '{}'",
+                domain.id
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Checks that `domain` has a non-empty mesh and an initial state sized by
@@ -755,6 +801,14 @@ mod tests {
         assert!(Scenario::multi(vec![]).is_err());
     }
 
+    #[test]
+    fn multi_rejects_two_domains_with_the_same_identifier() {
+        let d1 = Domain::new("lake", Box::new(NeedsTime), make_mesh());
+        let d2 = Domain::new("lake", Box::new(NeedsGradient), make_mesh());
+        let err = Scenario::multi(vec![d1, d2]).err().unwrap();
+        assert!(matches!(err, OxiflowError::InvalidDomain(ref m) if m.contains("'lake'")));
+    }
+
     // ── single_domain ─────────────────────────────────────────────────────────
 
     #[test]
@@ -869,6 +923,59 @@ mod tests {
         .unwrap();
         let err = s.validate().unwrap_err();
         assert!(matches!(err, OxiflowError::InvalidDomain(ref m) if m.contains("'second'")));
+    }
+
+    /// Two domains, `a` and `b`, coupled across `interface`.
+    fn coupled_scenario(interface: crate::coupling::Interface) -> Scenario {
+        use crate::coupling::PassthroughCoupling;
+        Scenario::multi(vec![
+            Domain::new("a", Box::new(NeedsTime), make_mesh()),
+            Domain::new("b", Box::new(NeedsTime), make_mesh()),
+        ])
+        .unwrap()
+        .with_coupling(Box::new(PassthroughCoupling { interface }))
+    }
+
+    #[test]
+    fn validate_accepts_an_interface_between_two_domains_of_the_scenario() {
+        use crate::coupling::Interface;
+        let s = coupled_scenario(Interface::new(DomainId::new("a"), DomainId::new("b")));
+        assert!(s.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_an_interface_on_an_unknown_source() {
+        use crate::coupling::Interface;
+        let s = coupled_scenario(Interface::new(DomainId::new("river"), DomainId::new("b")));
+        let err = s.validate().unwrap_err();
+        assert!(matches!(err, OxiflowError::InvalidDomain(ref m)
+            if m.contains("Interface(river → b)") && m.contains("'river'")));
+    }
+
+    #[test]
+    fn validate_rejects_an_interface_on_an_unknown_target() {
+        use crate::coupling::Interface;
+        let s = coupled_scenario(Interface::new(DomainId::new("a"), DomainId::new("lake")));
+        let err = s.validate().unwrap_err();
+        assert!(matches!(err, OxiflowError::InvalidDomain(ref m) if m.contains("'lake'")));
+    }
+
+    #[test]
+    fn validate_rejects_two_domains_with_the_same_identifier() {
+        // `multi` refuses them; `validate` guards any other way to build the
+        // list, so the check is exercised on the list directly.
+        let domains = vec![
+            Domain::new("lake", Box::new(NeedsTime), make_mesh()),
+            Domain::new("lake", Box::new(NeedsTime), make_mesh()),
+        ];
+        let s = Scenario {
+            domains,
+            couplings: vec![],
+            interfaces: vec![],
+            t_start: 0.0,
+        };
+        let err = s.validate().unwrap_err();
+        assert!(matches!(err, OxiflowError::InvalidDomain(ref m) if m.contains("'lake'")));
     }
 
     // ── BoundaryCondition integration ─────────────────────────────────────────

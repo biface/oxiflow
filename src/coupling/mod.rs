@@ -178,6 +178,39 @@ pub trait CouplingOperator: RequiresContext + Send + Sync {
     fn interface(&self) -> &Interface;
 }
 
+// ── Test coupling ─────────────────────────────────────────────────────────────
+//
+// Shared by the unit tests of the crate that need a coupling but not an
+// exchange. Defined once here rather than in every test module.
+
+/// Coupling that returns the state unchanged, with no context requirement.
+#[cfg(test)]
+pub(crate) struct PassthroughCoupling {
+    pub(crate) interface: Interface,
+}
+
+#[cfg(test)]
+impl RequiresContext for PassthroughCoupling {
+    fn required_variables(&self) -> Vec<crate::context::variable::ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl CouplingOperator for PassthroughCoupling {
+    fn apply(
+        &self,
+        states: &MultiDomainState,
+        _ctx: &ComputeContext,
+        _interface: &Interface,
+    ) -> Result<MultiDomainState, OxiflowError> {
+        Ok(states.clone())
+    }
+    fn interface(&self) -> &Interface {
+        &self.interface
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -237,32 +270,7 @@ mod tests {
 
     use crate::context::quantity::PhysicalQuantity;
     use crate::context::value::ContextValue;
-    use crate::context::variable::ContextVariable;
     use nalgebra::DVector;
-
-    struct PassthroughCoupling {
-        interface: Interface,
-    }
-
-    impl RequiresContext for PassthroughCoupling {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl CouplingOperator for PassthroughCoupling {
-        fn apply(
-            &self,
-            states: &MultiDomainState,
-            _ctx: &ComputeContext,
-            _interface: &Interface,
-        ) -> Result<MultiDomainState, OxiflowError> {
-            Ok(states.clone())
-        }
-        fn interface(&self) -> &Interface {
-            &self.interface
-        }
-    }
 
     #[test]
     fn passthrough_coupling_returns_unchanged_state() {
