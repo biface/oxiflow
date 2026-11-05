@@ -82,10 +82,11 @@
 //!
 //! ## Grid and integrator
 //!
-//! The scenario (constants, grids, initial states, domain models, coupling)
-//! and the settings of this run (`REFERENCE_RUN`) are defined in
-//! `rsc/models/lahar_outfall.rs`, shared with the animation
-//! `examples/lahar_lake_wave_simul.rs`; this file holds the diagnostics and
+//! The scenario (constants, grids, initial states, domain models, coupling),
+//! the settings of this run (`REFERENCE_RUN`) and the bore measurement
+//! (`bore`) are defined in `rsc/models/lahar_outfall.rs`, shared with the
+//! plots `examples/lahar_lake_wave_plot.rs` and the animation
+//! `examples/lahar_lake_wave_simul.rs`; this file holds the inventories and
 //! the checks.
 //!
 //! 801 channel nodes and 601 lake nodes, dx = 5 m. Explicit Euler, the
@@ -140,7 +141,7 @@
 use std::error::Error;
 
 use nalgebra::DMatrix;
-use oxiflow::{context::error::OxiflowError, mesh::Mesh};
+use oxiflow::mesh::Mesh;
 
 #[path = "../rsc/models/lahar_flux.rs"]
 mod lahar_flux;
@@ -152,11 +153,11 @@ mod lahar_physics;
 mod lahar_source;
 
 use lahar_outfall::{
-    channel_grid, channel_id, deposit_density, field, initial_states, injection, lake_grid,
-    lake_id, physics, run, CHANNEL_LENGTH, CHANNEL_SLOPE_DEG, DEPOSIT_PACKING, INFLOW,
+    bore, channel_grid, channel_id, deposit_density, field, initial_states, injection, lake_grid,
+    lake_id, physics, primitives, run, CHANNEL_LENGTH, CHANNEL_SLOPE_DEG, DEPOSIT_PACKING, INFLOW,
     INFLOW_SOLIDS, LAKE_DEPTH, LAKE_LENGTH, REFERENCE_RUN,
 };
-use lahar_physics::{COL_B, COL_M, COL_P, COL_S, G, H_MIN};
+use lahar_physics::{COL_B, COL_M, COL_S, G, H_MIN};
 
 // ── Run settings ──────────────────────────────────────────────────────────
 
@@ -164,11 +165,9 @@ use lahar_physics::{COL_B, COL_M, COL_P, COL_S, G, H_MIN};
 const DX: f64 = REFERENCE_RUN.dx;
 const DT: f64 = REFERENCE_RUN.dt;
 
-/// Bore measurement: start time, toe threshold above h0, and the window
-/// behind the toe over which h1 and u1 are averaged.
+/// Start of the bore check; the measurement itself (toe threshold, window
+/// behind the toe) is `bore` in `rsc/models/lahar_outfall.rs`.
 const BORE_START: f64 = 500.0;
-const TOE_THRESHOLD: f64 = 0.01;
-const PLATEAU_WINDOW: (f64, f64) = (100.0, 40.0);
 
 const TOL_MASS_EXCHANGE: f64 = 1e-13;
 const TOL_SOLIDS_EXCHANGE: f64 = 1e-13;
@@ -187,39 +186,6 @@ fn inventory_change(state: &DMatrix<f64>, initial: &DMatrix<f64>, col: usize, we
         })
         .sum::<f64>()
         * DX
-}
-
-/// Depth, velocity and solids fraction of one node.
-fn primitives(state: &DMatrix<f64>, i: usize) -> Result<(f64, f64, f64), OxiflowError> {
-    physics().primitives(state[(i, COL_M)], state[(i, COL_P)], state[(i, COL_S)])
-}
-
-/// Bore position, and depth and velocity behind it, in one lake state.
-fn bore(lake: &DMatrix<f64>, xs: &[f64]) -> Result<(f64, f64, f64), Box<dyn Error>> {
-    let mut depth = Vec::with_capacity(xs.len());
-    let mut velocity = Vec::with_capacity(xs.len());
-    for i in 0..xs.len() {
-        let (h, u, _) = primitives(lake, i)?;
-        depth.push(h);
-        velocity.push(u);
-    }
-    let toe = (0..xs.len())
-        .rev()
-        .find(|&i| depth[i] - LAKE_DEPTH > TOE_THRESHOLD)
-        .ok_or("no bore in the lake")?;
-    let behind: Vec<usize> = (0..toe)
-        .filter(|&i| xs[i] > xs[toe] - PLATEAU_WINDOW.0 && xs[i] < xs[toe] - PLATEAU_WINDOW.1)
-        .collect();
-    let n = behind.len() as f64;
-    let h1 = behind.iter().map(|&i| depth[i]).sum::<f64>() / n;
-    let u1 = behind.iter().map(|&i| velocity[i]).sum::<f64>() / n;
-    let level = 0.5 * (LAKE_DEPTH + h1);
-    let i = (0..xs.len() - 1)
-        .rev()
-        .find(|&i| depth[i] > level)
-        .ok_or("the depth never crosses mid-bore")?;
-    let front = xs[i] + (depth[i] - level) / (depth[i] - depth[i + 1]) * (xs[i + 1] - xs[i]);
-    Ok((front, h1, u1))
 }
 
 fn check(quantity: &str, error: f64, tolerance: f64) -> Result<(), Box<dyn Error>> {

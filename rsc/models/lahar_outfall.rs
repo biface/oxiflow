@@ -2,10 +2,13 @@
 //! and over a lip into a lake at rest, each a shallow-layer domain, coupled
 //! by the outflow of the channel's last cell (`OutfallExchange`).
 //!
-//! Single definition used by `examples/lahar_lake_wave.rs`, its animation
+//! Single definition used by `examples/lahar_lake_wave.rs`, its plots
+//! `examples/lahar_lake_wave_plot.rs`, its animation
 //! `examples/lahar_lake_wave_simul.rs` and `benches/orchestrator_phase1.rs`,
 //! each of which includes this file as a module with `#[path]`; the example
-//! documents the physics, the coupling and the validation. The grid spacing
+//! documents the physics, the coupling and the validation, and checks the
+//! bore measured by [`bore`] against Rankine–Hugoniot, which the plots
+//! draw. The grid spacing
 //! `dx`, shared by both grids, is a parameter of every function that builds
 //! a grid, a state or the coupling. The settings of the reference run, which
 //! the example validates and its animation replays, are [`REFERENCE_RUN`];
@@ -427,4 +430,64 @@ pub(crate) fn run(
         None,
     )?));
     orchestrator().run(&scenario, &config)
+}
+
+// ── Bore measurement ──────────────────────────────────────────────────────
+
+/// Toe of the bore: the last lake node more than this above the depth at
+/// rest, in metres.
+// The benchmark measures no bore and reads none of this section.
+#[allow(dead_code)]
+pub(crate) const TOE_THRESHOLD: f64 = 0.01;
+
+/// Window behind the toe over which the depth h1 and the velocity u1 of the
+/// bore are averaged, as distances from the toe: from 100 m to 40 m.
+#[allow(dead_code)]
+pub(crate) const PLATEAU_WINDOW: (f64, f64) = (100.0, 40.0);
+
+/// Depth, velocity and solids fraction of node `i` of a domain state.
+#[allow(dead_code)]
+pub(crate) fn primitives(state: &DMatrix<f64>, i: usize) -> Result<(f64, f64, f64), OxiflowError> {
+    physics().primitives(state[(i, COL_M)], state[(i, COL_P)], state[(i, COL_S)])
+}
+
+/// Bore in one lake state, at node positions `xs`: its position x_f, where
+/// the depth crosses (h0 + h1) / 2, and the depth h1 and velocity u1 behind
+/// it, averaged over [`PLATEAU_WINDOW`] behind the toe.
+///
+/// Fails when the lake holds no bore yet: no node above the toe threshold,
+/// or a toe too close to the inlet for the window to hold a node.
+#[allow(dead_code)]
+pub(crate) fn bore(lake: &DMatrix<f64>, xs: &[f64]) -> Result<(f64, f64, f64), OxiflowError> {
+    let no_bore = |message: &str| OxiflowError::PreconditionFailed {
+        context: "lahar_lake_wave",
+        message: message.to_string(),
+    };
+    let mut depth = Vec::with_capacity(xs.len());
+    let mut velocity = Vec::with_capacity(xs.len());
+    for i in 0..xs.len() {
+        let (h, u, _) = primitives(lake, i)?;
+        depth.push(h);
+        velocity.push(u);
+    }
+    let toe = (0..xs.len())
+        .rev()
+        .find(|&i| depth[i] - LAKE_DEPTH > TOE_THRESHOLD)
+        .ok_or_else(|| no_bore("no bore in the lake"))?;
+    let behind: Vec<usize> = (0..toe)
+        .filter(|&i| xs[i] > xs[toe] - PLATEAU_WINDOW.0 && xs[i] < xs[toe] - PLATEAU_WINDOW.1)
+        .collect();
+    if behind.is_empty() {
+        return Err(no_bore("the bore is too close to the inlet to be measured"));
+    }
+    let n = behind.len() as f64;
+    let h1 = behind.iter().map(|&i| depth[i]).sum::<f64>() / n;
+    let u1 = behind.iter().map(|&i| velocity[i]).sum::<f64>() / n;
+    let level = 0.5 * (LAKE_DEPTH + h1);
+    let i = (0..xs.len() - 1)
+        .rev()
+        .find(|&i| depth[i] > level)
+        .ok_or_else(|| no_bore("the depth never crosses mid-bore"))?;
+    let front = xs[i] + (depth[i] - level) / (depth[i] - depth[i + 1]) * (xs[i + 1] - xs[i]);
+    Ok((front, h1, u1))
 }

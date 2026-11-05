@@ -190,7 +190,9 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   examples ([#180](https://github.com/biface/oxiflow/issues/180)).
 - `examples/lahar_lake_wave_simul` replays the run of `lahar_lake_wave` as
   an animated SVG, one frame per saved state: the depth of the lahar along
-  the channel and the free surface of the lake, with a time bar. The
+  the channel and the free surface of the lake, on one horizontal scale,
+  with a time bar. The two nodes on either side of the lip, whose saved
+  state follows the exchange between the domains, are not drawn. The
   animation uses SVG animation elements only, with no script, so it plays
   in a web browser and on the wiki; a viewer that does not animate shows
   the first frame. Both examples take the settings of the run from
@@ -240,6 +242,16 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   reaching the wall and the layer relaxing. The scenario, the runs and the
   steady solution move to `rsc/models/burgers_boundary_layer.rs`, shared by
   the three examples; the output of `burgers_boundary_layer` is unchanged
+  ([#149](https://github.com/biface/oxiflow/issues/149)).
+- `examples/lahar_lake_wave_plot` draws the run of `lahar_lake_wave`
+  against the Rankine–Hugoniot conditions: `lahar_lake_wave_state.svg`,
+  the channel and the lake at t = 600 s on one horizontal scale, with the
+  step predicted from the measured celerity of the bore, and
+  `lahar_lake_wave_front.svg`, the position of the front against time with
+  the Rankine–Hugoniot celerity of the measured depth and the long-wave
+  speed for comparison. The bore measurement moves to
+  `rsc/models/lahar_outfall.rs`, shared by both examples; the output of
+  `lahar_lake_wave` is unchanged
   ([#149](https://github.com/biface/oxiflow/issues/149)).
 - `BDF2Solver` takes the banded path of `BackwardEulerSolver` and
   `CrankNicolsonSolver` (`sparse` feature), configured by the same
