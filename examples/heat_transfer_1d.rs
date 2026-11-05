@@ -14,9 +14,11 @@
 //! Run with: `cargo run --example heat_transfer_1d`. The example exits with
 //! an error if a check exceeds its tolerance.
 //!
-//! The graded conductivity of case (b) is defined once in
-//! `rsc/models/graded_conductivity.rs`, included below as the
-//! `graded_conductivity` module and shared with the coefficient-field
+//! The model, the material, the two runs and their exact solutions are
+//! defined once in `rsc/models/heat_transfer_1d.rs`, included below as the
+//! `heat_transfer_1d` module and shared with `heat_transfer_1d_plot`. The
+//! graded conductivity of case (b) comes from
+//! `rsc/models/graded_conductivity.rs`, shared with the coefficient-field
 //! dispatch benchmark.
 //!
 //! ## Physics
@@ -120,237 +122,34 @@
 //! order in space (measured on 51, 101 and 201 nodes).
 
 use std::error::Error;
-use std::f64::consts::PI;
-use std::sync::Arc;
 
 use nalgebra::DVector;
-use oxiflow::{
-    boundary::{BoundaryCondition, Dirichlet},
-    context::{
-        calculators::{CoefficientField, FDGradientCalculator, FDLaplacianCalculator, FDScheme},
-        compute::ComputeContext,
-        error::OxiflowError,
-        value::ContextValue,
-        variable::ContextVariable,
-    },
-    mesh::{BoundaryRegion, FaceSide, Mesh, UniformGrid1D},
-    model::traits::{PhysicalModel, RequiresContext},
-    solver::{
-        config::{IntegratorKind, StepControl, TimeConfiguration},
-        methods::{BDF2Solver, BackwardEulerSolver, CrankNicolsonSolver},
-        scenario::{Domain, Scenario},
-        SimulationResult, Solver, SolverConfiguration,
-    },
+use oxiflow::solver::{
+    config::IntegratorKind,
+    methods::{BDF2Solver, BackwardEulerSolver, CrankNicolsonSolver},
+    SimulationResult, Solver,
 };
 
 #[path = "../rsc/models/graded_conductivity.rs"]
 mod graded_conductivity;
+#[path = "../rsc/models/heat_transfer_1d.rs"]
+mod heat_transfer_1d;
 
-use graded_conductivity::GradedConductivity;
+use heat_transfer_1d::{
+    bar, cooling_run, fourier_cooling, graded_run, graded_steady, positions, solve, Run,
+    COOLING_DT, COOLING_ENDS, COOLING_INITIAL, GRADED_COLD, GRADED_DT, GRADED_END_TIME, GRADED_HOT,
+    LENGTH, NEWTON_ITERATIONS,
+};
 
-// ── Model ─────────────────────────────────────────────────────────────────
+// ── Checks ────────────────────────────────────────────────────────────────
 
-/// Context slot of the FD Laplacian of the temperature.
-fn laplacian_variable() -> ContextVariable {
-    ContextVariable::External {
-        name: "laplacian".into(),
-    }
-}
-
-/// Context slot of the centred FD gradient of the temperature.
-fn gradient_variable() -> ContextVariable {
-    ContextVariable::SpatialGradient {
-        dimension: 0,
-        component: None,
-    }
-}
-
-/// Name of the conductivity coefficient field lambda(x).
-const CONDUCTIVITY: &str = "conductivity";
-
-/// Name of the coefficient field lambda'(x), the derivative of the
-/// conductivity along the bar.
-const CONDUCTIVITY_SLOPE: &str = "conductivity_slope";
-
-fn coefficient_variable(name: &'static str) -> ContextVariable {
-    ContextVariable::Coefficient { name: name.into() }
-}
-
-/// `rho*c_p*dT/dt = lambda*T'' + lambda'*T'`: the conduction term in
-/// non-conservative form, from the Laplacian and the centred gradient of
-/// the temperature and the two coefficient fields lambda and lambda'.
-struct HeatConduction1D {
-    /// Volumetric heat capacity rho*c_p, in J/(m^3*K).
-    rho_cp: f64,
-    /// Uniform initial temperature, in degrees Celsius.
-    initial_temperature: f64,
-}
-
-impl RequiresContext for HeatConduction1D {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![
-            laplacian_variable(),
-            gradient_variable(),
-            coefficient_variable(CONDUCTIVITY),
-            coefficient_variable(CONDUCTIVITY_SLOPE),
-        ]
-    }
-}
-
-impl PhysicalModel for HeatConduction1D {
-    fn compute_physics(
-        &self,
-        _state: &ContextValue,
-        ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        let laplacian = ctx.external(laplacian_variable())?.as_scalar_field()?;
-        let gradient = ctx.gradient(0)?;
-        let lambda = ctx
-            .external(coefficient_variable(CONDUCTIVITY))?
-            .as_scalar_field()?;
-        let slope = ctx
-            .external(coefficient_variable(CONDUCTIVITY_SLOPE))?
-            .as_scalar_field()?;
-        let rate = DVector::from_iterator(
-            laplacian.len(),
-            (0..laplacian.len())
-                .map(|i| (lambda[i] * laplacian[i] + slope[i] * gradient[i]) / self.rho_cp),
-        );
-        Ok(ContextValue::ScalarField(rate))
-    }
-
-    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        ContextValue::ScalarField(DVector::from_element(
-            mesh.n_dof(),
-            self.initial_temperature,
-        ))
-    }
-
-    fn name(&self) -> &str {
-        "heat_transfer_1d"
-    }
-}
-
-// ── Material and bar ──────────────────────────────────────────────────────
-
-/// Density of carbon steel, kg/m³.
-const DENSITY: f64 = 7850.0;
-/// Specific heat capacity of carbon steel, J/(kg·K).
-const SPECIFIC_HEAT: f64 = 460.0;
-/// Conductivity of carbon steel, W/(m·K); lambda(0) in case (b).
-const LAMBDA0: f64 = 50.0;
-/// Bar length, m.
-const LENGTH: f64 = 0.1;
-/// Grid nodes, ends included (dx = 1 mm).
-const N_NODES: usize = 101;
-/// Newton budget of every implicit solver (see the module documentation).
-const NEWTON_ITERATIONS: usize = 5;
-
-// ── Case (a) ──────────────────────────────────────────────────────────────
-
-const COOLING_INITIAL: f64 = 100.0;
-const COOLING_ENDS: f64 = 20.0;
-const COOLING_DT: f64 = 0.5;
-const COOLING_END_TIME: f64 = 120.0;
-/// One saved state every 10 s.
-const COOLING_SAVE_EVERY: usize = 20;
+/// Case (a): times checked against the Fourier series.
 const COOLING_CHECK_TIMES: [f64; 3] = [30.0, 60.0, 120.0];
 /// Reported, not checked (see the module documentation).
 const COOLING_EARLY_TIME: f64 = 10.0;
 const COOLING_TOLERANCE: f64 = 1e-2;
-
-// ── Case (b) ──────────────────────────────────────────────────────────────
-
-const GRADED_BETA: f64 = 1.0;
-const GRADED_HOT: f64 = 100.0;
-const GRADED_COLD: f64 = 20.0;
-const GRADED_DT: f64 = 50.0;
-const GRADED_END_TIME: f64 = 3000.0;
-/// One saved state every 500 s.
-const GRADED_SAVE_EVERY: usize = 10;
+/// Case (b): tolerance at the end of the run, against the steady profile.
 const GRADED_TOLERANCE: f64 = 5e-4;
-
-fn rho_cp() -> f64 {
-    DENSITY * SPECIFIC_HEAT
-}
-
-fn bar() -> Result<UniformGrid1D, OxiflowError> {
-    UniformGrid1D::new(N_NODES, 0.0, LENGTH)
-}
-
-/// x of every node.
-fn positions(mesh: &dyn Mesh) -> Vec<f64> {
-    (0..mesh.n_dof()).map(|i| mesh.coordinates(i)[0]).collect()
-}
-
-fn face(side: FaceSide) -> BoundaryRegion {
-    BoundaryRegion::Face { axis: 0, side }
-}
-
-/// lambda(x) = lambda0 (1 + beta x / L); case (a) is beta = 0.
-fn conductivity(beta: f64) -> GradedConductivity {
-    GradedConductivity {
-        lambda0: LAMBDA0,
-        beta,
-        length: LENGTH,
-    }
-}
-
-/// What differs between the runs of the example.
-struct Run {
-    initial: f64,
-    lower: f64,
-    upper: f64,
-    conductivity: GradedConductivity,
-    integrator: IntegratorKind,
-    dt: f64,
-    end_time: f64,
-    save_every: usize,
-}
-
-/// Solves one run on the bar.
-fn solve(run: &Run, solver: &dyn Solver) -> Result<SimulationResult, OxiflowError> {
-    let model = HeatConduction1D {
-        rho_cp: rho_cp(),
-        initial_temperature: run.initial,
-    };
-    let conditions: Vec<Box<dyn BoundaryCondition>> = vec![
-        Box::new(Dirichlet::constant(face(FaceSide::Lower), run.lower)),
-        Box::new(Dirichlet::constant(face(FaceSide::Upper), run.upper)),
-    ];
-    let domain =
-        Domain::new("bar", Box::new(model), Box::new(bar()?)).with_boundary_conditions(conditions);
-    let scenario = Scenario::multi(vec![domain])?;
-
-    let mesh: Arc<dyn Mesh> = Arc::new(bar()?);
-    let lambda = run.conductivity;
-    let config = SolverConfiguration::new(
-        TimeConfiguration::new(run.end_time, StepControl::Fixed { dt: run.dt })
-            .saving_every(run.save_every),
-        run.integrator.clone(),
-    )
-    .with_calculator(Box::new(FDLaplacianCalculator::new(
-        Arc::clone(&mesh),
-        laplacian_variable(),
-    )))
-    .with_calculator(Box::new(FDGradientCalculator::new(
-        Arc::clone(&mesh),
-        0,
-        None,
-        FDScheme::Central,
-    )))
-    .with_calculator(Box::new(CoefficientField::of_x(
-        Arc::clone(&mesh),
-        CONDUCTIVITY,
-        move |x| lambda.value(x[0]),
-    )?))
-    .with_calculator(Box::new(CoefficientField::of_x(
-        mesh,
-        CONDUCTIVITY_SLOPE,
-        move |_| lambda.slope(),
-    )?));
-    solver.solve(&scenario, &config)
-}
 
 /// The saved state at `time`, or an error naming the run.
 fn state_at<'a>(
@@ -387,30 +186,6 @@ fn check(label: &str, time: f64, error: f64, tolerance: f64) -> Result<(), Box<d
     }
 }
 
-/// Fourier-series temperature of case (a).
-fn fourier_cooling(x: f64, t: f64) -> f64 {
-    let alpha = LAMBDA0 / rho_cp();
-    let step = COOLING_INITIAL - COOLING_ENDS;
-    let mut sum = 0.0;
-    let mut k = 1.0_f64;
-    loop {
-        let amplitude = 4.0 * step / (k * PI);
-        let decay = (-(k * PI / LENGTH).powi(2) * alpha * t).exp();
-        if (amplitude * decay).abs() < 1e-12 {
-            break;
-        }
-        sum += amplitude * (k * PI * x / LENGTH).sin() * decay;
-        k += 2.0;
-    }
-    COOLING_ENDS + sum
-}
-
-/// Exact steady temperature of case (b).
-fn graded_steady(x: f64) -> f64 {
-    let profile = (1.0 + GRADED_BETA * x / LENGTH).ln() / (1.0 + GRADED_BETA).ln();
-    GRADED_HOT - (GRADED_HOT - GRADED_COLD) * profile
-}
-
 fn cooling(xs: &[f64]) -> Result<(), Box<dyn Error>> {
     println!(
         "(a) cooling: steel bar, {COOLING_INITIAL} °C, ends held at {COOLING_ENDS} °C, dt = {COOLING_DT} s"
@@ -428,16 +203,7 @@ fn cooling(xs: &[f64]) -> Result<(), Box<dyn Error>> {
         ),
     ];
     for (name, solver, integrator) in solvers {
-        let run = Run {
-            initial: COOLING_INITIAL,
-            lower: COOLING_ENDS,
-            upper: COOLING_ENDS,
-            conductivity: conductivity(0.0),
-            integrator: integrator.clone(),
-            dt: COOLING_DT,
-            end_time: COOLING_END_TIME,
-            save_every: COOLING_SAVE_EVERY,
-        };
+        let run = cooling_run(integrator);
         let label = format!("(a) {name}");
         let result = solve(&run, solver.as_ref())?;
 
@@ -447,7 +213,6 @@ fn cooling(xs: &[f64]) -> Result<(), Box<dyn Error>> {
             &Run {
                 end_time: COOLING_DT,
                 save_every: 1,
-                integrator,
                 ..run
             },
             solver.as_ref(),
@@ -471,22 +236,12 @@ fn cooling(xs: &[f64]) -> Result<(), Box<dyn Error>> {
 }
 
 fn graded(xs: &[f64]) -> Result<(), Box<dyn Error>> {
-    let profile = conductivity(GRADED_BETA);
+    let run = graded_run();
     println!(
         "(b) graded bar: lambda from {} to {} W/(m·K), ends held at {GRADED_HOT} and {GRADED_COLD} °C, dt = {GRADED_DT} s",
-        profile.value(0.0),
-        profile.value(LENGTH)
+        run.conductivity.value(0.0),
+        run.conductivity.value(LENGTH)
     );
-    let run = Run {
-        initial: GRADED_COLD,
-        lower: GRADED_HOT,
-        upper: GRADED_COLD,
-        conductivity: profile,
-        integrator: IntegratorKind::BackwardEuler,
-        dt: GRADED_DT,
-        end_time: GRADED_END_TIME,
-        save_every: GRADED_SAVE_EVERY,
-    };
     let solver = BackwardEulerSolver::new().with_max_newton_iterations(NEWTON_ITERATIONS);
     let result = solve(&run, &solver)?;
     for (time, state) in result.times.iter().zip(&result.states).skip(1) {

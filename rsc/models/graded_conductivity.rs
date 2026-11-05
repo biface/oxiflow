@@ -1,11 +1,12 @@
 //! Conductivity graded linearly along a bar, the coefficient profile of
 //! case (b) of the heat-transfer reference example.
 //!
-//! Shared by `examples/heat_transfer_1d.rs`, which documents it, and
-//! `benches/heat_transfer_1d.rs`, each of which includes this file as a
-//! module with `#[path]`. Kept apart from the model
-//! (`rsc/models/heat_transfer_1d.rs`) because the benchmark times the
-//! coefficient field alone, without the model.
+//! Shared by the heat-transfer scenario `rsc/models/heat_transfer_1d.rs`
+//! (the example `examples/heat_transfer_1d.rs`, which documents it, and
+//! its plot) and by `benches/heat_transfer_1d.rs`, each of which includes
+//! this file as a module with `#[path]`. Kept apart from the scenario
+//! because the benchmark times the coefficient field alone, without the
+//! model.
 
 /// Conductivity graded linearly along a bar of length `length`:
 /// `lambda(x) = lambda0 * (1 + beta * x / length)`.
