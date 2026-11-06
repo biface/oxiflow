@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::methods::bdf2`"><title>oxiflow::solver::methods::bdf2 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.0 (b940084d7 2026-09-28)" data-channel="1.99.0" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::methods::bdf2`"><title>oxiflow::solver::methods::bdf2 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
         onload="renderMathInElement(document.body, {
@@ -8,44 +8,55 @@
         ]
     });">
 </script>
-</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module bdf2</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.9.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module bdf2</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodsbdf2" title="Module `solver::methods::bdf2`">Module <code>solver::methods::bdf2</code></a><ul><li><a href="#algorithm" title="Algorithm">Algorithm</a></li><li><a href="#startup-acceptance-criterion-44" title="Startup (acceptance criterion, #44)">Startup (acceptance criterion, #44)</a></li><li><a href="#scope-at-j4a--fixed-dt-only" title="Scope at J4a — fixed `dt` only">Scope at J4a — fixed <code>dt</code> only</a></li><li><a href="#stability" title="Stability">Stability</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>bdf2</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/bdf2.rs.html#1-719">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodsbdf2"><a class="doc-anchor" href="#module-solvermethodsbdf2">§</a>Module <code>solver::methods::bdf2</code></h2>
-<p>BDF2 integrator — implicit multi-step, 2nd order (issue #44).</p>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module bdf2</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module bdf2</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodsbdf2" title="Module `solver::methods::bdf2`">Module <code>solver::methods::bdf2</code></a><ul><li><a href="#algorithm" title="Algorithm">Algorithm</a></li><li><a href="#startup-acceptance-criterion-44" title="Startup (acceptance criterion, #44)">Startup (acceptance criterion, #44)</a></li><li><a href="#scope--fixed-dt-only" title="Scope — fixed `dt` only">Scope — fixed <code>dt</code> only</a></li><li><a href="#state-variants" title="State variants">State variants</a></li><li><a href="#banded-path-feature-sparse-da-043" title="Banded path (feature `sparse`, DA-043)">Banded path (feature <code>sparse</code>, DA-043)</a></li><li><a href="#stability" title="Stability">Stability</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>bdf2</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/bdf2.rs.html#1-849">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodsbdf2"><a class="doc-anchor" href="#module-solvermethodsbdf2">§</a>Module <code>solver::methods::bdf2</code></h2>
+<p>BDF2 integrator — implicit multi-step, 2nd order (issue <a href="https://github.com/biface/oxiflow/issues/44">#44</a>).</p>
 <h3 id="algorithm"><a class="doc-anchor" href="#algorithm">§</a>Algorithm</h3>
 <p>$$\frac{3}{2}u^{n+1} - 2u^n + \frac{1}{2}u^{n-1} = \Delta t \cdot f(u^{n+1}, t^{n+1})$$</p>
 <p>Unlike Backward Euler / Crank-Nicolson (<a href="../implicit/index.html" title="mod oxiflow::solver::methods::implicit"><code>super::implicit</code></a>), this needs
 <strong>two</strong> past states, not one — <code>SteppableSolver::history_depth()</code>
-returns <code>1</code> here (DD-034), and <a href="struct.BDF2Solver.html#method.step" title="method oxiflow::solver::methods::bdf2::BDF2Solver::step"><code>BDF2Solver::step</code></a> receives <code>u^{n-1}</code>
+returns <code>1</code> here (<a href="https://github.com/biface/oxiflow/issues/87">DD-034</a>), and <a href="struct.BDF2Solver.html#method.step" title="method oxiflow::solver::methods::bdf2::BDF2Solver::step"><code>BDF2Solver::step</code></a> receives <code>u^{n-1}</code>
 via the <code>history</code> parameter.</p>
-<p><code>bdf2_step_newton</code> (below) is BDF2-specific and stays in this file
-rather than <a href="../implicit/index.html" title="mod oxiflow::solver::methods::implicit"><code>super::implicit</code></a>: unlike <code>theta_method_step_newton</code>,
-which serves two solvers (Backward Euler, Crank-Nicolson), this
-formula has exactly one consumer. It still reuses
-<code>super::implicit::finite_difference_jacobian</code>,
-<code>super::evaluate_derivative</code>, and the shared <a href="../newton/index.html" title="mod oxiflow::solver::methods::newton"><code>super::newton</code></a> loop
-(DD-044, <a href="https://github.com/biface/oxiflow/issues/112">#112</a>) — the genuinely shared pieces. Unlike
-<code>super::implicit::theta_method_step</code> (kept as a separate,
-non-configurable wrapper for BE/CN because <em>production</em> code — this
-module’s own bootstrap step, below — calls it directly), BDF2 has no
-such production caller for the unconfigured form: <code>bdf2_step_newton</code>
-is called directly, both by <a href="struct.BDF2Solver.html#method.step" title="method oxiflow::solver::methods::bdf2::BDF2Solver::step"><code>BDF2Solver::step</code></a> and by this module’s
-own tests, passing <code>stiff_jacobian_convergence()</code>/
-<a href="../newton/enum.JacobianStrategy.html#method.default" title="associated function oxiflow::solver::methods::newton::JacobianStrategy::default"><code>JacobianStrategy::default</code></a>/<code>max_iterations = 1</code> explicitly where
-the pre-DD-044 behaviour is wanted.</p>
-<h3 id="startup-acceptance-criterion-44"><a class="doc-anchor" href="#startup-acceptance-criterion-44">§</a>Startup (acceptance criterion, #44)</h3>
+<p>The BDF2 update is the <code>ImplicitFormula::Bdf2</code> formula of
+<a href="../implicit/index.html" title="mod oxiflow::solver::methods::implicit"><code>super::implicit</code></a>: $\alpha = 3/2$, $c = \Delta t$, $u^{*} =
+\frac{4u^n - u^{n-1}}{3}$ in <a href="../newton/index.html" title="mod oxiflow::solver::methods::newton"><code>super::newton</code></a>’s residual convention.
+It runs through <code>super::implicit::implicit_step_newton</code>, like the
+theta method, so the Newton loop, the residual, the finite-difference
+Jacobian and the solver’s <code>NewtonParams</code> are those of the other
+implicit solvers (<a href="https://github.com/biface/oxiflow/issues/109">DD-044</a>, <a href="https://github.com/biface/oxiflow/issues/112">#112</a>).</p>
+<h3 id="startup-acceptance-criterion-44"><a class="doc-anchor" href="#startup-acceptance-criterion-44">§</a>Startup (acceptance criterion, <a href="https://github.com/biface/oxiflow/issues/44">#44</a>)</h3>
 <p>BDF2 needs <code>u^{n-1}</code>, which doesn’t exist at the very first step. When
 <code>history</code> is empty, <a href="struct.BDF2Solver.html#method.step" title="method oxiflow::solver::methods::bdf2::BDF2Solver::step"><code>BDF2Solver::step</code></a> falls back to a single
-Backward Euler step (θ=1, via <code>super::implicit::theta_method_step</code>)
+Backward Euler step (<code>ImplicitFormula::Theta(1.0)</code>)
 to produce <code>u^1</code> from <code>u^0</code> — the standard bootstrap for 2-step methods.
 From the second step onward, the real BDF2 update runs.</p>
-<h3 id="scope-at-j4a--fixed-dt-only"><a class="doc-anchor" href="#scope-at-j4a--fixed-dt-only">§</a>Scope at J4a — fixed <code>dt</code> only</h3>
-<p><em>“Step-size change logic for adaptive dt”</em> (as #44 originally asked)
-is <strong>not implemented</strong>: <code>StepControl::Adaptive</code> doesn’t exist yet
-anywhere in <code>oxiflow</code> (rejected by every solver, including this one),
-and #42 (DoPri45) — the issue that would introduce it — hasn’t landed.
-Writing a variable-step BDF2 formula now would mean testing it against
-nothing real. Revisit once #42 lands; the classical fixed-step
-coefficients used here (3/2, -2, 1/2) would need to become
-ratio-dependent for a varying step size between <code>u^{n-1}</code> and <code>u^n</code>.</p>
+<p>The bootstrap step runs the same iterated Newton loop as the BDF2
+update, with the solver’s own convergence criterion, Jacobian
+strategy and iteration budget: a nonlinear model gets the budget it
+was configured with from the first step on. With the default
+configuration, the bootstrap step is the single frozen-Jacobian
+correction it has always been.</p>
+<h3 id="scope--fixed-dt-only"><a class="doc-anchor" href="#scope--fixed-dt-only">§</a>Scope — fixed <code>dt</code> only</h3>
+<p><em>“Step-size change logic for adaptive dt”</em> (as <a href="https://github.com/biface/oxiflow/issues/44">#44</a> originally asked)
+is <strong>not implemented</strong>: this solver rejects <code>StepControl::Adaptive</code>,
+which only <code>DoPri45Solver</code> (<a href="https://github.com/biface/oxiflow/issues/42">#42</a>) accepts. A variable-step BDF2 would
+need the classical fixed-step coefficients used here (3/2, -2, 1/2) to
+become ratio-dependent for a varying step size between <code>u^{n-1}</code> and
+<code>u^n</code>, and an error estimate to drive the step; no model needs it yet.</p>
+<h3 id="state-variants"><a class="doc-anchor" href="#state-variants">§</a>State variants</h3>
+<p>The update works on the flat vector of unknowns given by <code>StateLayout</code>
+(<code>super::state_layout</code>), as the θ-method does: a <code>VectorField</code> state,
+interleaved by node, is advanced like a <code>ScalarField</code>, and so is the
+Backward Euler startup step (<a href="https://github.com/biface/oxiflow/issues/192">#192</a>). For a <code>ScalarField</code>, results are
+bit-identical to the former code.</p>
+<h3 id="banded-path-feature-sparse-da-043"><a class="doc-anchor" href="#banded-path-feature-sparse-da-043">§</a>Banded path (feature <code>sparse</code>, <a href="https://github.com/biface/oxiflow/issues/103">DA-043</a>)</h3>
+<p>Like <a href="../backward_euler/struct.BackwardEulerSolver.html" title="struct oxiflow::solver::methods::backward_euler::BackwardEulerSolver"><code>BackwardEulerSolver</code></a>
+and <a href="../crank_nicolson/struct.CrankNicolsonSolver.html" title="struct oxiflow::solver::methods::crank_nicolson::CrankNicolsonSolver"><code>CrankNicolsonSolver</code></a>,
+the solver takes a banded linear system once a sparse solver
+(<code>with_sparse_solver</code>) and a Jacobian half-bandwidth
+(<code>with_jacobian_bandwidth</code>) are configured and the system has more
+unknowns than <code>with_sparse_threshold</code> (default 100). The bootstrap
+step and the BDF2 update both take it, through the same Newton loop
+and with the same Newton parameters as the dense path (<a href="https://github.com/biface/oxiflow/issues/133">#133</a>).</p>
 <h3 id="stability"><a class="doc-anchor" href="#stability">§</a>Stability</h3>
 <p>A-stable and, unlike Crank-Nicolson, L-stable — strong damping on
 stiff modes, same qualitative behaviour as Backward Euler but 2nd

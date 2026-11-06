@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Domain","DomainId","Scenario"]};
+window.SIDEBAR_ITEMS = {"struct":["Domain","DomainId","DomainSpec","Scenario"]};

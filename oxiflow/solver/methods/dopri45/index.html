@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::methods::dopri45`"><title>oxiflow::solver::methods::dopri45 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.0 (b940084d7 2026-09-28)" data-channel="1.99.0" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::methods::dopri45`"><title>oxiflow::solver::methods::dopri45 - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
         onload="renderMathInElement(document.body, {
@@ -8,9 +8,9 @@
         ]
     });">
 </script>
-</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module dopri45</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.9.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module dopri45</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodsdopri45" title="Module `solver::methods::dopri45`">Module <code>solver::methods::dopri45</code></a><ul><li><a href="#algorithm" title="Algorithm">Algorithm</a></li><li><a href="#step-size-control-dd-036" title="Step-size control (DD-036)">Step-size control (DD-036)</a></li><li><a href="#scope--solver-only-not-steppablesolver-see-discussion" title="Scope — `Solver` only, not `SteppableSolver` (see discussion)">Scope — <code>Solver</code> only, not <code>SteppableSolver</code> (see discussion)</a></li><li><a href="#acceptance-criteria-mapping-42" title="Acceptance criteria mapping (#42)">Acceptance criteria mapping (#42)</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>dopri45</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/dopri45.rs.html#1-661">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodsdopri45"><a class="doc-anchor" href="#module-solvermethodsdopri45">§</a>Module <code>solver::methods::dopri45</code></h2>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module dopri45</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module dopri45</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solvermethodsdopri45" title="Module `solver::methods::dopri45`">Module <code>solver::methods::dopri45</code></a><ul><li><a href="#algorithm" title="Algorithm">Algorithm</a></li><li><a href="#step-size-control-dd-036" title="Step-size control (DD-036)">Step-size control (DD-036)</a></li><li><a href="#advective-step-limit-da-073" title="Advective step limit (DA-073)">Advective step limit (DA-073)</a></li><li><a href="#state-variants" title="State variants">State variants</a></li><li><a href="#scope--solver-only-not-steppablesolver-see-discussion" title="Scope — `Solver` only, not `SteppableSolver` (see discussion)">Scope — <code>Solver</code> only, not <code>SteppableSolver</code> (see discussion)</a></li><li><a href="#acceptance-criteria-mapping-42" title="Acceptance criteria mapping (#42)">Acceptance criteria mapping (#42)</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver::<wbr>methods</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">solver</a>::<wbr><a href="../index.html">methods</a></div><h1>Module <span>dopri45</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/solver/methods/dopri45.rs.html#1-786">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solvermethodsdopri45"><a class="doc-anchor" href="#module-solvermethodsdopri45">§</a>Module <code>solver::methods::dopri45</code></h2>
 <p>Dormand-Prince DoPri45 — explicit, adaptive step, order 5 (local
-extrapolation) with embedded order-4 error estimate (issue #42).</p>
+extrapolation) with embedded order-4 error estimate (issue <a href="https://github.com/biface/oxiflow/issues/42">#42</a>).</p>
 <h3 id="algorithm"><a class="doc-anchor" href="#algorithm">§</a>Algorithm</h3>
 <p>7-stage embedded Runge-Kutta pair. The FSAL (First Same As Last)
 property of the Dormand-Prince tableau means stage 7’s evaluation
@@ -18,30 +18,57 @@ point <strong>is</strong> the 5th-order solution — no separate weighted sum ne
 to obtain it (see <code>dopri45_stages</code> below). The 4th-order solution is
 never computed explicitly either: only the <em>difference</em>
 <code>b_i - b*_i</code> is needed for the error estimate.</p>
-<p>Butcher tableau coefficients verified by hand before writing this file
-(no compiler available in the authoring environment): row sums
-<code>sum_j a_ij = c_i</code> for every stage, <code>sum(b) = 1</code>, <code>sum(b*) = 1</code>. These
-are necessary consistency conditions for any valid RK tableau — they
-don’t guarantee every individual coefficient is correct, but they
-would catch most transcription errors. Cross-check against a
-published source (Hairer/Nørsett/Wanner, or Dormand &amp; Prince 1980)
-before trusting this in production.</p>
-<h3 id="step-size-control-dd-036"><a class="doc-anchor" href="#step-size-control-dd-036">§</a>Step-size control (DD-036)</h3>
+<p>The coefficients are those of Dormand &amp; Prince (1980). The tests check
+them against the Runge-Kutta order conditions (one condition per rooted
+tree, Butcher): the weights <code>b</code> satisfy all 17 conditions up to order
+5, and the embedded weights <code>b* = b - e</code> satisfy the 8 conditions up to
+order 4 and miss order 5, as the lower-order member of an embedded pair
+should. The row sums <code>sum_j a_ij = c_i</code> are checked as well.</p>
+<h3 id="step-size-control-dd-036"><a class="doc-anchor" href="#step-size-control-dd-036">§</a>Step-size control (<a href="https://github.com/biface/oxiflow/issues/89">DD-036</a>)</h3>
 <p>Delegates entirely to <a href="../step_control/struct.StepSizeController.html" title="struct oxiflow::solver::methods::step_control::StepSizeController"><code>StepSizeController</code></a>
 for the accept/reject decision and the next <code>dt</code> — this file only
 supplies the error norm input (the RK4/5 difference) and the rejection
 retry loop. See <a href="../step_control/index.html" title="mod oxiflow::solver::methods::step_control"><code>super::step_control</code></a> for the controller itself.</p>
+<h3 id="advective-step-limit-da-073"><a class="doc-anchor" href="#advective-step-limit-da-073">§</a>Advective step limit (<a href="https://github.com/biface/oxiflow/issues/229">DA-073</a>)</h3>
+<p>An advective term limits the step of an explicit method: with <code>s</code> the
+largest wave speed the model declares
+(<a href="../../../model/traits/trait.PhysicalModel.html#method.max_wave_speed" title="method oxiflow::model::traits::PhysicalModel::max_wave_speed"><code>PhysicalModel::max_wave_speed</code></a>)
+and <code>Δx</code> the characteristic length of the mesh, the Courant number
+<code>s·Δt/Δx</code> must not exceed 1, a necessary condition shared by all the
+explicit integrators of the crate. At the start of each step the solver
+evaluates <code>s</code> on the state, with the first stage, and shortens a trial
+step above <code>Δx / s</code> to that value before computing the other stages,
+instead of failing as forward Euler and RK4 do with their fixed step.
+The first stage is then evaluated again, its context carrying the
+shortened step.</p>
+<p>A shortened step is not a rejection: it is counted under the metadata
+key <code>"solver.cfl_limited_steps"</code>, at most once per step, since a
+rejection only shortens the step further. A count close to
+<code>"solver.accepted_steps"</code> means that stability, not the tolerance,
+sets the step: an implicit integrator is then likely the better
+choice. The limit applies below <code>dt_min</code> too: <code>dt_min</code> bounds the
+steps the controller may choose to meet the tolerance, while the limit
+is a stability bound, and a positive one, so the run still advances.
+A model that declares no speed is not limited; the diffusive (Fourier)
+limit is never checked.</p>
+<h3 id="state-variants"><a class="doc-anchor" href="#state-variants">§</a>State variants</h3>
+<p>Stage states and the error estimate are built with the crate’s linear
+combination of states, and the error norm reads every value of the
+state, so a <code>VectorField</code> (n nodes × d components) is advanced like a
+<code>ScalarField</code>: all components weigh the same in the RMS norm (<a href="https://github.com/biface/oxiflow/issues/192">#192</a>).
+For a <code>ScalarField</code>, results are bit-identical to the former <code>DVector</code>
+arithmetic.</p>
 <h3 id="scope--solver-only-not-steppablesolver-see-discussion"><a class="doc-anchor" href="#scope--solver-only-not-steppablesolver-see-discussion">§</a>Scope — <code>Solver</code> only, not <code>SteppableSolver</code> (see discussion)</h3>
-<p>Unlike BDF2 (DD-034), this solver does <strong>not</strong> implement
+<p>Unlike BDF2 (<a href="https://github.com/biface/oxiflow/issues/87">DD-034</a>), this solver does <strong>not</strong> implement
 <code>SteppableSolver</code>. BDF2’s gap (needing <code>u^{n-1}</code>) was orthogonal to
 <code>dt</code> itself; this solver’s defining feature is choosing its <em>own</em>
 <code>dt</code> across calls, which is in direct tension with
-<code>MultiDomainOrchestrator</code>’s v1 scope (DD-031: <code>dt</code> synchronised across
+<code>MultiDomainOrchestrator</code>’s v1 scope (<a href="https://github.com/biface/oxiflow/issues/82">DA-031</a>: <code>dt</code> synchronised across
 domains). Making this orchestrator-compatible would mean re-opening
-the multirate question DD-031 already deferred — not a gap orthogonal
+the multirate question <a href="https://github.com/biface/oxiflow/issues/82">DA-031</a> already deferred — not a gap orthogonal
 to an existing limitation, but the same one. Revisit together if
 multirate coupling is ever tackled.</p>
-<h3 id="acceptance-criteria-mapping-42"><a class="doc-anchor" href="#acceptance-criteria-mapping-42">§</a>Acceptance criteria mapping (#42)</h3>
+<h3 id="acceptance-criteria-mapping-42"><a class="doc-anchor" href="#acceptance-criteria-mapping-42">§</a>Acceptance criteria mapping (<a href="https://github.com/biface/oxiflow/issues/42">#42</a>)</h3>
 <ul>
 <li>Step-size control within <code>rtol</code>/<code>atol</code>: enforced by
 <code>StepSizeController::accept</code>.</li>
@@ -50,7 +77,9 @@ retry loop below bails out once the controller can no longer
 suggest a smaller <code>dt</code>.</li>
 <li>Accepted/rejected counts in <code>SimulationResult::metadata</code>: keys
 <code>"solver.accepted_steps"</code> / <code>"solver.rejected_steps"</code>, following the
-convention already documented on <code>SimulationResult</code>.</li>
+convention already documented on <code>SimulationResult</code>, plus
+<code>"solver.cfl_limited_steps"</code> for the steps shortened to the advective
+limit (see above).</li>
 <li>Performance comparable to fixed-step RK4 on non-stiff problems: not
 benchmarked here (no compiler in this environment) — worth checking
 once this runs for real.</li>

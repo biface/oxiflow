@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Constrains the primary field $u$ at the boundary of a spatial domain."><title>BoundaryCondition in oxiflow::boundary - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.0 (b940084d7 2026-09-28)" data-channel="1.99.0" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Constrains the primary field $u$ at the boundary of a spatial domain."><title>BoundaryCondition in oxiflow::boundary - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="sidebar-items.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
         onload="renderMathInElement(document.body, {
@@ -8,40 +8,58 @@
         ]
     });">
 </script>
-</head><body class="rustdoc trait"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">BoundaryCondition</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../oxiflow/index.html">oxiflow</a><span class="version">0.9.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Boundary<wbr>Condition</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#contract" title="Contract">Contract</a></li><li><a href="#classification" title="Classification">Classification</a></li><li><a href="#serialisation" title="Serialisation">Serialisation</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#send--sync-dd-037" title="`Send + Sync` (DD-037)"><code>Send + Sync</code> (DD-037)</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.apply" title="apply">apply</a></li><li><a href="#tymethod.boundary_type" title="boundary_type">boundary_type</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.ghost_value" title="ghost_value">ghost_value</a></li><li><a href="#method.location" title="location">location</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In oxiflow::<wbr>boundary</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">oxiflow</a>::<wbr><a href="index.html">boundary</a></div><h1>Trait <span class="trait">Boundary<wbr>Condition</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/oxiflow/boundary/mod.rs.html#258-350">Source</a> </span></div><pre class="rust item-decl"><code>pub trait BoundaryCondition:
+</head><body class="rustdoc trait"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">BoundaryCondition</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../oxiflow/index.html">oxiflow</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Boundary<wbr>Condition</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#contract" title="Contract">Contract</a></li><li><a href="#state-variants" title="State variants">State variants</a></li><li><a href="#classification" title="Classification">Classification</a></li><li><a href="#serialisation" title="Serialisation">Serialisation</a></li><li><a href="#examples" title="Examples">Examples</a></li><li><a href="#send--sync-da-037" title="`Send + Sync` (DA-037)"><code>Send + Sync</code> (DA-037)</a></li></ul><h3><a href="#required-methods">Required Methods</a></h3><ul class="block"><li><a href="#tymethod.apply" title="apply">apply</a></li><li><a href="#tymethod.boundary_type" title="boundary_type">boundary_type</a></li></ul><h3><a href="#provided-methods">Provided Methods</a></h3><ul class="block"><li><a href="#method.constrained_nodes" title="constrained_nodes">constrained_nodes</a></li><li><a href="#method.ghost_value" title="ghost_value">ghost_value</a></li><li><a href="#method.location" title="location">location</a></li></ul><h3><a href="#implementors">Implementors</a></h3></section><div id="rustdoc-modnav"><h2><a href="index.html">In oxiflow::<wbr>boundary</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">oxiflow</a>::<wbr><a href="index.html">boundary</a></div><h1>Trait <span class="trait">Boundary<wbr>Condition</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/oxiflow/boundary/mod.rs.html#307-428">Source</a> </span></div><pre class="rust item-decl"><code>pub trait BoundaryCondition:
     <a class="trait" href="../model/traits/trait.RequiresContext.html" title="trait oxiflow::model::traits::RequiresContext">RequiresContext</a>
-    + <a class="trait" href="https://doc.rust-lang.org/1.99.0/core/fmt/trait.Debug.html" title="trait core::fmt::Debug">Debug</a>
-    + <a class="trait" href="https://doc.rust-lang.org/1.99.0/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a>
-    + <a class="trait" href="https://doc.rust-lang.org/1.99.0/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> {
+    + <a class="trait" href="https://doc.rust-lang.org/1.97.1/core/fmt/trait.Debug.html" title="trait core::fmt::Debug">Debug</a>
+    + <a class="trait" href="https://doc.rust-lang.org/1.97.1/core/marker/trait.Send.html" title="trait core::marker::Send">Send</a>
+    + <a class="trait" href="https://doc.rust-lang.org/1.97.1/core/marker/trait.Sync.html" title="trait core::marker::Sync">Sync</a> {
     // Required methods
     fn <a href="#tymethod.boundary_type" class="fn">boundary_type</a>(&amp;self) -&gt; <a class="enum" href="enum.BoundaryType.html" title="enum oxiflow::boundary::BoundaryType">BoundaryType</a>;
 <span class="item-spacer"></span>    fn <a href="#tymethod.apply" class="fn">apply</a>(
         &amp;self,
-        state: &amp;mut <a class="type" href="https://docs.rs/nalgebra/0.25.0/nalgebra/base/alias/type.DVector.html" title="type nalgebra::base::alias::DVector">DVector</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.f64.html">f64</a>&gt;,
+        state: &amp;mut <a class="type" href="https://docs.rs/nalgebra/0.25.0/nalgebra/base/alias/type.DVector.html" title="type nalgebra::base::alias::DVector">DVector</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.f64.html">f64</a>&gt;,
         ctx: &amp;<a class="struct" href="../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext">ComputeContext</a>,
         mesh: &amp;dyn <a class="trait" href="../mesh/trait.Mesh.html" title="trait oxiflow::mesh::Mesh">Mesh</a>,
-    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.99.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.unit.html">()</a>, <a class="enum" href="../context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;;
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="enum" href="../context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;;
 
     // Provided methods
-    fn <a href="#method.location" class="fn">location</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.99.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="enum" href="enum.BoundaryLocation.html" title="enum oxiflow::boundary::BoundaryLocation">BoundaryLocation</a>&gt; { ... }
+    fn <a href="#method.location" class="fn">location</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="enum" href="enum.BoundaryLocation.html" title="enum oxiflow::boundary::BoundaryLocation">BoundaryLocation</a>&gt; { ... }
+<span class="item-spacer"></span>    fn <a href="#method.constrained_nodes" class="fn">constrained_nodes</a>(&amp;self, mesh: &amp;dyn <a class="trait" href="../mesh/trait.Mesh.html" title="trait oxiflow::mesh::Mesh">Mesh</a>) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.usize.html">usize</a>&gt; { ... }
 <span class="item-spacer"></span>    fn <a href="#method.ghost_value" class="fn">ghost_value</a>(
         &amp;self,
-        depth: <a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.usize.html">usize</a>,
-        interior_at_depth: <a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.f64.html">f64</a>,
-        dx: <a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.f64.html">f64</a>,
+        depth: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.usize.html">usize</a>,
+        interior_at_depth: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.f64.html">f64</a>,
+        dx: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.f64.html">f64</a>,
         ctx: &amp;<a class="struct" href="../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext">ComputeContext</a>,
-    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.99.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.f64.html">f64</a>&gt; { ... }
+    ) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.f64.html">f64</a>&gt; { ... }
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>Constrains the primary field $u$ at the boundary of a spatial domain.</p>
 <p>A boundary condition receives the current field state and the fully populated
 <a href="../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext"><code>ComputeContext</code></a>, then modifies <code>state</code> in-place to enforce the constraint.</p>
 <h2 id="contract"><a class="doc-anchor" href="#contract">§</a>Contract</h2>
 <ul>
-<li><code>apply</code> is called once per time step, after context calculators and before
-<code>PhysicalModel::compute_physics</code>.</li>
+<li><code>apply</code> is called at every derivative evaluation, after the calculators
+providing the variables declared in <code>required_variables()</code> and before
+the other calculators and <code>PhysicalModel::compute_physics</code> (<a href="https://github.com/biface/oxiflow/issues/200">DD-070</a>). The
+solver drivers also call it on the initial state and at the end of each
+step.</li>
 <li><code>apply</code> must not modify <code>ctx</code> or <code>mesh</code> — only <code>state</code>.</li>
 <li>Variables declared in <code>required_variables()</code> are guaranteed to be present
-in <code>ctx</code> when <code>apply</code> is called.</li>
+in <code>ctx</code> when <code>apply</code> is called. They are computed on the state <em>before</em>
+the conditions are applied, so a condition should only require variables
+that do not depend on the state (time, a feed concentration): a gradient
+read there would come from the unconstrained state.</li>
+<li><code>apply</code> only modifies the nodes returned by
+<a href="trait.BoundaryCondition.html#method.constrained_nodes" title="method oxiflow::boundary::BoundaryCondition::constrained_nodes"><code>constrained_nodes</code></a>, if it declares any.</li>
 </ul>
+<h2 id="state-variants"><a class="doc-anchor" href="#state-variants">§</a>State variants</h2>
+<p><code>apply</code> receives a single field, so it applies to <code>ScalarField</code> states
+only: a domain whose state is a <code>VectorField</code> and that has boundary
+conditions attached fails with <code>OxiflowError::TypeMismatch</code> at the first
+derivative evaluation. The boundaries of a <code>VectorField</code> state are
+closed at the operator level instead, through
+<a href="trait.BoundaryCondition.html#method.ghost_value" title="method oxiflow::boundary::BoundaryCondition::ghost_value"><code>Self::ghost_value</code></a> (as in the <code>langmuir_multi</code> and <code>lahar_multifield</code>
+examples). Conditions applied component by component belong with the
+mixed finite-element spaces (<a href="https://github.com/biface/oxiflow/issues/150">#150</a>).</p>
 <h2 id="classification"><a class="doc-anchor" href="#classification">§</a>Classification</h2>
 <p>Every implementation must declare its mathematical nature via <code>boundary_type()</code>.
 The geometric location may be declared via <code>location()</code> (default <code>None</code>) —
@@ -49,8 +67,11 @@ essential for complex meshes, FEM, and multi-phase problems.</p>
 <h2 id="serialisation"><a class="doc-anchor" href="#serialisation">§</a>Serialisation</h2>
 <p><code>BoundaryCondition</code> does not implement <code>serde::Serialize</code> / <code>serde::Deserialize</code>.
 Concrete implementations may hold arbitrary state that cannot be serialised
-generically. If persistence is required, provide a dedicated configuration
-type and reconstruct the BC from it — see <code>SimulationSnapshot</code> (DD-025).</p>
+generically (a closure, for a time-dependent <a href="dirichlet/struct.Dirichlet.html" title="struct oxiflow::boundary::dirichlet::Dirichlet"><code>Dirichlet</code></a> value). The
+conditions of this crate are described as data by <a href="spec/enum.BoundaryConditionSpec.html" title="enum oxiflow::boundary::spec::BoundaryConditionSpec"><code>BoundaryConditionSpec</code></a>
+(<a href="https://github.com/biface/oxiflow/issues/108">#108</a>), which builds them from a configuration; a condition defined
+outside the crate provides its own configuration type and reconstructs
+itself from it, as <code>SimulationSnapshot</code> (<a href="https://github.com/biface/oxiflow/issues/66">DT-025</a>) expects.</p>
 <h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
 <div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>oxiflow::boundary::{BoundaryCondition, BoundaryType};
 <span class="kw">use </span>oxiflow::context::compute::ComputeContext;
@@ -80,8 +101,8 @@ type and reconstruct the BC from it — see <code>SimulationSnapshot</code> (DD-
 
 <span class="kw">let </span>bc = ZeroFluxBC;
 <span class="macro">assert_eq!</span>(bc.boundary_type(), BoundaryType::Neumann);
-<span class="macro">assert!</span>(bc.location().is_none());</code></pre></div><h2 id="send--sync-dd-037"><a class="doc-anchor" href="#send--sync-dd-037">§</a><code>Send + Sync</code> (DD-037)</h2>
-<p>Added alongside DD-037 (#45): <a href="../solver/methods/imex/struct.SplitOperator.html" title="struct oxiflow::solver::methods::imex::SplitOperator"><code>crate::solver::methods::imex::SplitOperator</code></a>
+<span class="macro">assert!</span>(bc.location().is_none());</code></pre></div><h2 id="send--sync-da-037"><a class="doc-anchor" href="#send--sync-da-037">§</a><code>Send + Sync</code> (<a href="https://github.com/biface/oxiflow/issues/90">DA-037</a>)</h2>
+<p>Added alongside <a href="https://github.com/biface/oxiflow/issues/90">DA-037</a> (<a href="https://github.com/biface/oxiflow/issues/45">#45</a>): <a href="../solver/methods/imex/struct.SplitOperator.html" title="struct oxiflow::solver::methods::imex::SplitOperator"><code>crate::solver::methods::imex::SplitOperator</code></a>
 is the first place in the engine where a <code>Domain</code> is <em>owned</em> by a type
 that must itself be <code>Send + Sync</code> (<code>Solver: Send + Sync</code>) rather than
 only borrowed as <code>&amp;Domain</code>. Without this bound, <code>Box&lt;dyn BoundaryCondition&gt;</code>
@@ -91,37 +112,57 @@ implementations (<code>DanckwertsInlet</code>, <code>DanckwertsOutlet</code>) al
 this trivially (plain <code>f64</code>/<code>ContextVariable</code> fields or no fields at
 all) — non-breaking in practice, though technically a new bound on the
 trait for any future external implementor.</p>
-</div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.boundary_type" class="method"><a class="src rightside" href="../../src/oxiflow/boundary/mod.rs.html#263">Source</a><h4 class="code-header">fn <a href="#tymethod.boundary_type" class="fn">boundary_type</a>(&amp;self) -&gt; <a class="enum" href="enum.BoundaryType.html" title="enum oxiflow::boundary::BoundaryType">BoundaryType</a></h4></section></summary><div class="docblock"><p>Returns the mathematical type of this boundary condition.</p>
+</div></details><h2 id="required-methods" class="section-header">Required Methods<a href="#required-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="tymethod.boundary_type" class="method"><a class="src rightside" href="../../src/oxiflow/boundary/mod.rs.html#312">Source</a><h4 class="code-header">fn <a href="#tymethod.boundary_type" class="fn">boundary_type</a>(&amp;self) -&gt; <a class="enum" href="enum.BoundaryType.html" title="enum oxiflow::boundary::BoundaryType">BoundaryType</a></h4></section></summary><div class="docblock"><p>Returns the mathematical type of this boundary condition.</p>
 <p>Required — every implementation must declare whether it enforces a
 Dirichlet, Neumann, Robin, or Periodic constraint.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.apply" class="method"><a class="src rightside" href="../../src/oxiflow/boundary/mod.rs.html#288-293">Source</a><h4 class="code-header">fn <a href="#tymethod.apply" class="fn">apply</a>(
+</div></details><details class="toggle method-toggle" open><summary><section id="tymethod.apply" class="method"><a class="src rightside" href="../../src/oxiflow/boundary/mod.rs.html#339-344">Source</a><h4 class="code-header">fn <a href="#tymethod.apply" class="fn">apply</a>(
     &amp;self,
-    state: &amp;mut <a class="type" href="https://docs.rs/nalgebra/0.25.0/nalgebra/base/alias/type.DVector.html" title="type nalgebra::base::alias::DVector">DVector</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.f64.html">f64</a>&gt;,
+    state: &amp;mut <a class="type" href="https://docs.rs/nalgebra/0.25.0/nalgebra/base/alias/type.DVector.html" title="type nalgebra::base::alias::DVector">DVector</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.f64.html">f64</a>&gt;,
     ctx: &amp;<a class="struct" href="../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext">ComputeContext</a>,
     mesh: &amp;dyn <a class="trait" href="../mesh/trait.Mesh.html" title="trait oxiflow::mesh::Mesh">Mesh</a>,
-) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.99.0/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.unit.html">()</a>, <a class="enum" href="../context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;</h4></section></summary><div class="docblock"><p>Applies the boundary condition to <code>state</code>.</p>
-<p>Called once per time step, after all context calculators have run.
-Modifies <code>state</code> in-place to enforce the constraint.</p>
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/result/enum.Result.html" title="enum core::result::Result">Result</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.unit.html">()</a>, <a class="enum" href="../context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError">OxiflowError</a>&gt;</h4></section></summary><div class="docblock"><p>Applies the boundary condition to <code>state</code>.</p>
+<p>Called at every derivative evaluation and by the solver drivers (see
+the <em>Contract</em> section). Modifies <code>state</code> in-place to enforce the
+constraint.</p>
 <h5 id="parameters"><a class="doc-anchor" href="#parameters">§</a>Parameters</h5>
 <ul>
 <li><code>state</code> — current field $u$ as a DOF vector; modified in-place.</li>
-<li><code>ctx</code>   — fully populated context (time, step, spatial quantities).</li>
+<li><code>ctx</code>   — context holding the time, the time step and the variables
+declared in <code>required_variables()</code>.</li>
 <li><code>mesh</code>  — spatial discretisation of the domain.</li>
 </ul>
 <h5 id="errors"><a class="doc-anchor" href="#errors">§</a>Errors</h5>
 <p>Returns <a href="../context/error/enum.OxiflowError.html" title="enum oxiflow::context::error::OxiflowError"><code>OxiflowError</code></a> if the constraint cannot be applied.</p>
-</div></details></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.location" class="method"><a class="src rightside" href="../../src/oxiflow/boundary/mod.rs.html#270-272">Source</a><h4 class="code-header">fn <a href="#method.location" class="fn">location</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.99.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="enum" href="enum.BoundaryLocation.html" title="enum oxiflow::boundary::BoundaryLocation">BoundaryLocation</a>&gt;</h4></section></summary><div class="docblock"><p>Returns the geometric location of this boundary condition, if known.</p>
+</div></details></div><h2 id="provided-methods" class="section-header">Provided Methods<a href="#provided-methods" class="anchor">§</a></h2><div class="methods"><details class="toggle method-toggle" open><summary><section id="method.location" class="method"><a class="src rightside" href="../../src/oxiflow/boundary/mod.rs.html#319-321">Source</a><h4 class="code-header">fn <a href="#method.location" class="fn">location</a>(&amp;self) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="enum" href="enum.BoundaryLocation.html" title="enum oxiflow::boundary::BoundaryLocation">BoundaryLocation</a>&gt;</h4></section></summary><div class="docblock"><p>Returns the geometric location of this boundary condition, if known.</p>
 <p>Optional — defaults to <code>None</code> for simple or location-agnostic BCs.
 Override for complex meshes, FEM, and multi-phase problems where the
 location carries semantic meaning for the solver or post-processor.</p>
-</div></details><details class="toggle method-toggle" open><summary><section id="method.ghost_value" class="method"><a class="src rightside" href="../../src/oxiflow/boundary/mod.rs.html#340-349">Source</a><h4 class="code-header">fn <a href="#method.ghost_value" class="fn">ghost_value</a>(
+</div></details><details class="toggle method-toggle" open><summary><section id="method.constrained_nodes" class="method"><a class="src rightside" href="../../src/oxiflow/boundary/mod.rs.html#368-371">Source</a><h4 class="code-header">fn <a href="#method.constrained_nodes" class="fn">constrained_nodes</a>(&amp;self, mesh: &amp;dyn <a class="trait" href="../mesh/trait.Mesh.html" title="trait oxiflow::mesh::Mesh">Mesh</a>) -&gt; <a class="struct" href="https://doc.rust-lang.org/1.97.1/alloc/vec/struct.Vec.html" title="struct alloc::vec::Vec">Vec</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.usize.html">usize</a>&gt;</h4></section></summary><div class="docblock"><p>Indices of the nodes <a href="trait.BoundaryCondition.html#tymethod.apply" title="method oxiflow::boundary::BoundaryCondition::apply"><code>apply</code></a> sets, for <code>mesh</code> (<a href="https://github.com/biface/oxiflow/issues/200">DD-070</a>,
+<a href="https://github.com/biface/oxiflow/issues/200">#200</a>).</p>
+<p>The solver treats these nodes as algebraic: it sets the derivative to
+zero there at every evaluation, so that the integrators and the Newton
+iterations of the implicit methods leave them alone (their rows of the
+implicit system become identity rows), and the condition alone fixes
+their value, within a step as well as at its end.</p>
+<p>Defaults to an empty list: a condition that declares nothing keeps the
+derivative the model gives its nodes. The solver drivers still restore
+it at the end of each step, but its nodes move within the step: a
+direct call to <code>SteppableSolver::step</code> returns them moved, and the
+error estimate of an adaptive method or the residual of a Newton
+iteration includes that movement. Return only nodes <code>apply</code> actually
+sets — a declared node that <code>apply</code> leaves alone would keep its
+initial value.</p>
+<h5 id="errors-reported-by-the-solver"><a class="doc-anchor" href="#errors-reported-by-the-solver">§</a>Errors reported by the solver</h5>
+<p>An index outside the state is reported as
+<code>OxiflowError::PreconditionFailed</code> at the first derivative evaluation.</p>
+</div></details><details class="toggle method-toggle" open><summary><section id="method.ghost_value" class="method"><a class="src rightside" href="../../src/oxiflow/boundary/mod.rs.html#418-427">Source</a><h4 class="code-header">fn <a href="#method.ghost_value" class="fn">ghost_value</a>(
     &amp;self,
-    depth: <a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.usize.html">usize</a>,
-    interior_at_depth: <a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.f64.html">f64</a>,
-    dx: <a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.f64.html">f64</a>,
+    depth: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.usize.html">usize</a>,
+    interior_at_depth: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.f64.html">f64</a>,
+    dx: <a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.f64.html">f64</a>,
     ctx: &amp;<a class="struct" href="../context/compute/struct.ComputeContext.html" title="struct oxiflow::context::compute::ComputeContext">ComputeContext</a>,
-) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.99.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.99.0/std/primitive.f64.html">f64</a>&gt;</h4></section></summary><div class="docblock"><p>Ghost-cell value for this boundary condition, at reflection depth
-<code>depth</code> (DD-042, amendment 1).</p>
+) -&gt; <a class="enum" href="https://doc.rust-lang.org/1.97.1/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="primitive" href="https://doc.rust-lang.org/1.97.1/std/primitive.f64.html">f64</a>&gt;</h4></section></summary><div class="docblock"><p>Ghost-cell value for this boundary condition, at reflection depth
+<code>depth</code> (<a href="https://github.com/biface/oxiflow/issues/100">DD-042</a>, amendment 1).</p>
 <p><code>FluxBoundary::GhostCell</code> (<code>operators::fv</code>, <code>operators::weno</code>) needs
 values <em>outside</em> the real domain to close its face-flux computation
 at the boundary — something <code>apply()</code> above does not provide, since
@@ -135,17 +176,17 @@ depth — the method-of-images convention: ghost layer <code>k</code> mirrors
 interior node <code>k−1</code> (so <code>depth = 1</code> pairs with the nearest interior
 neighbor, <code>depth = 2</code> with the next one, etc.). Each layer is derived
 directly from this real interior value, not from a previously
-computed ghost layer — deliberately, so a Robin condition (e.g.
-<a href="danckwerts/struct.DanckwertsInlet.html" title="struct oxiflow::boundary::danckwerts::DanckwertsInlet"><code>DanckwertsInlet</code></a>) stays exact at every depth instead of eroding
+computed ghost layer — deliberately, so that a Robin condition
+stays exact at every depth instead of eroding
 through repeated extrapolation. A chained scheme (each ghost derived
 from the previous one) was considered and rejected for exactly this
-reason — see DD-042, amendment 1.</p>
+reason — see <a href="https://github.com/biface/oxiflow/issues/100">DD-042</a>, amendment 1.</p>
 <p>Defaults to <code>None</code> — non-breaking for every existing or external
 implementation. A generic Dirichlet/Neumann formula is deliberately
 <em>not</em> supplied here as a fallback: a Robin condition has no generic
 ghost value independent of its own α/β coefficients, and silently
 approximating one for it would be wrong, not merely imprecise — see
-DD-042 for the two concrete consumers (lahar-lake, chromatography)
+<a href="https://github.com/biface/oxiflow/issues/100">DD-042</a> for the two concrete consumers (lahar-lake, chromatography)
 that motivated this method and why a generic-by-<code>BoundaryType</code>
 fallback was rejected in favor of per-implementation exactness.</p>
 <p>A <code>FluxBoundary::GhostCell</code> referencing a BC that does not override
@@ -154,10 +195,10 @@ this method (still returns <code>None</code>), or that cannot supply the
 (<code>OxiflowError::PreconditionFailed</code>) rather than substitute an
 approximation of its own.</p>
 <p>Takes <code>ctx</code> (added alongside <a href="injection/struct.InjectionInlet.html" title="struct oxiflow::boundary::injection::InjectionInlet"><code>InjectionInlet</code></a>) so a ghost value can
-depend on simulation time — the two motivating cases at DD-042
+depend on simulation time — the two motivating cases at <a href="https://github.com/biface/oxiflow/issues/100">DD-042</a>
 (lahar-lake, Danckwerts) were both steady-state, so the original
 signature had no way to express a time-varying boundary; a
 competitive-adsorption inlet (chromatography) needs exactly that
 (an injection profile evaluated at <code>ctx.time()</code>), not a
 per-implementation special case bolted on separately.</p>
-</div></details></div><h2 id="dyn-compatibility" class="section-header">Dyn Compatibility<a href="#dyn-compatibility" class="anchor">§</a></h2><div class="dyn-compatibility-info"><p>This trait <b>is</b> <a href="https://doc.rust-lang.org/1.99.0/reference/items/traits.html#dyn-compatibility">dyn compatible</a>.</p><p><i>In older versions of Rust, dyn compatibility was called "object safety".</i></p></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><section id="impl-BoundaryCondition-for-DanckwertsInlet" class="impl"><a class="src rightside" href="../../src/oxiflow/boundary/danckwerts.rs.html#154-201">Source</a><a href="#impl-BoundaryCondition-for-DanckwertsInlet" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.BoundaryCondition.html" title="trait oxiflow::boundary::BoundaryCondition">BoundaryCondition</a> for <a class="struct" href="danckwerts/struct.DanckwertsInlet.html" title="struct oxiflow::boundary::danckwerts::DanckwertsInlet">DanckwertsInlet</a></h3></section><section id="impl-BoundaryCondition-for-DanckwertsOutlet" class="impl"><a class="src rightside" href="../../src/oxiflow/boundary/danckwerts.rs.html#259-292">Source</a><a href="#impl-BoundaryCondition-for-DanckwertsOutlet" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.BoundaryCondition.html" title="trait oxiflow::boundary::BoundaryCondition">BoundaryCondition</a> for <a class="struct" href="danckwerts/struct.DanckwertsOutlet.html" title="struct oxiflow::boundary::danckwerts::DanckwertsOutlet">DanckwertsOutlet</a></h3></section><section id="impl-BoundaryCondition-for-InjectionInlet" class="impl"><a class="src rightside" href="../../src/oxiflow/boundary/injection.rs.html#177-203">Source</a><a href="#impl-BoundaryCondition-for-InjectionInlet" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.BoundaryCondition.html" title="trait oxiflow::boundary::BoundaryCondition">BoundaryCondition</a> for <a class="struct" href="injection/struct.InjectionInlet.html" title="struct oxiflow::boundary::injection::InjectionInlet">InjectionInlet</a></h3></section></div><script src="../../trait.impl/oxiflow/boundary/trait.BoundaryCondition.js" async></script></section></div></main></body></html>
+</div></details></div><h2 id="implementors" class="section-header">Implementors<a href="#implementors" class="anchor">§</a></h2><div id="implementors-list"><div class="negative-marker"></div><section id="impl-BoundaryCondition-for-DanckwertsInlet" class="impl"><a class="src rightside" href="../../src/oxiflow/boundary/danckwerts.rs.html#216-282">Source</a><a href="#impl-BoundaryCondition-for-DanckwertsInlet" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.BoundaryCondition.html" title="trait oxiflow::boundary::BoundaryCondition">BoundaryCondition</a> for <a class="struct" href="danckwerts/struct.DanckwertsInlet.html" title="struct oxiflow::boundary::danckwerts::DanckwertsInlet">DanckwertsInlet</a></h3></section><section id="impl-BoundaryCondition-for-DanckwertsOutlet" class="impl"><a class="src rightside" href="../../src/oxiflow/boundary/danckwerts.rs.html#366-405">Source</a><a href="#impl-BoundaryCondition-for-DanckwertsOutlet" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.BoundaryCondition.html" title="trait oxiflow::boundary::BoundaryCondition">BoundaryCondition</a> for <a class="struct" href="danckwerts/struct.DanckwertsOutlet.html" title="struct oxiflow::boundary::danckwerts::DanckwertsOutlet">DanckwertsOutlet</a></h3></section><section id="impl-BoundaryCondition-for-Dirichlet" class="impl"><a class="src rightside" href="../../src/oxiflow/boundary/dirichlet.rs.html#168-212">Source</a><a href="#impl-BoundaryCondition-for-Dirichlet" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.BoundaryCondition.html" title="trait oxiflow::boundary::BoundaryCondition">BoundaryCondition</a> for <a class="struct" href="dirichlet/struct.Dirichlet.html" title="struct oxiflow::boundary::dirichlet::Dirichlet">Dirichlet</a></h3></section><section id="impl-BoundaryCondition-for-InjectionInlet" class="impl"><a class="src rightside" href="../../src/oxiflow/boundary/injection.rs.html#179-205">Source</a><a href="#impl-BoundaryCondition-for-InjectionInlet" class="anchor">§</a><h3 class="code-header">impl <a class="trait" href="trait.BoundaryCondition.html" title="trait oxiflow::boundary::BoundaryCondition">BoundaryCondition</a> for <a class="struct" href="injection/struct.InjectionInlet.html" title="struct oxiflow::boundary::injection::InjectionInlet">InjectionInlet</a></h3></section></div><script src="../../trait.impl/oxiflow/boundary/trait.BoundaryCondition.js" async></script></section></div></main></body></html>

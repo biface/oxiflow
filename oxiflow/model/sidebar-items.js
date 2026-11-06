@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["composite","discretized","traits"]};
+window.SIDEBAR_ITEMS = {"mod":["composite","discretized","initial_condition","spec","traits"]};

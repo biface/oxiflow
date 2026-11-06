@@ -1,0 +1,43 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `boundary::dirichlet`"><title>oxiflow::boundary::dirichlet - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module dirichlet</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module dirichlet</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-boundarydirichlet" title="Module `boundary::dirichlet`">Module <code>boundary::dirichlet</code></a><ul><li><a href="#condition" title="Condition">Condition</a></li><li><a href="#region" title="Region">Region</a></li><li><a href="#constrained-nodes-dd-070" title="Constrained nodes (DD-070)">Constrained nodes (DD-070)</a></li><li><a href="#location" title="Location">Location</a></li><li><a href="#serialisation" title="Serialisation">Serialisation</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>boundary</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">boundary</a></div><h1>Module <span>dirichlet</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/boundary/dirichlet.rs.html#1-417">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-boundarydirichlet"><a class="doc-anchor" href="#module-boundarydirichlet">§</a>Module <code>boundary::dirichlet</code></h2>
+<p>Dirichlet boundary condition on a boundary region of the mesh (<a href="https://github.com/biface/oxiflow/issues/202">#202</a>).</p>
+<h3 id="condition"><a class="doc-anchor" href="#condition">§</a>Condition</h3>
+<p>Every node of the region holds a prescribed value, constant or given as a
+function of time:</p>
+<p>$$u = g(t) \quad \text{on the region}$$</p>
+<p>The time is read from <a href="../../context/compute/struct.ComputeContext.html#method.time" title="method oxiflow::context::compute::ComputeContext::time"><code>ComputeContext::time</code></a>; the condition requires no
+context variable.</p>
+<h3 id="region"><a class="doc-anchor" href="#region">§</a>Region</h3>
+<p>The condition acts on a <a href="../../mesh/enum.BoundaryRegion.html" title="enum oxiflow::mesh::BoundaryRegion"><code>BoundaryRegion</code></a> the mesh resolves with
+<a href="../../mesh/trait.Mesh.html#method.boundary_nodes" title="method oxiflow::mesh::Mesh::boundary_nodes"><code>Mesh::boundary_nodes</code></a> (<a href="https://github.com/biface/oxiflow/issues/203">DA-071</a>): with the default implementation of
+<code>Mesh</code>, either face of a 1D mesh, normal to axis 0. A mesh that does not
+define the region refuses it with <code>PreconditionFailed</code>. Only the nodes of
+the region are needed, not their interior neighbours: unlike the
+Danckwerts conditions, a Dirichlet condition also applies on a 1D mesh of
+a single node.</p>
+<h3 id="constrained-nodes-dd-070"><a class="doc-anchor" href="#constrained-nodes-dd-070">§</a>Constrained nodes (<a href="https://github.com/biface/oxiflow/issues/200">DD-070</a>)</h3>
+<p>The nodes of the region are declared through
+<a href="../trait.BoundaryCondition.html#method.constrained_nodes" title="method oxiflow::boundary::BoundaryCondition::constrained_nodes"><code>BoundaryCondition::constrained_nodes</code></a>: the solver keeps their
+derivative at zero and the solver drivers re-apply the condition to the
+initial state and at the end of each step, at the exact time of the saved
+state. Every saved state holds <code>g(t)</code> at those nodes, bit for bit.</p>
+<h3 id="location"><a class="doc-anchor" href="#location">§</a>Location</h3>
+<p><a href="../trait.BoundaryCondition.html#method.location" title="method oxiflow::boundary::BoundaryCondition::location"><code>BoundaryCondition::location</code></a> keeps its default, <code>None</code>: the region
+already designates where the condition acts, and a
+<a href="../enum.BoundaryLocation.html" title="enum oxiflow::boundary::BoundaryLocation"><code>BoundaryLocation</code></a> (<code>Inlet</code>,
+<code>Wall</code>…) carries a physical role a held value does not imply.</p>
+<h3 id="serialisation"><a class="doc-anchor" href="#serialisation">§</a>Serialisation</h3>
+<p>Not serialisable: the time-dependent value is a closure. A configuration
+that needs persistence rebuilds the condition from its own description,
+as <code>BoundaryCondition</code> recommends.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.Dirichlet.html" title="struct oxiflow::boundary::dirichlet::Dirichlet">Dirichlet</a></dt><dd>Dirichlet condition — every node of a boundary region holds a prescribed
+value $g(t)$, constant or a function of time (<a href="https://github.com/biface/oxiflow/issues/202">#202</a>).</dd></dl></section></div></main></body></html>

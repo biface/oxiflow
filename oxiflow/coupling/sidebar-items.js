@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Interface"],"trait":["CouplingOperator"]};
+window.SIDEBAR_ITEMS = {"struct":["CouplingContext","Interface"],"trait":["CouplingOperator"]};

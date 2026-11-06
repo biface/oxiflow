@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"mod":["structured"],"trait":["Mesh"]};
+window.SIDEBAR_ITEMS = {"enum":["BoundaryRegion","FaceSide"],"mod":["spec","structured"],"struct":["BoundaryNode"],"trait":["Mesh"]};

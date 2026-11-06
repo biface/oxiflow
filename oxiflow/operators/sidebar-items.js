@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["FluxBoundary"],"mod":["adaptive","fd","fv","limiters","weno"],"trait":["DiscreteOperator","FluxDivergenceOperator"]};
+window.SIDEBAR_ITEMS = {"enum":["FluxBoundary"],"mod":["adaptive","fd","fv","limiters","spec","weno"],"trait":["DiscreteOperator","FluxDivergenceOperator"]};

@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::parallel`"><title>oxiflow::solver::parallel - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.99.0 (b940084d7 2026-09-28)" data-channel="1.99.0" data-search-js="search-cf4fc35e.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-417ebf0a.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `solver::parallel`"><title>oxiflow::solver::parallel - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
         onload="renderMathInElement(document.body, {
@@ -8,26 +8,50 @@
         ]
     });">
 </script>
-</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module parallel</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.9.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module parallel</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solverparallel" title="Module `solver::parallel`">Module <code>solver::parallel</code></a><ul><li><a href="#what-this-is-not" title="What this is not">What this is not</a></li></ul></li></ul><h3><a href="#functions">Module Items</a></h3><ul class="block"><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a></div><h1>Module <span>parallel</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/parallel.rs.html#1-206">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solverparallel"><a class="doc-anchor" href="#module-solverparallel">§</a>Module <code>solver::parallel</code></h2>
-<p>Shared Rayon-dispatch-threshold mechanism (DD-014, DD-048) — a small,
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module parallel</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module parallel</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-solverparallel" title="Module `solver::parallel`">Module <code>solver::parallel</code></a><ul><li><a href="#what-this-is-not" title="What this is not">What this is not</a></li><li><a href="#sizing-a-threshold" title="Sizing a threshold">Sizing a threshold</a></li></ul></li></ul><h3><a href="#functions">Module Items</a></h3><ul class="block"><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>solver</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">solver</a></div><h1>Module <span>parallel</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/solver/parallel.rs.html#1-233">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-solverparallel"><a class="doc-anchor" href="#module-solverparallel">§</a>Module <code>solver::parallel</code></h2>
+<p>Shared Rayon-dispatch-threshold mechanism (<a href="https://github.com/biface/oxiflow/issues/14">DT-014</a>, <a href="https://github.com/biface/oxiflow/issues/140">DA-048</a>) — a small,
 reusable building block for every site in the crate that decides, per
 element, whether to run a computation sequentially or through Rayon.
 Extracted after the same field/builder/guard triplet was written
 twice, verbatim, on <code>FDGradientCalculator</code> and <code>FDLaplacianCalculator</code>
-(DD-014, #51) — see DD-048 for the full rationale (architecture
+(<a href="https://github.com/biface/oxiflow/issues/14">DT-014</a>, <a href="https://github.com/biface/oxiflow/issues/51">#51</a>) — see <a href="https://github.com/biface/oxiflow/issues/140">DA-048</a> for the full rationale (architecture
 principles P1-P5) behind this module’s shape.</p>
 <h3 id="what-this-is-not"><a class="doc-anchor" href="#what-this-is-not">§</a>What this is not</h3>
 <p>Not a trait imposed on <code>ContextCalculator</code>/<code>DiscreteOperator</code>/
-<code>FluxDivergenceOperator</code> — DD-048 explicitly rejects that shape,
-mirroring the precedent already set twice (DD-012 amendment 2, DD-039
+<code>FluxDivergenceOperator</code> — <a href="https://github.com/biface/oxiflow/issues/140">DA-048</a> explicitly rejects that shape,
+mirroring the precedent already set twice (<a href="https://github.com/biface/oxiflow/issues/12">DA-012</a> amendment 2, <a href="https://github.com/biface/oxiflow/issues/95">DA-039</a>
 option A): forcing an orthogonal capability onto every implementer of
 a shared trait, when only some of them benefit from it. Each site that
-wants Rayon dispatch holds a [<code>ParallelThreshold</code>] field and reads it
+wants Rayon dispatch holds a <code>ParallelThreshold</code> field and reads it
 itself — a plain data-holding type, not a behavioural contract.</p>
 <p>Entirely gated behind the <code>parallel</code> feature, at the module
 declaration itself (<code>solver::mod</code>) — mirrors <code>solver::sparse</code>/
 <code>solver::gpu</code>’s own gating, not merely the items inside it.</p>
+<h3 id="sizing-a-threshold"><a class="doc-anchor" href="#sizing-a-threshold">§</a>Sizing a threshold</h3>
+<p>A dispatch pays once the work it splits outweighs the cost of handing
+it to the Rayon pool. That work reads best as the sequential time of
+one call of the dispatched loop, the number of items times the cost of
+one item, rather than as a node count, which means nothing without the
+cost of a node. On the design machine (Intel Core i5-1335U, 12 Rayon
+threads), the reference run of the <code>oxiflow_parallel</code> benchmarks for
+v0.10.0 (<a href="https://github.com/biface/oxiflow/issues/214">#214</a>) puts the crossover early for loops limited by
+arithmetic: parallel loses while one call lasts 10 to 30 µs
+sequentially, and wins from about 100 µs for heavy items (a Langmuir
+row, a lahar source node) and 300 µs for the lightest (a closed-form
+coefficient), that is from about 10³ items at 100 ns each or 10⁵ items
+at 3 ns each. Loops limited by memory bandwidth cross much later:
+between 0.4 and 4 ms of sequential work for the lahar flux, around
+30 ms for the FD Laplacian.</p>
+<p>Two effects move the crossover in a full run. Inside a time step, a
+dispatch sits between sequential phases and costs more than in a
+back-to-back benchmark loop. Under <code>MultiDomainOrchestrator</code>, the
+dispatch inside each domain competes with the dispatch across domains.
+Every default in the crate is therefore an indicative starting point:
+measure the target workload with <a href="fn.calibrate_parallel_threshold.html" title="fn oxiflow::solver::parallel::calibrate_parallel_threshold"><code>calibrate_parallel_threshold</code></a> or the
+benchmarks under <code>benches/</code>, then set the threshold of each site. The
+abaques of the reference run, with the charts and tables of every site,
+are on the wiki: <a href="https://github.com/biface/oxiflow/wiki/Dispatch-abaques">Dispatch abaques</a>.</p>
 </div></details><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.calibrate_parallel_threshold.html" title="fn oxiflow::solver::parallel::calibrate_parallel_threshold">calibrate_<wbr>parallel_<wbr>threshold</a></dt><dd>Empirically measures the sequential/parallel crossover point for a
 given per-element workload, on the machine actually running the code
 — rather than assuming a number calibrated for a different workload
-or a different machine (DD-048).</dd></dl></section></div></main></body></html>
+or a different machine (<a href="https://github.com/biface/oxiflow/issues/140">DA-048</a>).</dd></dl></section></div></main></body></html>

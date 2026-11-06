@@ -1,0 +1,106 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `model::initial_condition`"><title>oxiflow::model::initial_condition - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module initial_condition</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../oxiflow/index.html">oxiflow</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module initial_<wbr>condition</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-modelinitial_condition" title="Module `model::initial_condition`">Module <code>model::initial_condition</code></a><ul><li><a href="#why" title="Why">Why</a></li><li><a href="#what-a-resume-reproduces" title="What a resume reproduces">What a resume reproduces</a></li><li><a href="#shape" title="Shape">Shape</a></li></ul></li><li><a href="#examples" title="Examples">Examples</a></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>model</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../index.html">oxiflow</a>::<wbr><a href="../index.html">model</a></div><h1>Module <span>initial_<wbr>condition</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../src/oxiflow/model/initial_condition.rs.html#1-267">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-modelinitial_condition"><a class="doc-anchor" href="#module-modelinitial_condition">§</a>Module <code>model::initial_condition</code></h2>
+<p><code>PrescribedInitialState</code> — any <a href="../traits/trait.PhysicalModel.html" title="trait oxiflow::model::traits::PhysicalModel"><code>PhysicalModel</code></a> started from a given state
+instead of its own initial condition.</p>
+<h3 id="why"><a class="doc-anchor" href="#why">§</a>Why</h3>
+<p>A model’s <a href="../traits/trait.PhysicalModel.html#tymethod.initial_state" title="method oxiflow::model::traits::PhysicalModel::initial_state"><code>PhysicalModel::initial_state</code></a> is fixed by the model itself.
+Two situations need another starting point without changing the model:</p>
+<ol>
+<li><strong>Resuming a run</strong> from a
+<a href="../../solver/snapshot/struct.SimulationSnapshot.html" title="struct oxiflow::solver::snapshot::SimulationSnapshot"><code>SimulationSnapshot</code></a>: the
+restore contract of <a href="https://github.com/biface/oxiflow/issues/66">DT-025</a>
+leaves it to the caller to rebuild the scenario and re-inject the saved
+state as the initial condition. Wrapping the model is that re-injection;
+<a href="../../solver/scenario/struct.Scenario.html#method.with_t_start" title="method oxiflow::solver::scenario::Scenario::with_t_start"><code>Scenario::with_t_start</code></a>
+sets the matching start time.</li>
+<li><strong>Starting from a state computed elsewhere</strong>: a developed flow, a
+perturbed equilibrium, the end state of another run.</li>
+</ol>
+<p>The wrapper changes the initial condition and nothing else: every other
+<a href="../traits/trait.RequiresContext.html" title="trait oxiflow::model::traits::RequiresContext"><code>RequiresContext</code></a> and <a href="../traits/trait.PhysicalModel.html" title="trait oxiflow::model::traits::PhysicalModel"><code>PhysicalModel</code></a> method is delegated, <code>name()</code>
+included, so the result of a run keeps the wrapped model’s name.</p>
+<h3 id="what-a-resume-reproduces"><a class="doc-anchor" href="#what-a-resume-reproduces">§</a>What a resume reproduces</h3>
+<p>A run resumed at step N from a snapshot and continued for M steps matches
+an uninterrupted N + M run under two conditions:</p>
+<ul>
+<li><strong>One-step integrators only.</strong> A snapshot carries no history, so a
+multistep integrator (BDF2) restarts on its bootstrap step and the two
+runs part from there.</li>
+<li><strong>Times agree to rounding, not bit for bit.</strong> The fixed-step loop
+computes each time as <code>t_start + k·dt</code>. Resumed from <code>t_start = t_N</code>, it
+computes <code>t_N + k·dt</code> where the uninterrupted run computes
+<code>(N + k)·dt</code>; the two can differ in the last bits. States are identical
+for a model that does not read the time; a model that does sees those
+last-bit differences.</li>
+</ul>
+<h3 id="shape"><a class="doc-anchor" href="#shape">§</a>Shape</h3>
+<p><a href="../traits/trait.PhysicalModel.html#tymethod.initial_state" title="method oxiflow::model::traits::PhysicalModel::initial_state"><code>initial_state</code></a> cannot report an error, so
+the prescribed state is checked against the mesh by
+<a href="../../solver/scenario/struct.Scenario.html#method.validate" title="method oxiflow::solver::scenario::Scenario::validate"><code>Scenario::validate</code></a>, which
+<a href="../../solver/trait.Solver.html#tymethod.solve" title="method oxiflow::solver::Solver::solve"><code>Solver::solve</code></a> and the orchestrator call
+before the first step. A caller that drives
+<a href="../../solver/methods/trait.SteppableSolver.html#tymethod.step" title="method oxiflow::solver::methods::SteppableSolver::step"><code>SteppableSolver::step</code></a>
+in its own loop calls it itself.</p>
+<h2 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h2>
+<p>Resuming a run from a snapshot taken at <code>t = 0.5</code>:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>nalgebra::DVector;
+<span class="kw">use </span>oxiflow::context::{ComputeContext, ContextValue, ContextVariable, OxiflowError};
+<span class="kw">use </span>oxiflow::mesh::{Mesh, UniformGrid1D};
+<span class="kw">use </span>oxiflow::model::{PhysicalModel, PrescribedInitialState, RequiresContext};
+<span class="kw">use </span>oxiflow::solver::config::{IntegratorKind, StepControl, TimeConfiguration};
+<span class="kw">use </span>oxiflow::solver::methods::ForwardEulerSolver;
+<span class="kw">use </span>oxiflow::solver::scenario::Scenario;
+<span class="kw">use </span>oxiflow::solver::snapshot::SimulationSnapshot;
+<span class="kw">use </span>oxiflow::solver::{Solver, SolverConfiguration};
+
+<span class="kw">struct </span>Decay;
+<span class="kw">impl </span>RequiresContext <span class="kw">for </span>Decay {
+    <span class="kw">fn </span>required_variables(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;ContextVariable&gt; { <span class="macro">vec!</span>[] }
+}
+<span class="kw">impl </span>PhysicalModel <span class="kw">for </span>Decay {
+    <span class="kw">fn </span>compute_physics(<span class="kw-2">&amp;</span><span class="self">self</span>, s: <span class="kw-2">&amp;</span>ContextValue, <span class="kw">_</span>: <span class="kw-2">&amp;</span>ComputeContext)
+        -&gt; <span class="prelude-ty">Result</span>&lt;ContextValue, OxiflowError&gt; {
+        <span class="prelude-val">Ok</span>(ContextValue::ScalarField(s.as_scalar_field()<span class="question-mark">?</span>.map(|v| -v)))
+    }
+    <span class="kw">fn </span>initial_state(<span class="kw-2">&amp;</span><span class="self">self</span>, mesh: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Mesh) -&gt; ContextValue {
+        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), <span class="number">1.0</span>))
+    }
+    <span class="kw">fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str { <span class="string">"decay" </span>}
+}
+
+<span class="kw">let </span>time = TimeConfiguration::new(<span class="number">0.5</span>, StepControl::Fixed { dt: <span class="number">0.125 </span>});
+<span class="kw">let </span>first = Scenario::single(Box::new(Decay), Box::new(UniformGrid1D::new(<span class="number">4</span>, <span class="number">0.0</span>, <span class="number">1.0</span>)<span class="question-mark">?</span>));
+<span class="kw">let </span>run = ForwardEulerSolver.solve(<span class="kw-2">&amp;</span>first, <span class="kw-2">&amp;</span>SolverConfiguration::new(time.clone(), IntegratorKind::Euler))<span class="question-mark">?</span>;
+
+<span class="comment">// Explicit checkpoint at the end of the first run.
+</span><span class="kw">let </span>snapshot = SimulationSnapshot {
+    time_config: time,
+    integrator: IntegratorKind::Euler,
+    state: run.states.last().unwrap().clone(),
+    t: run.t_final().unwrap(),
+    n_steps: run.n_steps,
+    error: <span class="prelude-val">None</span>,
+    partial: <span class="prelude-val">None</span>,
+};
+
+<span class="comment">// Rebuild the scenario, re-inject the state, restart from its time.
+</span><span class="kw">let </span>model = PrescribedInitialState::new(Box::new(Decay), snapshot.state.clone());
+<span class="kw">let </span>resumed = Scenario::single(Box::new(model), Box::new(UniformGrid1D::new(<span class="number">4</span>, <span class="number">0.0</span>, <span class="number">1.0</span>)<span class="question-mark">?</span>))
+    .with_t_start(snapshot.t);
+<span class="kw">let </span>config = SolverConfiguration::new(
+    TimeConfiguration::new(<span class="number">1.0</span>, StepControl::Fixed { dt: <span class="number">0.125 </span>}),
+    IntegratorKind::Euler,
+);
+<span class="kw">let </span>rest = ForwardEulerSolver.solve(<span class="kw-2">&amp;</span>resumed, <span class="kw-2">&amp;</span>config)<span class="question-mark">?</span>;
+<span class="macro">assert_eq!</span>(rest.states[<span class="number">0</span>], snapshot.state);
+<span class="macro">assert_eq!</span>(rest.t_final(), <span class="prelude-val">Some</span>(<span class="number">1.0</span>));</code></pre></div></div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.PrescribedInitialState.html" title="struct oxiflow::model::initial_condition::PrescribedInitialState">Prescribed<wbr>Initial<wbr>State</a></dt><dd>A <a href="../traits/trait.PhysicalModel.html" title="trait oxiflow::model::traits::PhysicalModel"><code>PhysicalModel</code></a> whose initial condition is replaced by a given state.</dd></dl></section></div></main></body></html>

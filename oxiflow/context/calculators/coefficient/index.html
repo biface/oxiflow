@@ -1,0 +1,47 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Module `context::calculators::coefficient`"><title>oxiflow::context::calculators::coefficient - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../../" data-static-root-path="../../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module coefficient</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../../../oxiflow/index.html">oxiflow</a><span class="version">0.10.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module coefficient</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#module-contextcalculatorscoefficient" title="Module `context::calculators::coefficient`">Module <code>context::calculators::coefficient</code></a><ul><li><a href="#sharing-without-copy-dt-068" title="Sharing without copy (DT-068)">Sharing without copy (DT-068)</a></li><li><a href="#parallel-dispatch-da-048" title="Parallel dispatch (DA-048)">Parallel dispatch (DA-048)</a></li></ul></li></ul><h3><a href="#structs">Module Items</a></h3><ul class="block"><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"><h2><a href="../index.html">In oxiflow::<wbr>context::<wbr>calculators</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../../../index.html">oxiflow</a>::<wbr><a href="../../index.html">context</a>::<wbr><a href="../index.html">calculators</a></div><h1>Module <span>coefficient</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../../../src/oxiflow/context/calculators/coefficient.rs.html#1-754">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="module-contextcalculatorscoefficient"><a class="doc-anchor" href="#module-contextcalculatorscoefficient">§</a>Module <code>context::calculators::coefficient</code></h2>
+<p>Coefficient fields c(x) and c(x, t) evaluated on the mesh nodes (<a href="https://github.com/biface/oxiflow/issues/181">DD-066</a>,
+<a href="https://github.com/biface/oxiflow/issues/182">#182</a>).</p>
+<p><a href="struct.CoefficientField.html" title="struct oxiflow::context::calculators::coefficient::CoefficientField"><code>CoefficientField</code></a> evaluates a user function on <code>Mesh::coordinates(i)</code>
+for every node <code>i</code> and publishes the result as a <code>ScalarField</code> under
+<code>ContextVariable::Coefficient { name }</code>. It is the space-dependent sibling
+of <code>ExternalTabulated</code>, which stays a function of time only and publishes
+a <code>Scalar</code>.</p>
+<h3 id="sharing-without-copy-dt-068"><a class="doc-anchor" href="#sharing-without-copy-dt-068">§</a>Sharing without copy (<a href="https://github.com/biface/oxiflow/issues/195">DT-068</a>)</h3>
+<p>The calculator overrides <code>ContextCalculator::compute_shared</code>, so the
+solver receives the field it keeps instead of a copy:</p>
+<ul>
+<li>c(x) is evaluated once, at construction, and every evaluation gets the
+same allocation;</li>
+<li>c(x, t) keeps its last time and value: evaluations at the same time
+(the stages of a step at one time, the n + 1 evaluations of a dense
+Jacobian) share one computation.</li>
+</ul>
+<p>Both caches assume the mesh does not change after construction. This is
+an implementation detail, not a public contract: invalidation on a moving
+or adapted mesh is for v0.11.0 and later (<a href="https://github.com/biface/oxiflow/issues/181">DD-066</a>).</p>
+<p>The cache of c(x, t) is never locked while the field is computed. The
+solver may evaluate derivatives inside Rayon tasks (<a href="https://github.com/biface/oxiflow/issues/198">DT-069</a>), and a
+worker waiting for its own parallel loop can run another such task: if
+that task blocked on a lock held by the same worker, it would never be
+released. Concurrent misses at the same time therefore compute the same
+field independently; the finite-difference Jacobians do not cause them,
+since they evaluate the unperturbed state before dispatching columns.</p>
+<h3 id="parallel-dispatch-da-048"><a class="doc-anchor" href="#parallel-dispatch-da-048">§</a>Parallel dispatch (<a href="https://github.com/biface/oxiflow/issues/140">DA-048</a>)</h3>
+<p>With the <code>parallel</code> feature, the nodes are evaluated through Rayon once
+the mesh has at least as many nodes as the calculator’s threshold, and
+each value is written directly into the output vector (no intermediate
+collection, see <a href="https://github.com/biface/oxiflow/issues/144">#144</a>). The threshold governs c(x, t); c(x) is evaluated
+once, at construction, with the default threshold. Each node is
+evaluated by the same function with the same arguments in both modes, so
+the sequential and parallel fields are bit-for-bit identical.</p>
+</div></details><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.CoefficientField.html" title="struct oxiflow::context::calculators::coefficient::CoefficientField">Coefficient<wbr>Field</a></dt><dd>Coefficient field c(x) or c(x, t), evaluated on every mesh node (<a href="https://github.com/biface/oxiflow/issues/181">DD-066</a>).</dd></dl></section></div></main></body></html>

@@ -1,0 +1,278 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/model/initial_condition.rs`."><title>initial_condition.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="oxiflow" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body, {
+        delimiters: [
+            {left: '$$', right: '$$', display: true},
+            {left: '$', right: '$', display: false}
+        ]
+    });">
+</script>
+</head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">oxiflow/model/</div>initial_condition.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! # Module `model::initial_condition`
+<a href=#2 id=2 data-nosnippet>2</a>//!
+<a href=#3 id=3 data-nosnippet>3</a>//! `PrescribedInitialState` — any [`PhysicalModel`] started from a given state
+<a href=#4 id=4 data-nosnippet>4</a>//! instead of its own initial condition.
+<a href=#5 id=5 data-nosnippet>5</a>//!
+<a href=#6 id=6 data-nosnippet>6</a>//! ## Why
+<a href=#7 id=7 data-nosnippet>7</a>//!
+<a href=#8 id=8 data-nosnippet>8</a>//! A model's [`PhysicalModel::initial_state`] is fixed by the model itself.
+<a href=#9 id=9 data-nosnippet>9</a>//! Two situations need another starting point without changing the model:
+<a href=#10 id=10 data-nosnippet>10</a>//!
+<a href=#11 id=11 data-nosnippet>11</a>//! 1. **Resuming a run** from a
+<a href=#12 id=12 data-nosnippet>12</a>//!    [`SimulationSnapshot`](crate::solver::snapshot::SimulationSnapshot): the
+<a href=#13 id=13 data-nosnippet>13</a>//!    restore contract of [DT-025](https://github.com/biface/oxiflow/issues/66)
+<a href=#14 id=14 data-nosnippet>14</a>//!    leaves it to the caller to rebuild the scenario and re-inject the saved
+<a href=#15 id=15 data-nosnippet>15</a>//!    state as the initial condition. Wrapping the model is that re-injection;
+<a href=#16 id=16 data-nosnippet>16</a>//!    [`Scenario::with_t_start`](crate::solver::scenario::Scenario::with_t_start)
+<a href=#17 id=17 data-nosnippet>17</a>//!    sets the matching start time.
+<a href=#18 id=18 data-nosnippet>18</a>//! 2. **Starting from a state computed elsewhere**: a developed flow, a
+<a href=#19 id=19 data-nosnippet>19</a>//!    perturbed equilibrium, the end state of another run.
+<a href=#20 id=20 data-nosnippet>20</a>//!
+<a href=#21 id=21 data-nosnippet>21</a>//! The wrapper changes the initial condition and nothing else: every other
+<a href=#22 id=22 data-nosnippet>22</a>//! [`RequiresContext`] and [`PhysicalModel`] method is delegated, `name()`
+<a href=#23 id=23 data-nosnippet>23</a>//! included, so the result of a run keeps the wrapped model's name.
+<a href=#24 id=24 data-nosnippet>24</a>//!
+<a href=#25 id=25 data-nosnippet>25</a>//! ## What a resume reproduces
+<a href=#26 id=26 data-nosnippet>26</a>//!
+<a href=#27 id=27 data-nosnippet>27</a>//! A run resumed at step N from a snapshot and continued for M steps matches
+<a href=#28 id=28 data-nosnippet>28</a>//! an uninterrupted N + M run under two conditions:
+<a href=#29 id=29 data-nosnippet>29</a>//!
+<a href=#30 id=30 data-nosnippet>30</a>//! - **One-step integrators only.** A snapshot carries no history, so a
+<a href=#31 id=31 data-nosnippet>31</a>//!   multistep integrator (BDF2) restarts on its bootstrap step and the two
+<a href=#32 id=32 data-nosnippet>32</a>//!   runs part from there.
+<a href=#33 id=33 data-nosnippet>33</a>//! - **Times agree to rounding, not bit for bit.** The fixed-step loop
+<a href=#34 id=34 data-nosnippet>34</a>//!   computes each time as `t_start + k·dt`. Resumed from `t_start = t_N`, it
+<a href=#35 id=35 data-nosnippet>35</a>//!   computes `t_N + k·dt` where the uninterrupted run computes
+<a href=#36 id=36 data-nosnippet>36</a>//!   `(N + k)·dt`; the two can differ in the last bits. States are identical
+<a href=#37 id=37 data-nosnippet>37</a>//!   for a model that does not read the time; a model that does sees those
+<a href=#38 id=38 data-nosnippet>38</a>//!   last-bit differences.
+<a href=#39 id=39 data-nosnippet>39</a>//!
+<a href=#40 id=40 data-nosnippet>40</a>//! ## Shape
+<a href=#41 id=41 data-nosnippet>41</a>//!
+<a href=#42 id=42 data-nosnippet>42</a>//! [`initial_state`](PhysicalModel::initial_state) cannot report an error, so
+<a href=#43 id=43 data-nosnippet>43</a>//! the prescribed state is checked against the mesh by
+<a href=#44 id=44 data-nosnippet>44</a>//! [`Scenario::validate`](crate::solver::scenario::Scenario::validate), which
+<a href=#45 id=45 data-nosnippet>45</a>//! [`Solver::solve`](crate::solver::Solver::solve) and the orchestrator call
+<a href=#46 id=46 data-nosnippet>46</a>//! before the first step. A caller that drives
+<a href=#47 id=47 data-nosnippet>47</a>//! [`SteppableSolver::step`](crate::solver::methods::SteppableSolver::step)
+<a href=#48 id=48 data-nosnippet>48</a>//! in its own loop calls it itself.
+<a href=#49 id=49 data-nosnippet>49</a>//!
+<a href=#50 id=50 data-nosnippet>50</a>//! # Examples
+<a href=#51 id=51 data-nosnippet>51</a>//!
+<a href=#52 id=52 data-nosnippet>52</a>//! Resuming a run from a snapshot taken at `t = 0.5`:
+<a href=#53 id=53 data-nosnippet>53</a>//!
+<a href=#54 id=54 data-nosnippet>54</a>//! ```rust
+<a href=#55 id=55 data-nosnippet>55</a>//! use nalgebra::DVector;
+<a href=#56 id=56 data-nosnippet>56</a>//! use oxiflow::context::{ComputeContext, ContextValue, ContextVariable, OxiflowError};
+<a href=#57 id=57 data-nosnippet>57</a>//! use oxiflow::mesh::{Mesh, UniformGrid1D};
+<a href=#58 id=58 data-nosnippet>58</a>//! use oxiflow::model::{PhysicalModel, PrescribedInitialState, RequiresContext};
+<a href=#59 id=59 data-nosnippet>59</a>//! use oxiflow::solver::config::{IntegratorKind, StepControl, TimeConfiguration};
+<a href=#60 id=60 data-nosnippet>60</a>//! use oxiflow::solver::methods::ForwardEulerSolver;
+<a href=#61 id=61 data-nosnippet>61</a>//! use oxiflow::solver::scenario::Scenario;
+<a href=#62 id=62 data-nosnippet>62</a>//! use oxiflow::solver::snapshot::SimulationSnapshot;
+<a href=#63 id=63 data-nosnippet>63</a>//! use oxiflow::solver::{Solver, SolverConfiguration};
+<a href=#64 id=64 data-nosnippet>64</a>//!
+<a href=#65 id=65 data-nosnippet>65</a>//! struct Decay;
+<a href=#66 id=66 data-nosnippet>66</a>//! impl RequiresContext for Decay {
+<a href=#67 id=67 data-nosnippet>67</a>//!     fn required_variables(&amp;self) -&gt; Vec&lt;ContextVariable&gt; { vec![] }
+<a href=#68 id=68 data-nosnippet>68</a>//! }
+<a href=#69 id=69 data-nosnippet>69</a>//! impl PhysicalModel for Decay {
+<a href=#70 id=70 data-nosnippet>70</a>//!     fn compute_physics(&amp;self, s: &amp;ContextValue, _: &amp;ComputeContext)
+<a href=#71 id=71 data-nosnippet>71</a>//!         -&gt; Result&lt;ContextValue, OxiflowError&gt; {
+<a href=#72 id=72 data-nosnippet>72</a>//!         Ok(ContextValue::ScalarField(s.as_scalar_field()?.map(|v| -v)))
+<a href=#73 id=73 data-nosnippet>73</a>//!     }
+<a href=#74 id=74 data-nosnippet>74</a>//!     fn initial_state(&amp;self, mesh: &amp;dyn Mesh) -&gt; ContextValue {
+<a href=#75 id=75 data-nosnippet>75</a>//!         ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+<a href=#76 id=76 data-nosnippet>76</a>//!     }
+<a href=#77 id=77 data-nosnippet>77</a>//!     fn name(&amp;self) -&gt; &amp;str { "decay" }
+<a href=#78 id=78 data-nosnippet>78</a>//! }
+<a href=#79 id=79 data-nosnippet>79</a>//!
+<a href=#80 id=80 data-nosnippet>80</a>//! let time = TimeConfiguration::new(0.5, StepControl::Fixed { dt: 0.125 });
+<a href=#81 id=81 data-nosnippet>81</a>//! let first = Scenario::single(Box::new(Decay), Box::new(UniformGrid1D::new(4, 0.0, 1.0)?));
+<a href=#82 id=82 data-nosnippet>82</a>//! let run = ForwardEulerSolver.solve(&amp;first, &amp;SolverConfiguration::new(time.clone(), IntegratorKind::Euler))?;
+<a href=#83 id=83 data-nosnippet>83</a>//!
+<a href=#84 id=84 data-nosnippet>84</a>//! // Explicit checkpoint at the end of the first run.
+<a href=#85 id=85 data-nosnippet>85</a>//! let snapshot = SimulationSnapshot {
+<a href=#86 id=86 data-nosnippet>86</a>//!     time_config: time,
+<a href=#87 id=87 data-nosnippet>87</a>//!     integrator: IntegratorKind::Euler,
+<a href=#88 id=88 data-nosnippet>88</a>//!     state: run.states.last().unwrap().clone(),
+<a href=#89 id=89 data-nosnippet>89</a>//!     t: run.t_final().unwrap(),
+<a href=#90 id=90 data-nosnippet>90</a>//!     n_steps: run.n_steps,
+<a href=#91 id=91 data-nosnippet>91</a>//!     error: None,
+<a href=#92 id=92 data-nosnippet>92</a>//!     partial: None,
+<a href=#93 id=93 data-nosnippet>93</a>//! };
+<a href=#94 id=94 data-nosnippet>94</a>//!
+<a href=#95 id=95 data-nosnippet>95</a>//! // Rebuild the scenario, re-inject the state, restart from its time.
+<a href=#96 id=96 data-nosnippet>96</a>//! let model = PrescribedInitialState::new(Box::new(Decay), snapshot.state.clone());
+<a href=#97 id=97 data-nosnippet>97</a>//! let resumed = Scenario::single(Box::new(model), Box::new(UniformGrid1D::new(4, 0.0, 1.0)?))
+<a href=#98 id=98 data-nosnippet>98</a>//!     .with_t_start(snapshot.t);
+<a href=#99 id=99 data-nosnippet>99</a>//! let config = SolverConfiguration::new(
+<a href=#100 id=100 data-nosnippet>100</a>//!     TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.125 }),
+<a href=#101 id=101 data-nosnippet>101</a>//!     IntegratorKind::Euler,
+<a href=#102 id=102 data-nosnippet>102</a>//! );
+<a href=#103 id=103 data-nosnippet>103</a>//! let rest = ForwardEulerSolver.solve(&amp;resumed, &amp;config)?;
+<a href=#104 id=104 data-nosnippet>104</a>//! assert_eq!(rest.states[0], snapshot.state);
+<a href=#105 id=105 data-nosnippet>105</a>//! assert_eq!(rest.t_final(), Some(1.0));
+<a href=#106 id=106 data-nosnippet>106</a>//! # Ok::&lt;(), OxiflowError&gt;(())
+<a href=#107 id=107 data-nosnippet>107</a>//! ```
+<a href=#108 id=108 data-nosnippet>108</a>
+<a href=#109 id=109 data-nosnippet>109</a></span><span class="kw">use </span><span class="kw">crate</span>::context::compute::ComputeContext;
+<a href=#110 id=110 data-nosnippet>110</a><span class="kw">use </span><span class="kw">crate</span>::context::error::OxiflowError;
+<a href=#111 id=111 data-nosnippet>111</a><span class="kw">use </span><span class="kw">crate</span>::context::value::ContextValue;
+<a href=#112 id=112 data-nosnippet>112</a><span class="kw">use </span><span class="kw">crate</span>::context::variable::ContextVariable;
+<a href=#113 id=113 data-nosnippet>113</a><span class="kw">use </span><span class="kw">crate</span>::mesh::Mesh;
+<a href=#114 id=114 data-nosnippet>114</a><span class="kw">use </span><span class="kw">crate</span>::model::traits::{PhysicalModel, RequiresContext};
+<a href=#115 id=115 data-nosnippet>115</a>
+<a href=#116 id=116 data-nosnippet>116</a><span class="doccomment">/// A [`PhysicalModel`] whose initial condition is replaced by a given state.
+<a href=#117 id=117 data-nosnippet>117</a>///
+<a href=#118 id=118 data-nosnippet>118</a>/// See the [module documentation](self) for the restore contract it serves
+<a href=#119 id=119 data-nosnippet>119</a>/// and what a resumed run reproduces.
+<a href=#120 id=120 data-nosnippet>120</a></span><span class="kw">pub struct </span>PrescribedInitialState {
+<a href=#121 id=121 data-nosnippet>121</a>    model: Box&lt;<span class="kw">dyn </span>PhysicalModel&gt;,
+<a href=#122 id=122 data-nosnippet>122</a>    state: ContextValue,
+<a href=#123 id=123 data-nosnippet>123</a>}
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a><span class="kw">impl </span>PrescribedInitialState {
+<a href=#126 id=126 data-nosnippet>126</a>    <span class="doccomment">/// Wraps `model` so that its initial condition is `state`.
+<a href=#127 id=127 data-nosnippet>127</a>    ///
+<a href=#128 id=128 data-nosnippet>128</a>    /// `state` is not checked here: the mesh is not known yet.
+<a href=#129 id=129 data-nosnippet>129</a>    /// [`Scenario::validate`](crate::solver::scenario::Scenario::validate)
+<a href=#130 id=130 data-nosnippet>130</a>    /// checks it against the domain's mesh (see the
+<a href=#131 id=131 data-nosnippet>131</a>    /// [module documentation](self#shape) for who calls it).
+<a href=#132 id=132 data-nosnippet>132</a>    </span><span class="kw">pub fn </span>new(model: Box&lt;<span class="kw">dyn </span>PhysicalModel&gt;, state: ContextValue) -&gt; <span class="self">Self </span>{
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="self">Self </span>{ model, state }
+<a href=#134 id=134 data-nosnippet>134</a>    }
+<a href=#135 id=135 data-nosnippet>135</a>
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="doccomment">/// The wrapped model.
+<a href=#137 id=137 data-nosnippet>137</a>    </span><span class="kw">pub fn </span>model(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span><span class="kw">dyn </span>PhysicalModel {
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="self">self</span>.model.as_ref()
+<a href=#139 id=139 data-nosnippet>139</a>    }
+<a href=#140 id=140 data-nosnippet>140</a>
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="doccomment">/// The prescribed initial state.
+<a href=#142 id=142 data-nosnippet>142</a>    </span><span class="kw">pub fn </span>state(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>ContextValue {
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.state
+<a href=#144 id=144 data-nosnippet>144</a>    }
+<a href=#145 id=145 data-nosnippet>145</a>}
+<a href=#146 id=146 data-nosnippet>146</a>
+<a href=#147 id=147 data-nosnippet>147</a><span class="kw">impl </span>RequiresContext <span class="kw">for </span>PrescribedInitialState {
+<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">fn </span>required_variables(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;ContextVariable&gt; {
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="self">self</span>.model.required_variables()
+<a href=#150 id=150 data-nosnippet>150</a>    }
+<a href=#151 id=151 data-nosnippet>151</a>
+<a href=#152 id=152 data-nosnippet>152</a>    <span class="kw">fn </span>optional_variables(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;ContextVariable&gt; {
+<a href=#153 id=153 data-nosnippet>153</a>        <span class="self">self</span>.model.optional_variables()
+<a href=#154 id=154 data-nosnippet>154</a>    }
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">fn </span>depends_on(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;ContextVariable&gt; {
+<a href=#157 id=157 data-nosnippet>157</a>        <span class="self">self</span>.model.depends_on()
+<a href=#158 id=158 data-nosnippet>158</a>    }
+<a href=#159 id=159 data-nosnippet>159</a>
+<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">fn </span>priority(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u32 {
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="self">self</span>.model.priority()
+<a href=#162 id=162 data-nosnippet>162</a>    }
+<a href=#163 id=163 data-nosnippet>163</a>}
+<a href=#164 id=164 data-nosnippet>164</a>
+<a href=#165 id=165 data-nosnippet>165</a><span class="kw">impl </span>PhysicalModel <span class="kw">for </span>PrescribedInitialState {
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">fn </span>compute_physics(
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#168 id=168 data-nosnippet>168</a>        state: <span class="kw-2">&amp;</span>ContextValue,
+<a href=#169 id=169 data-nosnippet>169</a>        ctx: <span class="kw-2">&amp;</span>ComputeContext,
+<a href=#170 id=170 data-nosnippet>170</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ContextValue, OxiflowError&gt; {
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="self">self</span>.model.compute_physics(state, ctx)
+<a href=#172 id=172 data-nosnippet>172</a>    }
+<a href=#173 id=173 data-nosnippet>173</a>
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="doccomment">/// Returns the prescribed state, whatever the mesh: its size is checked
+<a href=#175 id=175 data-nosnippet>175</a>    /// by `Scenario::validate`.
+<a href=#176 id=176 data-nosnippet>176</a>    </span><span class="kw">fn </span>initial_state(<span class="kw-2">&amp;</span><span class="self">self</span>, _mesh: <span class="kw-2">&amp;</span><span class="kw">dyn </span>Mesh) -&gt; ContextValue {
+<a href=#177 id=177 data-nosnippet>177</a>        <span class="self">self</span>.state.clone()
+<a href=#178 id=178 data-nosnippet>178</a>    }
+<a href=#179 id=179 data-nosnippet>179</a>
+<a href=#180 id=180 data-nosnippet>180</a>    <span class="kw">fn </span>name(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="self">self</span>.model.name()
+<a href=#182 id=182 data-nosnippet>182</a>    }
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="kw">fn </span>description(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt; {
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="self">self</span>.model.description()
+<a href=#186 id=186 data-nosnippet>186</a>    }
+<a href=#187 id=187 data-nosnippet>187</a>
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="kw">fn </span>max_wave_speed(
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#190 id=190 data-nosnippet>190</a>        state: <span class="kw-2">&amp;</span>ContextValue,
+<a href=#191 id=191 data-nosnippet>191</a>        ctx: <span class="kw-2">&amp;</span>ComputeContext,
+<a href=#192 id=192 data-nosnippet>192</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;f64&gt;, OxiflowError&gt; {
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="self">self</span>.model.max_wave_speed(state, ctx)
+<a href=#194 id=194 data-nosnippet>194</a>    }
+<a href=#195 id=195 data-nosnippet>195</a>}
+<a href=#196 id=196 data-nosnippet>196</a>
+<a href=#197 id=197 data-nosnippet>197</a><span class="comment">// ── Tests ─────────────────────────────────────────────────────────────────────
+<a href=#198 id=198 data-nosnippet>198</a>
+<a href=#199 id=199 data-nosnippet>199</a></span><span class="attr">#[cfg(test)]
+<a href=#200 id=200 data-nosnippet>200</a></span><span class="kw">mod </span>tests {
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">use </span><span class="kw">crate</span>::mesh::structured::UniformGrid1D;
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">use </span><span class="kw">crate</span>::model::FullModel;
+<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">use </span>nalgebra::{DMatrix, DVector};
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="kw">fn </span>prescribed() -&gt; PrescribedInitialState {
+<a href=#207 id=207 data-nosnippet>207</a>        PrescribedInitialState::new(
+<a href=#208 id=208 data-nosnippet>208</a>            Box::new(FullModel),
+<a href=#209 id=209 data-nosnippet>209</a>            ContextValue::ScalarField(DVector::from_vec(<span class="macro">vec!</span>[<span class="number">3.0</span>, <span class="number">4.0</span>, <span class="number">5.0</span>])),
+<a href=#210 id=210 data-nosnippet>210</a>        )
+<a href=#211 id=211 data-nosnippet>211</a>    }
+<a href=#212 id=212 data-nosnippet>212</a>
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="attr">#[test]
+<a href=#214 id=214 data-nosnippet>214</a>    </span><span class="kw">fn </span>context_requirements_are_those_of_the_wrapped_model() {
+<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">let </span>model = prescribed();
+<a href=#216 id=216 data-nosnippet>216</a>        <span class="macro">assert_eq!</span>(model.required_variables(), FullModel.required_variables());
+<a href=#217 id=217 data-nosnippet>217</a>        <span class="macro">assert_eq!</span>(model.optional_variables(), FullModel.optional_variables());
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="macro">assert_eq!</span>(model.depends_on(), FullModel.depends_on());
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="macro">assert_eq!</span>(model.priority(), FullModel.priority());
+<a href=#220 id=220 data-nosnippet>220</a>    }
+<a href=#221 id=221 data-nosnippet>221</a>
+<a href=#222 id=222 data-nosnippet>222</a>    <span class="attr">#[test]
+<a href=#223 id=223 data-nosnippet>223</a>    </span><span class="kw">fn </span>name_and_description_are_those_of_the_wrapped_model() {
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw">let </span>model = prescribed();
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="macro">assert_eq!</span>(model.name(), FullModel.name());
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="macro">assert_eq!</span>(model.description(), FullModel.description());
+<a href=#227 id=227 data-nosnippet>227</a>    }
+<a href=#228 id=228 data-nosnippet>228</a>
+<a href=#229 id=229 data-nosnippet>229</a>    <span class="attr">#[test]
+<a href=#230 id=230 data-nosnippet>230</a>    </span><span class="kw">fn </span>wave_speed_is_that_of_the_wrapped_model() {
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">let </span>ctx = ComputeContext::new(<span class="number">0.0</span>, <span class="number">0.01</span>);
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">let </span>state = ContextValue::ScalarField(DVector::from_vec(<span class="macro">vec!</span>[<span class="number">1.0</span>, <span class="number">2.0</span>, <span class="number">3.0</span>]));
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">let </span>declared = PrescribedInitialState::new(
+<a href=#234 id=234 data-nosnippet>234</a>            Box::new(<span class="kw">crate</span>::model::DeclaredWaveSpeed { speed: <span class="number">3.0 </span>}),
+<a href=#235 id=235 data-nosnippet>235</a>            state.clone(),
+<a href=#236 id=236 data-nosnippet>236</a>        );
+<a href=#237 id=237 data-nosnippet>237</a>        <span class="macro">assert_eq!</span>(declared.max_wave_speed(<span class="kw-2">&amp;</span>state, <span class="kw-2">&amp;</span>ctx).unwrap(), <span class="prelude-val">Some</span>(<span class="number">3.0</span>));
+<a href=#238 id=238 data-nosnippet>238</a>        <span class="macro">assert_eq!</span>(prescribed().max_wave_speed(<span class="kw-2">&amp;</span>state, <span class="kw-2">&amp;</span>ctx).unwrap(), <span class="prelude-val">None</span>);
+<a href=#239 id=239 data-nosnippet>239</a>    }
+<a href=#240 id=240 data-nosnippet>240</a>
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="attr">#[test]
+<a href=#242 id=242 data-nosnippet>242</a>    </span><span class="kw">fn </span>physics_is_that_of_the_wrapped_model() {
+<a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">let </span>ctx = ComputeContext::new(<span class="number">0.0</span>, <span class="number">0.01</span>);
+<a href=#244 id=244 data-nosnippet>244</a>        <span class="kw">let </span>state = ContextValue::ScalarField(DVector::from_vec(<span class="macro">vec!</span>[<span class="number">1.0</span>, <span class="number">2.0</span>, <span class="number">3.0</span>]));
+<a href=#245 id=245 data-nosnippet>245</a>        <span class="macro">assert_eq!</span>(
+<a href=#246 id=246 data-nosnippet>246</a>            prescribed().compute_physics(<span class="kw-2">&amp;</span>state, <span class="kw-2">&amp;</span>ctx).unwrap(),
+<a href=#247 id=247 data-nosnippet>247</a>            FullModel.compute_physics(<span class="kw-2">&amp;</span>state, <span class="kw-2">&amp;</span>ctx).unwrap()
+<a href=#248 id=248 data-nosnippet>248</a>        );
+<a href=#249 id=249 data-nosnippet>249</a>    }
+<a href=#250 id=250 data-nosnippet>250</a>
+<a href=#251 id=251 data-nosnippet>251</a>    <span class="attr">#[test]
+<a href=#252 id=252 data-nosnippet>252</a>    </span><span class="kw">fn </span>initial_state_is_the_prescribed_state_not_the_model_one() {
+<a href=#253 id=253 data-nosnippet>253</a>        <span class="kw">let </span>mesh = UniformGrid1D::new(<span class="number">3</span>, <span class="number">0.0</span>, <span class="number">1.0</span>).unwrap();
+<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw">let </span>model = prescribed();
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="macro">assert_eq!</span>(model.initial_state(<span class="kw-2">&amp;</span>mesh), <span class="kw-2">*</span>model.state());
+<a href=#256 id=256 data-nosnippet>256</a>        <span class="macro">assert_ne!</span>(model.initial_state(<span class="kw-2">&amp;</span>mesh), FullModel.initial_state(<span class="kw-2">&amp;</span>mesh));
+<a href=#257 id=257 data-nosnippet>257</a>    }
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a>    <span class="attr">#[test]
+<a href=#260 id=260 data-nosnippet>260</a>    </span><span class="kw">fn </span>a_vector_field_state_is_returned_unchanged() {
+<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">let </span>mesh = UniformGrid1D::new(<span class="number">2</span>, <span class="number">0.0</span>, <span class="number">1.0</span>).unwrap();
+<a href=#262 id=262 data-nosnippet>262</a>        <span class="kw">let </span>state = ContextValue::VectorField(DMatrix::from_row_slice(<span class="number">2</span>, <span class="number">2</span>, <span class="kw-2">&amp;</span>[<span class="number">1.</span>, <span class="number">2.</span>, <span class="number">3.</span>, <span class="number">4.</span>]));
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">let </span>model = PrescribedInitialState::new(Box::new(FullModel), state.clone());
+<a href=#264 id=264 data-nosnippet>264</a>        <span class="macro">assert_eq!</span>(model.initial_state(<span class="kw-2">&amp;</span>mesh), state);
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="macro">assert_eq!</span>(model.model().name(), FullModel.name());
+<a href=#266 id=266 data-nosnippet>266</a>    }
+<a href=#267 id=267 data-nosnippet>267</a>}
+</code></pre></div></section></main></body></html>

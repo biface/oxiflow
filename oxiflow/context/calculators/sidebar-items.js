@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["FDScheme"],"mod":["integral","spatial","tabulated","time"]};
+window.SIDEBAR_ITEMS = {"enum":["FDScheme"],"mod":["coefficient","integral","spatial","tabulated","time"]};
