@@ -3,7 +3,7 @@
 //! Finite-difference [`DiscreteOperator`] implementations for
 //! [`UniformGrid1D`] — `UpwindGradient` (1st order, advection-dominant),
 //! `CenteredGradient` (2nd order, diffusion-dominant), `CenteredLaplacian`
-//! (2nd order) (#47, DD-012).
+//! (2nd order) ([#47](https://github.com/biface/oxiflow/issues/47), [DA-012](https://github.com/biface/oxiflow/issues/12)).
 //!
 //! ## `Direction` rather than two separate structs
 //!
@@ -19,7 +19,7 @@
 //! `FDLaplacianCalculator` (the FD delegation refactor landing alongside
 //! `#47`) hold `Arc<dyn Mesh>` (INV-1, object-safe interface) — not a
 //! concrete mesh type. [`DiscreteOperator::apply`] requires `&Self::MeshType`
-//! (a concrete type, DD-012), which a `dyn Mesh` cannot produce without
+//! (a concrete type, [DA-012](https://github.com/biface/oxiflow/issues/12)), which a `dyn Mesh` cannot produce without
 //! downcasting. The only mesh datum any FD stencil actually needs is the
 //! single scalar `dx = mesh.characteristic_length()` — already part of the
 //! object-safe `Mesh` trait. The stencil math is therefore factored into
@@ -32,7 +32,7 @@
 //!
 //! [`UniformGrid1D`]: crate::mesh::structured::UniformGrid1D
 //!
-//! ## Rayon dispatch (`parallel` feature, DD-014, #51)
+//! ## Rayon dispatch (`parallel` feature, [DT-014](https://github.com/biface/oxiflow/issues/14), [#51](https://github.com/biface/oxiflow/issues/51))
 //!
 //! Each `compute_from_dx` takes an explicit `parallel_threshold: usize`. Past
 //! that node count, the per-index stencil closure runs through Rayon's
@@ -42,15 +42,30 @@
 //! the actual value is owned by the calculators that call this function
 //! directly (see [`crate::context::calculators::spatial::FDGradientCalculator`]
 //! and `FDLaplacianCalculator`'s `parallel_threshold` field), mirroring how
-//! `SparseLinearSolver`'s threshold (DD-043, #103) lives on the caller rather
+//! `SparseLinearSolver`'s threshold ([DA-043](https://github.com/biface/oxiflow/issues/103)) lives on the caller rather
 //! than the callee. [`DiscreteOperator::apply`] has no such caller to draw a
-//! value from, so it uses [`default_parallel_threshold`], calibrated
-//! empirically at 49_999: sequential cost of a single stencil evaluation
+//! value from, so it uses `default_parallel_threshold`, an indicative
+//! value of 49_999: sequential cost of a single stencil evaluation
 //! here (2-3 flops) is ~1 ns/node, the same order of magnitude as typical
 //! Rayon dispatch overhead well below that count. This does not transfer
 //! from `chrom-rs`'s threshold of 999, which was calibrated for a much
 //! heavier per-node cost (e.g. an isotherm evaluation) — only the
 //! operation-volume semantics carries over, not the number itself.
+//!
+//! There is no single right threshold. The crossover depends on the model
+//! and its per-node cost, the problem size, how models and calculators are
+//! chained within a time step, and the machine (core count, memory
+//! bandwidth, thermal state) -- see [DA-048](https://github.com/biface/oxiflow/issues/140) and [#140](https://github.com/biface/oxiflow/issues/140). The default is a
+//! starting point; the benchmarks under `benches/` are there to build the
+//! charts that replace it for a given use.
+//!
+//! A stencil loop is limited by memory bandwidth more than by arithmetic,
+//! so its own crossover lies far above the default: in the reference run
+//! for v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)), the Laplacian ran 1.7x slower in parallel at
+//! 100,000 nodes, broke even around 10⁷ and gained under 5 % at 3·10⁷.
+//! How to read a crossover is explained in the documentation of
+//! `solver::parallel` (`parallel` feature); the abaques of every dispatch
+//! site are on the wiki: [Dispatch abaques](https://github.com/biface/oxiflow/wiki/Dispatch-abaques).
 
 use nalgebra::DVector;
 #[cfg(feature = "parallel")]
@@ -63,8 +78,8 @@ use crate::mesh::Mesh;
 use crate::operators::DiscreteOperator;
 
 /// Default Rayon dispatch threshold for the `compute_from_dx` functions in
-/// this module (DD-014, #51) — see the module documentation for the
-/// empirical justification. Used by [`DiscreteOperator::apply`], which has
+/// this module ([DT-014](https://github.com/biface/oxiflow/issues/14), [#51](https://github.com/biface/oxiflow/issues/51)) — an indicative value, see the module
+/// documentation for its reasoning and limits. Used by [`DiscreteOperator::apply`], which has
 /// no per-calculator config to draw a threshold from; calculators
 /// (`FDGradientCalculator`/`FDLaplacianCalculator`) use this as their own
 /// field default but may override it via `with_parallel_threshold`. Gated
@@ -106,7 +121,7 @@ impl UpwindGradient {
 
     /// Stencil math on a raw field and scalar `dx` — see the module
     /// documentation for why this bypasses `Self::MeshType`, and for the
-    /// `parallel_threshold` dispatch (DD-014, #51).
+    /// `parallel_threshold` dispatch ([DT-014](https://github.com/biface/oxiflow/issues/14), [#51](https://github.com/biface/oxiflow/issues/51)).
     ///
     /// Two versions exist, split by `#[cfg(feature = "parallel")]` rather
     /// than one version that takes and ignores the threshold: a discarded
@@ -235,7 +250,7 @@ impl CenteredGradient {
 
     /// Stencil math on a raw field and scalar `dx` — see the module
     /// documentation for why this bypasses `Self::MeshType`, and for why
-    /// `parallel_threshold` (DD-014, #51) is split across two cfg-gated
+    /// `parallel_threshold` ([DT-014](https://github.com/biface/oxiflow/issues/14), [#51](https://github.com/biface/oxiflow/issues/51)) is split across two cfg-gated
     /// versions rather than a single one that sometimes ignores it.
     #[cfg(feature = "parallel")]
     pub(crate) fn compute_from_dx(
@@ -335,7 +350,7 @@ impl CenteredLaplacian {
 
     /// Stencil math on a raw field and scalar `dx` — see the module
     /// documentation for why this bypasses `Self::MeshType`, and for why
-    /// `parallel_threshold` (DD-014, #51) is split across two cfg-gated
+    /// `parallel_threshold` ([DT-014](https://github.com/biface/oxiflow/issues/14), [#51](https://github.com/biface/oxiflow/issues/51)) is split across two cfg-gated
     /// versions rather than a single one that sometimes ignores it.
     ///
     /// Only the interior loop is dispatched through Rayon: the two boundary
@@ -446,7 +461,7 @@ mod tests {
     #[cfg(feature = "parallel")]
     const PAR: usize = 0;
 
-    // `compute_from_dx`'s arity itself depends on `parallel` (DD-014, #51) —
+    // `compute_from_dx`'s arity itself depends on `parallel` (DT-014, #51) —
     // these wrappers absorb that so every correctness test below can call a
     // single, uniform signature regardless of feature. `PAR`/`SEQ`-driven
     // dispatch is exercised separately, only under `parallel`, further down.
@@ -654,7 +669,7 @@ mod tests {
         assert!(matches!(err, OxiflowError::InvalidDomain(_)));
     }
 
-    // ── Parallel/sequential equivalence (DD-014, #51) ─────────────────────────
+    // ── Parallel/sequential equivalence (DT-014, #51) ─────────────────────────
     //
     // `PAR` (threshold 0) forces the Rayon path on any non-empty field —
     // gated behind `feature = "parallel"` since the branch does not exist

@@ -1,0 +1,145 @@
+name: "🧭 Design Decision — Technical"
+description: >
+  Propose or document a technical decision. Category is fixed by this
+  template (no dropdown, no additional label) — Implementation, dependencies, libraries, licensing, distribution
+title: "[DT-NNN] "
+labels:
+  - "type: decision"
+  - "status: triage"
+
+body:
+  - type: markdown
+    attributes:
+      value: >
+        **Category: Technical** — fixed by this template. Do not add a
+        `decision:`-prefixed label; `type: decision` is the only label this
+        form applies. Check existing DA/DD/DT/DQ issues together for the
+        next free NNN — the counter is shared across all four prefixes, not
+        reset per category.
+
+  - type: input
+    id: summary
+    attributes:
+      label: "Summary"
+      description: >
+        One-sentence, plain-language summary of the decision — distinct from
+        the (telegraphic) issue title and the (potentially long) Context
+        below. Used to build the DESIGN_DECISIONS.md recap table without
+        reparsing the full body.
+      placeholder: "One sentence describing the decision."
+    validations:
+      required: true
+
+  - type: input
+    id: target-version
+    attributes:
+      label: "Target version"
+      description: "Project version where this decision takes effect (= milestone)."
+      placeholder: "0.3.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: "Context"
+      description: >
+        Why is this decision necessary?
+        What constraint, gap, or opportunity motivates it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: "Options considered"
+      description: "List the alternatives with their trade-offs."
+      placeholder: |
+        | Option | Advantage | Risk |
+        |--------|-----------|------|
+        | **A** — … | … | … |
+        | **B** — … | … | … |
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: decision
+    attributes:
+      label: "Decision"
+      description: "The chosen option and a brief justification."
+    validations:
+      required: false
+
+  - type: textarea
+    id: consequences
+    attributes:
+      label: "Consequences"
+      description: >
+        Impact on the public API, dependencies, tests,
+        backward compatibility, or future decisions. Name any of the five
+        mandatory root files this touches explicitly (see
+        documents-conventions/references/required-files.md).
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: "Affected scopes"
+      description: "Apply the matching `scope:` labels manually after creation."
+      options:
+        - label: "`api` — public interface"
+        - label: "`ui` — error messages, output formatting"
+        - label: "`docs` — docstrings, Sphinx, guides"
+        - label: "`tests` — pytest, coverage"
+        - label: "`ci` — tox, GitHub Actions, pipeline"
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      description: "Apply the matching `priority:` label after creation."
+      options:
+        - "critical — drop everything"
+        - "high — next up"
+        - "medium — normal backlog"
+        - "low — nice to have"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: "Estimated effort"
+      description: "Apply the matching `effort:` label after creation."
+      options:
+        - "XS — < 1 h"
+        - "S  — half-day"
+        - "M  — 1 day"
+        - "L  — 2–3 days"
+        - "XL — > 3 days"
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: "Related issues & references"
+      description: "Previous DA/DD/DT/DQ issues, GitHub issues, PRs, relevant PEPs."
+      placeholder: |
+        - Follows from: #4 (DA-002 — ...)
+        - Blocks: #26 (FEAT: ...)
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: done-checklist
+    attributes:
+      label: "Closing checklist"
+      description: "Check all boxes before closing the issue."
+      options:
+        - label: "Affected modules are identified"
+        - label: "Implementation issues / PRs are linked"
+        - label: "The `status: closed` label has been applied"
+        - label: "DESIGN_DECISIONS.md recap table row added/updated (Ouverture/Clôture/Jalon)"

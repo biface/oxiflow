@@ -1,10 +1,10 @@
 //! # Module `solver::snapshot`
 //!
 //! Serialisable snapshot of a simulation's physical state, for post-mortem
-//! divergence analysis and normal pause/resume (DD-025 Option B, issue #71 ;
-//! generalised by DD-029, issue #77).
+//! divergence analysis and normal pause/resume ([DT-025](https://github.com/biface/oxiflow/issues/66) Option B, issue [#71](https://github.com/biface/oxiflow/issues/71) ;
+//! generalised by [DD-029](https://github.com/biface/oxiflow/issues/77)).
 //!
-//! ## Two-phase restore contract (DD-025)
+//! ## Two-phase restore contract ([DT-025](https://github.com/biface/oxiflow/issues/66))
 //!
 //! `SimulationSnapshot` captures only the **physical state** (`ContextValue`,
 //! the temporal configuration in effect, and the integration method used) —
@@ -14,11 +14,24 @@
 //! `Domain`/`Scenario`/`SolverConfiguration` themselves and re-injects the
 //! state as the initial condition.
 //!
-//! ## Two triggers, one type (DD-029)
+//! The re-injection is
+//! [`PrescribedInitialState`](crate::model::PrescribedInitialState): wrap the
+//! rebuilt model with `snapshot.state`, then set
+//! [`Scenario::with_t_start`](crate::solver::scenario::Scenario::with_t_start)
+//! to `snapshot.t`. A resumed run matches the uninterrupted one for one-step
+//! integrators only: the snapshot carries no history, so a multistep
+//! integrator (BDF2) restarts on its bootstrap step. Times agree to rounding
+//! rather than bit for bit, since the fixed-step loop computes
+//! `t_start + k·dt` from the new start. The
+//! [`model::initial_condition`](crate::model::initial_condition) module
+//! documentation details both points and shows a resume.
+//!
+//! ## Two triggers, one type ([DD-029](https://github.com/biface/oxiflow/issues/77))
 //!
 //! - **Automatic** — [`Solver::on_divergence`](super::Solver::on_divergence)
-//!   is called with a snapshot right before a [`OxiflowError::SolverDivergence`]
-//!   is returned. Default implementation is a no-op; override to persist.
+//!   is called with a snapshot right before a
+//!   [`SolverDivergence`](crate::context::OxiflowError::SolverDivergence)
+//!   error is returned. Default implementation is a no-op; override to persist.
 //! - **Explicit** — normal pause/resume checkpointing. There is no
 //!   `Solver::checkpoint()` method: every field of `SimulationSnapshot` is
 //!   already public, and the live physical state (`ContextValue`, `t`,
@@ -91,7 +104,7 @@ pub struct SimulationSnapshot {
 
 // ── File format ──────────────────────────────────────────────────────────────
 
-/// On-disk format for [`write_snapshot`] / [`read_snapshot`].
+/// On-disk format for `write_snapshot` / `read_snapshot` (`serde` feature).
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SnapshotFormat {

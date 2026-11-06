@@ -1,7 +1,8 @@
-//! # Integration test: lahar–lake mass conservation (#40, DD-031)
+//! # Integration test: lahar–lake mass conservation ([#40](https://github.com/biface/oxiflow/issues/40), [DA-031](https://github.com/biface/oxiflow/issues/82))
 //!
-//! Companion to `examples/lahar_lake_proto.rs` — same physics, run through
-//! `MultiDomainOrchestrator`, asserting the acceptance criteria from #40
+//! Companion to `examples/lahar_lake_proto.rs`, on the same models and
+//! coupling operator (`rsc/models/lahar_lake.rs`), run through
+//! `MultiDomainOrchestrator`, asserting the acceptance criteria from [#40](https://github.com/biface/oxiflow/issues/40)
 //! that an example alone cannot enforce as a regression gate:
 //! - Mass conservation within the expected splitting-error tolerance
 //! - `CouplingOperator` invoked at every synchronised step (not zero,
@@ -10,7 +11,7 @@
 //! Structural-only validation (`Scenario::multi`, `with_coupling`, INV-3
 //! composite keying) is already covered by `tests/coupling_proto.rs`
 //! (v0.3.0) — this file specifically exercises the *time-stepping* path
-//! that DD-031 added on top of it. Kept as a separate file rather than
+//! that [DA-031](https://github.com/biface/oxiflow/issues/82) added on top of it. Kept as a separate file rather than
 //! extending `coupling_proto.rs`: its existing `MassTransferCoupling`
 //! stub uses overwrite semantics tailored to its own structural-only
 //! assertions, not mass conservation — changing it would risk breaking
@@ -19,15 +20,14 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use nalgebra::DVector;
 use oxiflow::{
     context::{
-        compute::ComputeContext, error::OxiflowError, quantity::PhysicalQuantity,
-        state::MultiDomainState, value::ContextValue, variable::ContextVariable,
+        error::OxiflowError, quantity::PhysicalQuantity, state::MultiDomainState,
+        variable::ContextVariable,
     },
-    coupling::{CouplingOperator, Interface},
+    coupling::{CouplingContext, CouplingOperator, Interface},
     mesh::{Mesh, UniformGrid1D},
-    model::traits::{PhysicalModel, RequiresContext},
+    model::traits::RequiresContext,
     solver::{
         config::{StepControl, TimeConfiguration},
         methods::ForwardEulerSolver,
@@ -39,124 +39,46 @@ use oxiflow::{
 const N_NODES: usize = 5;
 const LAMBDA: f64 = 0.2;
 
-// ── Models (duplicated from examples/lahar_lake_proto.rs) ───────────────────
-//
-// Examples and integration tests are separate Cargo compilation units —
-// they cannot share code without a dedicated (currently nonexistent)
-// test-utils crate or module. Kept intentionally minimal; if a third
-// consumer needs the same fixtures, that's the trigger to extract one.
+#[path = "../rsc/models/lahar_lake.rs"]
+mod lahar_lake_model;
 
-struct GranularFlow {
-    lambda: f64,
-}
+use lahar_lake_model::{GranularFlow, MassTransfer, ShallowWaterReceiver};
 
-impl RequiresContext for GranularFlow {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![]
-    }
-}
-
-impl PhysicalModel for GranularFlow {
-    fn compute_physics(
-        &self,
-        state: &ContextValue,
-        _ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        let c = state.as_scalar_field()?;
-        Ok(ContextValue::ScalarField(c.map(|ci| -self.lambda * ci)))
-    }
-
-    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-    }
-
-    fn name(&self) -> &str {
-        "granular_flow"
-    }
-}
-
-struct ShallowWaterReceiver;
-
-impl RequiresContext for ShallowWaterReceiver {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![]
-    }
-}
-
-impl PhysicalModel for ShallowWaterReceiver {
-    fn compute_physics(
-        &self,
-        state: &ContextValue,
-        _ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        let c = state.as_scalar_field()?;
-        Ok(ContextValue::ScalarField(DVector::zeros(c.len())))
-    }
-
-    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        ContextValue::ScalarField(DVector::zeros(mesh.n_dof()))
-    }
-
-    fn name(&self) -> &str {
-        "shallow_water_receiver"
-    }
-}
-
-/// Same as the example's `MassTransfer`, with an added invocation counter
-/// for the "invoked at every step" assertion.
-struct MassTransfer {
-    lambda: f64,
-    interface: Interface,
+/// Counts the invocations of the shared `MassTransfer` it wraps, for the
+/// "invoked at every step" assertion. Every trait method delegates to the
+/// wrapped operator, so the transfer itself is the shared code.
+struct CountingCoupling {
+    inner: MassTransfer,
     calls: Arc<AtomicUsize>,
 }
 
-impl RequiresContext for MassTransfer {
+impl RequiresContext for CountingCoupling {
     fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![]
+        self.inner.required_variables()
+    }
+
+    fn optional_variables(&self) -> Vec<ContextVariable> {
+        self.inner.optional_variables()
+    }
+
+    fn depends_on(&self) -> Vec<ContextVariable> {
+        self.inner.depends_on()
     }
 }
 
-impl CouplingOperator for MassTransfer {
+impl CouplingOperator for CountingCoupling {
     fn apply(
         &self,
         states: &MultiDomainState,
-        ctx: &ComputeContext,
+        ctx: &CouplingContext,
         interface: &Interface,
     ) -> Result<MultiDomainState, OxiflowError> {
         self.calls.fetch_add(1, Ordering::SeqCst);
-
-        let dt = ctx.time_step();
-        let quantity = PhysicalQuantity::concentration();
-
-        let source = states
-            .get(interface.source(), &quantity)
-            .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context: "MassTransfer",
-                message: "missing source field".into(),
-            })?
-            .as_scalar_field()?;
-        let target = states
-            .get(interface.target(), &quantity)
-            .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context: "MassTransfer",
-                message: "missing target field".into(),
-            })?
-            .as_scalar_field()?;
-
-        let flux = source.map(|c| self.lambda * c);
-        let new_target: DVector<f64> = target.clone() + flux * dt;
-
-        let mut result = states.clone();
-        result.set(
-            interface.target().clone(),
-            quantity,
-            ContextValue::ScalarField(new_target),
-        );
-        Ok(result)
+        self.inner.apply(states, ctx, interface)
     }
 
     fn interface(&self) -> &Interface {
-        &self.interface
+        self.inner.interface()
     }
 }
 
@@ -184,9 +106,11 @@ fn build_scenario() -> (Scenario, Arc<AtomicUsize>) {
     let lake = Domain::new(lake_id(), Box::new(ShallowWaterReceiver), make_mesh());
     let interface = Interface::new(lahar_id(), lake_id()).with_label("lahar-lake");
     let calls = Arc::new(AtomicUsize::new(0));
-    let coupling = Box::new(MassTransfer {
-        lambda: LAMBDA,
-        interface,
+    let coupling = Box::new(CountingCoupling {
+        inner: MassTransfer {
+            lambda: LAMBDA,
+            interface,
+        },
         calls: calls.clone(),
     });
     let scenario = Scenario::multi(vec![lahar, lake])

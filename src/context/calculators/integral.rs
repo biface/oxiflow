@@ -24,10 +24,10 @@ use crate::model::traits::RequiresContext;
 /// The result is exposed under a user-chosen `ContextVariable::External { name }`,
 /// typically `"spatial_mean"`, `"total_mass"`, or similar.
 ///
-/// # Limitations (J2)
+/// # Limitations
 ///
-/// Only 1D meshes are supported at this milestone. The calculator returns
-/// `PreconditionFailed` for meshes with `spatial_dimension() != 1`.
+/// Only 1D meshes are supported until the nD meshes of J11. The calculator
+/// returns `PreconditionFailed` for meshes with `spatial_dimension() != 1`.
 ///
 /// # Examples
 ///
@@ -103,7 +103,7 @@ impl ContextCalculator for TrapezoidalIntegral {
             return Err(OxiflowError::PreconditionFailed {
                 context: "TrapezoidalIntegral",
                 message: format!(
-                    "only 1D meshes are supported at J2, got spatial_dimension = {}",
+                    "only 1D meshes are supported, got spatial_dimension = {}",
                     self.mesh.spatial_dimension()
                 ),
             });

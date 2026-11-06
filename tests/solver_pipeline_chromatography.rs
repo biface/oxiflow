@@ -13,9 +13,10 @@
 //!
 //! $$\frac{\partial c}{\partial t} = -\lambda \cdot c + A \cdot \exp\!\left(-\frac{(t - t_{\text{inj}})^2}{2\sigma^2}\right)$$
 //!
-//! At J1, spatial transport ($v \cdot \partial c / \partial z$, $D_{ax} \cdot \partial^2 c / \partial z^2$)
-//! is not modelled — `DiscreteOperator` (INV-2) arrives at J4b. The test validates
-//! that the engine pipeline runs correctly, not the spatial accuracy of the physics.
+//! The test dates from J1 and keeps its simplification: spatial transport
+//! ($v \cdot \partial c / \partial z$, $D_{ax} \cdot \partial^2 c / \partial z^2$)
+//! is not modelled. The test validates that the engine pipeline runs correctly,
+//! not the spatial accuracy of the physics.
 //!
 //! ## Acceptance criteria
 //!

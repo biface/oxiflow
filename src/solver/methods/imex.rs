@@ -1,13 +1,13 @@
 //! # Module `solver::methods::imex`
 //!
-//! Temporal operator splitting — `OperatorSplittingSolver` (DD-037, #45).
+//! Temporal operator splitting — `OperatorSplittingSolver` ([DA-037](https://github.com/biface/oxiflow/issues/90), [#45](https://github.com/biface/oxiflow/issues/45)).
 //!
 //! ## Temporal coupling, not spatial
 //!
 //! This module composes **n ≥ 2** [`PhysicalModel`](crate::model::PhysicalModel)
 //! evaluated in sequence on the **same state**, the **same mesh** — as
 //! opposed to INV-3's spatial coupling (`CouplingOperator`, cross-domain,
-//! asymmetric source → target at an `Interface`). See DD-037 for the full
+//! asymmetric source → target at an `Interface`). See [DA-037](https://github.com/biface/oxiflow/issues/90) for the full
 //! distinction between the two families.
 //!
 //! oxiflow's canonical form already names two separate terms:
@@ -20,24 +20,24 @@
 //! contribution carry its own `Domain` is enough to isolate it correctly,
 //! without touching `SteppableSolver` or any existing solver.
 //!
-//! ## v1 scope (#45)
+//! ## v1 scope ([#45](https://github.com/biface/oxiflow/issues/45))
 //!
 //! Only **one-step** sub-solvers (`history_depth() == 0`) are supported —
 //! validated at construction. [`SplittingScheme::Strang`] is the only
 //! implemented and tested variant; [`SplittingScheme::LieTrotter`] is
-//! reserved (DD-037) and rejected at construction until a concrete case
+//! reserved ([DA-037](https://github.com/biface/oxiflow/issues/90)) and rejected at construction until a concrete case
 //! requires it.
 //!
 //! ## The outer `Scenario`/`Domain`
 //!
 //! [`Solver::solve`] requires a `Scenario` — hence an outer `Domain` — even
 //! though `OperatorSplittingSolver` doesn't need one to compute (it has
-//! everything in its own operators). DD-037 settles this for
+//! everything in its own operators). [DA-037](https://github.com/biface/oxiflow/issues/90) settles this for
 //! [`crate::model::CompositeModel`]: the outer `Domain` carries the sum of
 //! the contributions, which makes `scenario.context_requirements()` and
 //! `domain.model.initial_state()` correct without dedicated logic here —
 //! and also serves as a testable monolithic reference run through an
-//! ordinary solver (acceptance criterion 1 of #45).
+//! ordinary solver (acceptance criterion 1 of [#45](https://github.com/biface/oxiflow/issues/45)).
 
 use std::collections::HashMap;
 
@@ -46,7 +46,9 @@ use crate::context::value::ContextValue;
 use crate::context::ContextCalculator;
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::StepControl;
-use crate::solver::methods::{check_finite, SteppableSolver};
+use crate::solver::methods::{
+    check_finite, divergence_snapshot, enforce_boundary_conditions, SteppableSolver,
+};
 use crate::solver::scenario::{Domain, Scenario};
 use crate::solver::{SimulationResult, Solver, SolverConfiguration};
 
@@ -58,7 +60,7 @@ pub struct SplitOperator {
     /// Mesh, BCs, and model specific to this contribution.
     pub domain: Domain,
     /// Sub-solver integrating this contribution. Must have
-    /// `history_depth() == 0` (v1 scope, DD-037).
+    /// `history_depth() == 0` (v1 scope, [DA-037](https://github.com/biface/oxiflow/issues/90)).
     pub solver: Box<dyn SteppableSolver>,
 }
 
@@ -69,19 +71,19 @@ pub struct SplitOperator {
 pub enum SplittingScheme {
     /// Full step of each operator, in sequence — order 1.
     ///
-    /// Reserved (DD-037): same structure as `Strang`, but not implemented
+    /// Reserved ([DA-037](https://github.com/biface/oxiflow/issues/90)): same structure as `Strang`, but not implemented
     /// or tested here — `OperatorSplittingSolver::new` rejects it until a
     /// concrete case requires it.
     LieTrotter,
     /// Half-step on every operator but the last (full step), then passes
     /// back in reverse order — symmetric/palindromic composition, order 2.
-    /// For n=2, this is exactly the scheme from #45: explicit half-step →
+    /// For n=2, this is exactly the scheme from [#45](https://github.com/biface/oxiflow/issues/45): explicit half-step →
     /// full implicit step → explicit half-step.
     Strang,
 }
 
 /// Generic composite: n ≥ 2 operators sharing the same state, composed
-/// according to a [`SplittingScheme`] (DD-037, #45).
+/// according to a [`SplittingScheme`] ([DA-037](https://github.com/biface/oxiflow/issues/90), [#45](https://github.com/biface/oxiflow/issues/45)).
 pub struct OperatorSplittingSolver {
     operators: Vec<SplitOperator>,
     scheme: SplittingScheme,
@@ -115,9 +117,9 @@ impl OperatorSplittingSolver {
     ///
     /// `OxiflowError::PreconditionFailed` if:
     /// - fewer than two operators are provided;
-    /// - a sub-solver has `history_depth() != 0` (v1 scope, DD-037);
+    /// - a sub-solver has `history_depth() != 0` (v1 scope, [DA-037](https://github.com/biface/oxiflow/issues/90));
     /// - `scheme` is `SplittingScheme::LieTrotter` (reserved, not
-    ///   implemented — DD-037).
+    ///   implemented — [DA-037](https://github.com/biface/oxiflow/issues/90)).
     pub fn new(
         operators: Vec<SplitOperator>,
         scheme: SplittingScheme,
@@ -135,7 +137,7 @@ impl OperatorSplittingSolver {
         if scheme == SplittingScheme::LieTrotter {
             return Err(OxiflowError::PreconditionFailed {
                 context: "OperatorSplittingSolver::new",
-                message: "SplittingScheme::LieTrotter is reserved (DD-037) — not yet \
+                message: "SplittingScheme::LieTrotter is reserved (DA-037) — not yet \
                            implemented or tested; use SplittingScheme::Strang"
                     .into(),
             });
@@ -149,7 +151,7 @@ impl OperatorSplittingSolver {
                     message: format!(
                         "sub-solver for operator '{}' has history_depth() == {depth} — \
                          only one-step sub-solvers (history_depth() == 0) are supported \
-                         in v1 (DD-037)",
+                         in v1 (DA-037)",
                         op.domain.model.name()
                     ),
                 });
@@ -159,7 +161,7 @@ impl OperatorSplittingSolver {
         Ok(Self { operators, scheme })
     }
 
-    /// Ergonomic constructor for the n=2 case requested by #45: explicit
+    /// Ergonomic constructor for the n=2 case requested by [#45](https://github.com/biface/oxiflow/issues/45): explicit
     /// half-step → full implicit step → explicit half-step.
     pub fn strang(
         domain_explicit: Domain,
@@ -192,7 +194,7 @@ impl OperatorSplittingSolver {
     ) -> Result<ContextValue, OxiflowError> {
         match self.scheme {
             // Unreachable: rejected by `new` — kept for exhaustiveness in
-            // case `SplittingScheme` gains more variants later (DD-037).
+            // case `SplittingScheme` gains more variants later (DA-037).
             SplittingScheme::LieTrotter => unreachable!(
                 "SplittingScheme::LieTrotter is rejected by OperatorSplittingSolver::new"
             ),
@@ -200,12 +202,12 @@ impl OperatorSplittingSolver {
         }
     }
 
-    /// Symmetric/palindromic composition, generalised to n ≥ 2 (DD-037).
+    /// Symmetric/palindromic composition, generalised to n ≥ 2 ([DA-037](https://github.com/biface/oxiflow/issues/90)).
     ///
     /// Φ₁(dt/2) ∘ Φ₂(dt/2) ∘ … ∘ Φₙ₋₁(dt/2) ∘ Φₙ(dt) ∘ Φₙ₋₁(dt/2) ∘ … ∘ Φ₁(dt/2)
     ///
     /// For n=2: Φ₁ half-step (explicit) → Φ₂ full step (implicit) → Φ₁
-    /// half-step — exactly the scheme from #45.
+    /// half-step — exactly the scheme from [#45](https://github.com/biface/oxiflow/issues/45).
     fn apply_strang(
         &self,
         chain: &[&dyn ContextCalculator],
@@ -248,11 +250,14 @@ impl OperatorSplittingSolver {
 
 impl Solver for OperatorSplittingSolver {
     /// Fixed-step loop — does not reuse
-    /// [`SteppableSolver::solve_fixed_step`] (DD-035): this composite is not
-    /// a `SteppableSolver` (same posture as DD-036 for DoPri45 — avoiding
-    /// reopening multi-domain orchestration for a need #45 doesn't raise).
+    /// [`SteppableSolver::solve_fixed_step`] ([DD-035](https://github.com/biface/oxiflow/issues/88)): this composite is not
+    /// a `SteppableSolver` (same posture as [DD-036](https://github.com/biface/oxiflow/issues/89) for DoPri45 — avoiding
+    /// reopening multi-domain orchestration for a need [#45](https://github.com/biface/oxiflow/issues/45) doesn't raise).
     /// The loop below deliberately mirrors `solve_fixed_step`'s shape to
-    /// stay consistent with the other fixed-step solvers.
+    /// stay consistent with the other fixed-step solvers, divergence
+    /// included: a non-finite state hands a `SimulationSnapshot` to
+    /// [`Solver::on_divergence`] before `SolverDivergence` is returned
+    /// ([DT-025](https://github.com/biface/oxiflow/issues/66), [#134](https://github.com/biface/oxiflow/issues/134)).
     fn solve(
         &self,
         scenario: &Scenario,
@@ -290,6 +295,7 @@ impl Solver for OperatorSplittingSolver {
         let chain = build_calculator_chain(&requirements, &config.calculators)?;
 
         let mut u = domain.model.initial_state(domain.mesh.as_ref());
+        enforce_boundary_conditions(domain, &chain, &mut u, t_start, dt)?;
 
         let n_steps = ((t_end - t_start) / dt).round() as usize;
         let save_every = config.time.save_every.unwrap_or(1);
@@ -305,8 +311,22 @@ impl Solver for OperatorSplittingSolver {
             let t_next = t_start + ((step + 1) as f64) * dt;
 
             u = self.apply_step(&chain, &mut u, t, dt)?;
+            // Saved states satisfy the outer domain's boundary conditions
+            // (DD-070); the sub-steps only re-apply them per evaluation.
+            enforce_boundary_conditions(domain, &chain, &mut u, t_next, dt)?;
 
-            check_finite(&u, t_next)?;
+            if let Err(e) = check_finite(&u, t_next) {
+                self.on_divergence(&divergence_snapshot(
+                    config,
+                    &u,
+                    t_next,
+                    step + 1,
+                    e.to_string(),
+                    &states,
+                    &times,
+                ));
+                return Err(e);
+            }
 
             if (step + 1) % save_every == 0 {
                 states.push(u.clone());
@@ -328,47 +348,21 @@ impl Solver for OperatorSplittingSolver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::compute::ComputeContext;
-    use crate::context::variable::ContextVariable;
     use crate::mesh::structured::UniformGrid1D;
-    use crate::mesh::Mesh;
-    use crate::model::{CompositeModel, PhysicalModel, RequiresContext};
+    use crate::model::{CompositeModel, ExponentialDecay, PhysicalModel};
     use crate::solver::config::{IntegratorKind, TimeConfiguration};
     use crate::solver::methods::euler::ForwardEulerSolver;
-    use nalgebra::DVector;
-
-    /// `du/dt = -rate * u` — pure decay, no time dependence.
-    struct Decay {
-        rate: f64,
-    }
-    impl RequiresContext for Decay {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-    impl PhysicalModel for Decay {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.rate * v)))
-        }
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-        fn name(&self) -> &str {
-            "decay"
-        }
-    }
 
     fn make_mesh() -> UniformGrid1D {
         UniformGrid1D::new(5, 0.0, 1.0).unwrap()
     }
 
     fn make_domain(rate: f64) -> Domain {
-        Domain::new("decay", Box::new(Decay { rate }), Box::new(make_mesh()))
+        Domain::new(
+            "decay",
+            Box::new(ExponentialDecay { lambda: rate }),
+            Box::new(make_mesh()),
+        )
     }
 
     fn make_solver() -> OperatorSplittingSolver {
@@ -422,8 +416,8 @@ mod tests {
 
         let composite = CompositeModel::new(
             vec![
-                Box::new(Decay { rate: 1.0 }) as Box<dyn PhysicalModel>,
-                Box::new(Decay { rate: 2.0 }) as Box<dyn PhysicalModel>,
+                Box::new(ExponentialDecay { lambda: 1.0 }) as Box<dyn PhysicalModel>,
+                Box::new(ExponentialDecay { lambda: 2.0 }) as Box<dyn PhysicalModel>,
             ],
             "combined_decay",
         )
@@ -457,5 +451,32 @@ mod tests {
         let json = serde_json::to_string(&SplittingScheme::Strang).unwrap();
         let restored: SplittingScheme = serde_json::from_str(&json).unwrap();
         assert_eq!(restored, SplittingScheme::Strang);
+    }
+
+    #[test]
+    fn solve_reports_divergence_of_the_split_state() {
+        // Forward Euler half-steps on a rate of 1e200 multiply the state by
+        // 1 − 0.5e200 twice per outer step (the full step on rate 0.5 only
+        // halves it): the state overflows to infinity on the first step.
+        let solver = OperatorSplittingSolver::strang(
+            make_domain(1e200),
+            Box::new(ForwardEulerSolver),
+            make_domain(0.5),
+            Box::new(ForwardEulerSolver),
+        )
+        .unwrap();
+        let scenario = Scenario::single(
+            Box::new(ExponentialDecay { lambda: 1.0 }),
+            Box::new(make_mesh()),
+        );
+        let config = SolverConfiguration::new(
+            TimeConfiguration::new(10.0, StepControl::Fixed { dt: 1.0 }),
+            IntegratorKind::Euler,
+        );
+        let result = solver.solve(&scenario, &config);
+        assert!(
+            matches!(result, Err(OxiflowError::SolverDivergence { .. })),
+            "expected SolverDivergence, got {result:?}"
+        );
     }
 }

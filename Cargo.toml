@@ -1,8 +1,17 @@
 [package]
 name        = "oxiflow"
-version     = "0.9.0"
+version     = "0.10.0"
 edition     = "2021"
 rust-version = "1.84"
+# Résolveur sensible au MSRV — DT-067 (#183) : à la résolution, Cargo préfère
+# la version la plus récente compatible avec `rust-version`. Préférence, pas
+# contrainte : une dépendance transitive peut encore exiger davantage, d'où les
+# épinglages du `Cargo.lock` versionné, contrôlés par le job MSRV (#168).
+resolver    = "3"
+# Une seule cible de benchmark, `oxiflow_parallel` (voir `[[bench]]`), qui
+# regroupe les modules de `benches/` par `mod`. Sans cette ligne, Cargo
+# compilerait aussi chaque module comme une cible autonome et vide (#199).
+autobenches = false
 
 description = "Generic PDE solving engine for transport, reaction and diffusion phenomena (∂u/∂t + ∇·F = S)"
 license     = "Apache-2.0"
@@ -14,12 +23,34 @@ readme      = "README.md"
 keywords    = ["pde", "solver", "transport", "diffusion", "numerical"]
 categories  = ["science", "algorithms"]
 
+# Contenu du paquet publié : ce dont Cargo a besoin, et rien d'autre. La
+# bibliothèque, les cibles déclarées et les modèles de `rsc/` qu'elles
+# incluent par `#[path]`, l'en-tête KaTeX appelé par `rustdoc-args` (docs.rs),
+# la licence et la notice (Apache 2.0, § 4), le README du champ `readme` et le
+# CHANGELOG. La configuration du dépôt (CI, hooks, IDE, scripts) et les guides
+# de contribution restent sur GitHub. Liste blanche : un fichier ajouté au
+# dépôt n'entre dans le paquet que si on l'ajoute ici.
+include = [
+    "/src/**",
+    "/examples/**",
+    "/tests/**",
+    "/benches/**",
+    "/rsc/**",
+    "/docs/katex-header.html",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/README.md",
+    "/LICENSE.txt",
+    "/NOTICE",
+    "/CHANGELOG.md",
+]
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Dépendances de production / Production dependencies
 # ──────────────────────────────────────────────────────────────────────────────
 
 [dependencies]
-# Algèbre linéaire dense — vecteurs, matrices, champs. DD-013 (issue #13) :
+# Algèbre linéaire dense — vecteurs, matrices, champs. DT-013 (issue #13) :
 # nalgebra retenu plutôt qu'une implémentation maison (option A).
 nalgebra  = "0.33"
 # Gestion des erreurs typées — DD-004 (issue #4) : enum `OxiflowError` via
@@ -27,33 +58,29 @@ nalgebra  = "0.33"
 thiserror = "2"
 
 # Optionnelles / Optional
-# feature `parallel` — parallélisme opt-in via Rayon. DD-014 (issue #14,
+# feature `parallel` — parallélisme opt-in via Rayon. DT-014 (issue #14,
 # décision ; issue #51, implémentation) : feature opt-in + seuil configurable
 # (option A) plutôt qu'activation systématique (option B) ou threading manuel
 # (option C).
 rayon = { version = "1", optional = true }
-# feature `serde`    — sérialisation des types publics. DD-025 (issue #66,
+# feature `serde`    — sérialisation des types publics. DT-025 (issue #66,
 # décision ; issue #67, implémentation Option A) : `cfg_attr` sur les types
 # valeur dès v0.1.0, `SimulationSnapshot` (Option B, issue #71) à v0.6.0.
 serde = { version = "1", features = ["derive"], optional = true }
 # feature `hdf5`     — données expérimentales volumineuses (`ExternalTabulated`).
-# DD-027 (issue #75) : HDF5 conservé pour ce seul usage (VTK devient le pivot
+# DT-027 (issue #75) : HDF5 conservé pour ce seul usage (VTK devient le pivot
 # des résultats — feature `vtk`, pas encore ajoutée ici).
 # Migré vers `hdf5-metno` (chore #79) via l'alias `package` de Cargo : le nom
 # local reste `hdf5`, donc aucun site d'appel (`use hdf5::...`) n'a besoin
 # d'être modifié — seule cette ligne change. `hdf5 = "0.8"` (wrapper aldanor)
-# est explicitement décrit par DD-027 comme non maintenu et ne compilant plus
+# est explicitement décrit par DT-027 comme non maintenu et ne compilant plus
 # contre les toolchains Rust récentes ; `hdf5-metno` est le fork activement
 # maintenu (Institut météorologique norvégien), même auteur original en
 # co-mainteneur.
 hdf5  = { package = "hdf5-metno", version = "0.10", optional = true }
-# feature `vtk`      — export XML (.vtu) de SimulationResult::write_vtk()
-# (DD-027, issue #78). Pure Rust, aucune dépendance système (contrairement à
-# `hdf5`) — voir DD-027 : choisi comme pivot d'interop pour ParaView/VisIt.
-vtkio = { version = "0.6", optional = true }
 # feature `sparse`   — solveur linéaire creux pour les intégrateurs implicites
-# sur grandes grilles. DD-013 (issue #13, décision faer pour le volet creux) ;
-# DD-043 (issue #50, v0.6.0) : trait frère de LinearSolver, pas une extension
+# sur grandes grilles. DT-013 (issue #13, décision faer pour le volet creux) ;
+# DA-043 (issue #50, v0.6.0) : trait frère de LinearSolver, pas une extension
 # (voir solver::sparse). `default-features = false` : seul `sparse-linalg`
 # (LU sur faer::sparse::SparseColMat) est nécessaire — les features par défaut
 # de faer tirent aussi `npy` (I/O .npy, inutilisé ici) et son propre `rayon`
@@ -61,7 +88,7 @@ vtkio = { version = "0.6", optional = true }
 # dépendances transitives avec un MSRV bien supérieur à celui de ce crate,
 # sans bénéfice ici.
 faer  = { version = "0.24", optional = true, default-features = false, features = ["std", "sparse-linalg"] }
-# feature `serde`    — sérialisation JSON de `SimulationSnapshot` (DD-025 Option
+# feature `serde`    — sérialisation JSON de `SimulationSnapshot` (DT-025 Option
 # B / DD-029, issue #71) — `write_snapshot()` au format lisible pour le debug.
 # Passée de dev-dependency (fixtures de test uniquement) à dépendance de
 # production optionnelle : `write_snapshot()` en a besoin dans le crate publié,
@@ -69,26 +96,26 @@ faer  = { version = "0.24", optional = true, default-features = false, features 
 # récentes déclarent `rust-version = "1.85.0"`, au-dessus du MSRV de ce crate
 # (`1.80`) — vérifié sur l'index crates.io avant ajout, pas supposé.
 serde_json = { version = "1", optional = true }
-# feature `serde`    — sérialisation bincode de `SimulationSnapshot` (DD-025
+# feature `serde`    — sérialisation bincode de `SimulationSnapshot` (DT-025
 # Option B / DD-029, issue #71) — format binaire natif recommandé pour
 # `checkpoint()`/`on_divergence()` (fidélité + performance). Même contrainte de
 # MSRV que `serde_json` ci-dessus : `bincode 1.3` (API `serialize`/
 # `deserialize` classique), pas `2.x`/`3.x` (`rust-version = "1.85.0"`).
 bincode = { version = "1.3", optional = true }
-# feature `gpu`      — architecture GPU (DD-026/#73, DD-045/#127). `wgpu`
+# feature `gpu`      — architecture GPU (DA-026/#73, DT-045/#127). `wgpu`
 # 26.0.1 : dernière version déclarant une MSRV compatible (`1.84`) — voir
-# DD-045 pour le détail de la tension MSRV (aucune version stable ne déclare
+# DT-045 pour le détail de la tension MSRV (aucune version stable ne déclare
 # `1.80`, plancher relevé plutôt que de parier sur une MSRV non déclarée).
 # `default-features = false` : exclut `gles`/`webgpu` (cibles navigateur/
 # mobile, hors périmètre d'un crate de calcul scientifique natif) — seuls
-# les backends natifs desktop sont retenus (DD-045).
+# les backends natifs desktop sont retenus (DT-045).
 wgpu = { version = "26.0.1", optional = true, default-features = false, features = ["vulkan", "metal", "dx12", "wgsl"] }
 # feature `gpu`      — exécution bloquante de `request_adapter`/`request_device`
-# (DD-045 : pas de runtime async, cohérent avec `Solver::solve()` déjà bloquant).
+# (DT-045 : pas de runtime async, cohérent avec `Solver::solve()` déjà bloquant).
 pollster = { version = "1.0", optional = true }
 # feature `gpu`      — conversion des payloads `ContextValue` en octets
 # uploadables (`bytemuck::cast_slice` sur les tranches `DVector`/`DMatrix`,
-# DD-026 INV-GPU-5). Pas de `rust-version` déclarée en amont, aucune tension
+# DA-026 INV-GPU-5). Pas de `rust-version` déclarée en amont, aucune tension
 # MSRV constatée.
 bytemuck = { version = "1.25", optional = true }
 
@@ -99,30 +126,36 @@ bytemuck = { version = "1.25", optional = true }
 [features]
 default  = []
 
-# Parallélisme opt-in via Rayon — DD-014 (issue #14, décision ; issue #51,
+# Parallélisme opt-in via Rayon — DT-014 (issue #14, décision ; issue #51,
 # implémentation) : activé uniquement au-delà d'un seuil configurable
 # (`set_parallel_threshold`), jamais par défaut.
 parallel = ["dep:rayon"]
 
-# Sérialisation des types publics via serde — DD-025 (issue #66, décision ;
+# Sérialisation des types publics via serde — DT-025 (issue #66, décision ;
 # issue #67, implémentation Option A). Entraîne `serde_json`/`bincode` pour
-# `write_snapshot()` (DD-025 Option B / DD-029, issue #71) : JSON lisible pour
+# `write_snapshot()` (DT-025 Option B / DD-029, issue #71) : JSON lisible pour
 # le debug, bincode natif pour `checkpoint()`/`on_divergence()`.
 serde    = ["dep:serde", "nalgebra/serde-serialize", "dep:serde_json", "dep:bincode"]
 
-# Support HDF5 pour les données expérimentales volumineuses — DD-027
+# Support HDF5 pour les données expérimentales volumineuses — DT-027
 # (issue #75). Dépendance migrée vers `hdf5-metno` (chore #79) — voir le
 # commentaire sur la dépendance ci-dessus.
 hdf5     = ["dep:hdf5"]
-vtk      = ["dep:vtkio"]
 
-# Solveur linéaire creux (faer) — DD-013 (issue #13) / DD-043 (issue #50,
+# Export XML VTK (`.vtu`) de `SimulationResult::write_vtk()` — DT-027 (issue
+# #75, décision ; issue #78, implémentation). Écriture interne, sans dépendance
+# (#191) : `vtkio 0.6.3` tirait trois avis RUSTSEC (`lz4_flex`, `quick-xml`)
+# qu'aucune version publiée ne corrige. La feature reste, vide, pour garder
+# l'API et les checks CI `vtk` ; la généralisation 2D/3D vient à v0.11.0.
+vtk      = []
+
+# Solveur linéaire creux (faer) — DT-013 (issue #13) / DA-043 (issue #50,
 # v0.6.0). Trait frère de LinearSolver (solver::sparse), pas une extension.
 sparse   = ["dep:faer"]
 
-# Architecture GPU — DD-026 (#73) / DD-045 (#127). Toujours active dès que la
+# Architecture GPU — DA-026 (#73) / DT-045 (#127). Toujours active dès que la
 # feature est activée, sans seuil runtime (divergence délibérée avec
-# `parallel`/DD-014 : la feature flag est déjà l'opt-in, voir DD-045).
+# `parallel`/DT-014 : la feature flag est déjà l'opt-in, voir DT-045).
 gpu      = ["dep:wgpu", "dep:pollster", "dep:bytemuck"]
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -148,6 +181,12 @@ criterion = { version = "0.8", features = ["html_reports"] }
 # used; Circle/PathElement/RGBColor/the 8 basic named colors are core,
 # not feature-gated.
 plotters = { version = "0.3", default-features = false, features = ["svg_backend", "line_series"] }
+# quick-xml — relecture des `.vtu` dans le test d'aller-retour de `write_vtk`
+# (#191) : le fichier est vérifié par un vrai parseur XML, pas par des
+# comparaisons de texte. `0.41` : première version corrigée des avis
+# RUSTSEC-2026-0194/-0195 ; `0.42` déclare `rust-version = "1.86"`, au-dessus
+# de la MSRV — le caret `^0.41` l'exclut.
+quick-xml = "0.41"
 
 [[bench]]
 name    = "oxiflow_parallel"

@@ -1,8 +1,8 @@
 //! # Module `operators::weno`
 //!
 //! WENO (Weighted Essentially Non-Oscillatory) reconstruction schemes for
-//! [`UniformGrid1D`] — `WENO3` (3rd order), `WENO5` (5th order) (#49,
-//! DD-039).
+//! [`UniformGrid1D`] — `WENO3` (3rd order), `WENO5` (5th order) ([#49](https://github.com/biface/oxiflow/issues/49),
+//! [DA-039](https://github.com/biface/oxiflow/issues/95)).
 //!
 //! ## Why WENO
 //!
@@ -23,11 +23,11 @@
 //! diffusive term is always the direct centered difference between the two
 //! nodes adjacent to the face, exactly as in `operators::fv`.
 //!
-//! ## Cell-average semantics — shared with `operators::fv` (DD-041)
+//! ## Cell-average semantics — shared with `operators::fv` ([DD-041](https://github.com/biface/oxiflow/issues/98))
 //!
 //! `u[i]` here is the average of `u` over the cell whose faces sit at nodes
 //! `i` and `i+1` — the *same* cell-average interpretation `operators::fv`
-//! uses (DD-040), not a nodal point-value interpretation. This module
+//! uses ([DD-040](https://github.com/biface/oxiflow/issues/96)), not a nodal point-value interpretation. This module
 //! originally claimed the opposite ("no cell/node question here"), reasoning
 //! that WENO reconstructs directly from `UniformGrid1D`'s nodal array
 //! without a separate cell-center computation, unlike FV. That reasoning
@@ -41,13 +41,13 @@
 //! reconstruction is — this was caught empirically (order-verification
 //! tests measured order ≈2 instead of the expected 3/5) and confirmed by
 //! direct Taylor expansion of the resulting stencil. See the correction
-//! history above `weno3_left` for the full account. This is DD-041 — a new
-//! decision extending DD-040's cell-average convention to a second
-//! consumer, not an amendment rewriting what DD-040 itself decided.
+//! history above `weno3_left` for the full account. This is [DD-041](https://github.com/biface/oxiflow/issues/98) — a new
+//! decision extending [DD-040](https://github.com/biface/oxiflow/issues/96)'s cell-average convention to a second
+//! consumer, not an amendment rewriting what [DD-040](https://github.com/biface/oxiflow/issues/96) itself decided.
 //!
 //! ## Upwind-direction selection
 //!
-//! `velocity` is a constant scalar (the "simple case" of DD-039 — space/time
+//! `velocity` is a constant scalar (the "simple case" of [DA-039](https://github.com/biface/oxiflow/issues/95) — space/time
 //! varying parameters would be declared via `required_variables()` instead,
 //! not needed by `#49`'s scope). Because the sign of `velocity` never
 //! changes across the domain, the upwind bias is chosen once from
@@ -55,12 +55,15 @@
 //! switching logic is needed (that would only matter for a
 //! space-varying velocity field, out of scope here).
 //!
-//! ## `FluxBoundary` and CFL
+//! ## `FluxBoundary` and stability
 //!
-//! Both reuse [`crate::operators::FluxBoundary`] and
-//! `crate::operators::check_cfl`, shared with `operators::fv` — same
-//! boundary-treatment question, same advective stability condition. See
-//! their documentation for rationale.
+//! Both reuse [`crate::operators::FluxBoundary`], shared with
+//! `operators::fv` — same boundary-treatment question; see its
+//! documentation for rationale. Like the FV schemes, they check no
+//! stability condition and declare the absolute value of `velocity` as
+//! their wave speed, from which the explicit integrators derive their
+//! advective step limit ([DA-073](https://github.com/biface/oxiflow/issues/229); see the *Stability* section of
+//! `operators::fv`).
 //!
 //! [`UniformGrid1D`]: crate::mesh::structured::UniformGrid1D
 
@@ -74,8 +77,8 @@ use crate::mesh::structured::UniformGrid1D;
 use crate::mesh::Mesh;
 use crate::model::traits::RequiresContext;
 use crate::operators::{
-    check_cfl, ghost_cell_wide_divergence, periodic_wide_divergence, truncated_wide_divergence,
-    wrap, FluxBoundary, FluxDivergenceOperator,
+    ghost_cell_wide_divergence, periodic_wide_divergence, truncated_wide_divergence, wrap,
+    FluxBoundary, FluxDivergenceOperator,
 };
 
 /// Regularization constant preventing division by zero when a smoothness
@@ -254,7 +257,7 @@ impl WENO3 {
     /// Local smoothness indicator at face `i`, in `[0, 1)` — `0` for a
     /// perfectly smooth (locally linear) window, approaching `1` near a
     /// discontinuity or kink. Used by `operators::adaptive::AdaptiveFlux`
-    /// (#99) to blend WENO with a limiter per face, not by `WENO3` itself.
+    /// ([#99](https://github.com/biface/oxiflow/issues/99)) to blend WENO with a limiter per face, not by `WENO3` itself.
     ///
     /// `τ = |β0 − β1|` — the same WENO-Z smoothness contrast [`weno_combine2`]
     /// uses internally — normalized by `β0 + β1` so the result stays bounded
@@ -292,7 +295,6 @@ impl FluxDivergenceOperator for WENO3 {
     ) -> Result<ContextValue, OxiflowError> {
         let u = field.as_scalar_field()?;
         let dx = mesh.characteristic_length();
-        check_cfl("WENO3", self.velocity, ctx.time_step(), dx)?;
 
         let div = match &self.boundary {
             FluxBoundary::Periodic => {
@@ -387,6 +389,15 @@ impl FluxDivergenceOperator for WENO3 {
         // treatments is 2 cells (see the GhostCell margins above).
         2
     }
+
+    fn max_wave_speed(
+        &self,
+        _field: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError> {
+        // Constant advection velocity: the same speed on any field.
+        Ok(self.velocity.abs())
+    }
 }
 
 // ── WENO5 operator ────────────────────────────────────────────────────────────
@@ -450,7 +461,6 @@ impl FluxDivergenceOperator for WENO5 {
     ) -> Result<ContextValue, OxiflowError> {
         let u = field.as_scalar_field()?;
         let dx = mesh.characteristic_length();
-        check_cfl("WENO5", self.velocity, ctx.time_step(), dx)?;
 
         let div = match &self.boundary {
             FluxBoundary::Periodic => {
@@ -538,6 +548,15 @@ impl FluxDivergenceOperator for WENO5 {
         // Widest reach across both upwind directions and all three boundary
         // treatments is 3 cells (see the GhostCell margins above).
         3
+    }
+
+    fn max_wave_speed(
+        &self,
+        _field: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError> {
+        // Constant advection velocity: the same speed on any field.
+        Ok(self.velocity.abs())
     }
 }
 
@@ -666,105 +685,82 @@ mod tests {
     /// (dx²/24)·f'' + O(dx⁴)`, standard midpoint-rule correction). For a
     /// scheme whose own truncation error is `O(dx³)` (WENO3) that `O(dx²)`
     /// sampling artifact in the *test data itself* dominates and masks the
-    /// scheme's real convergence — this is what happened here: switching
-    /// the nonlinear weighting formula (Jiang-Shu → WENO-Z) barely moved the
-    /// measured ratio (2.76 → 2.73), which was the tell that the bottleneck
-    /// wasn't the scheme at all, but the test's input data. WENO5's own
-    /// `O(dx⁵)` error is small enough that this `O(dx²)` artifact apparently
-    /// stayed under its test's older threshold, masking the same underlying
-    /// issue there too — fixed for both, uniformly, below.
+    /// scheme's real convergence. The correction applies to both WENO
+    /// schemes alike. It is necessary but not sufficient for WENO3, whose
+    /// coarse-grid convergence is also slowed by its nonlinear weights (see
+    /// [`weno3_reaches_third_order_on_fine_grids`]).
     fn sinc_factor(dx: f64) -> f64 {
         let arg = PI * dx;
         arg.sin() / arg
     }
 
-    #[test]
-    fn weno3_smooth_periodic_solution_converges_faster_than_first_order() {
-        let errors: Vec<f64> = [21usize, 41]
+    /// RMS error of `op`'s flux divergence on `n` cells for the advected
+    /// wave `sin(2πx)` (unit velocity, no diffusion), sampled and compared
+    /// as exact cell averages (see [`sinc_factor`]).
+    fn smooth_wave_error<O>(op: &O, n: usize) -> f64
+    where
+        O: FluxDivergenceOperator<MeshType = UniformGrid1D>,
+    {
+        let m = periodic_mesh(n);
+        let dx = m.characteristic_length();
+        let sinc = sinc_factor(dx);
+        let x: Vec<f64> = (0..n).map(|i| i as f64 * dx).collect();
+        let u = DVector::from_vec(x.iter().map(|&xi| (2.0 * PI * xi).sin() * sinc).collect());
+        let result = op
+            .apply(&ContextValue::ScalarField(u), &m, &ctx(1e-6))
+            .unwrap();
+        let div = result.as_scalar_field().unwrap().clone();
+        // Analytical ∇·F = v·du/dx = 2π·cos(2πx), cell-averaged with the
+        // same sinc factor as the input.
+        let analytical: Vec<f64> = x
             .iter()
-            .map(|&n| {
-                let m = periodic_mesh(n);
-                let dx = m.characteristic_length();
-                let sinc = sinc_factor(dx);
-                let x: Vec<f64> = (0..n).map(|i| i as f64 * dx).collect();
-                let u =
-                    DVector::from_vec(x.iter().map(|&xi| (2.0 * PI * xi).sin() * sinc).collect());
-                let op = WENO3::new(1.0, 0.0, FluxBoundary::Periodic);
-                let field = ContextValue::ScalarField(u);
-                let result = op.apply(&field, &m, &ctx(1e-6)).unwrap();
-                let div = result.as_scalar_field().unwrap().clone();
-                // Analytical ∇·F = v * du/dx = v * 2π * cos(2π x), cell-averaged
-                // with the same sinc factor as the input, for consistency.
-                let analytical: Vec<f64> = x
-                    .iter()
-                    .map(|&xi| 2.0 * PI * (2.0 * PI * xi).cos() * sinc)
-                    .collect();
-                rms_error(&div, &analytical)
-            })
+            .map(|&xi| 2.0 * PI * (2.0 * PI * xi).cos() * sinc)
             .collect();
+        rms_error(&div, &analytical)
+    }
 
-        let ratio = errors[0] / errors[1];
-        // Measured consistently in the range ~2.72–2.76 across three
-        // independently-verified corrections (ideal-weight fix, WENO-Z
-        // reweighting, true-cell-average test data) that each rigorously
-        // should have mattered and barely moved the number — ruling out a
-        // formula bug (confirmed three times over by direct Taylor
-        // expansion of the fully-assembled scheme, not just the isolated
-        // reconstruction). What remains is a known, literature-documented
-        // property of WENO3 specifically: combining two ~2nd-order
-        // substencils only buys *one* extra order (up to 3rd), which needs
-        // a much tighter weight-perturbation tolerance (`w_k - d_k`) than
-        // WENO5 does (combining three ~3rd-order substencils buys *three*
-        // extra orders, up to 5th, with a correspondingly looser tolerance).
-        // Standard nonlinear weight formulas (Jiang-Shu or WENO-Z alike)
-        // don't meet WENO3's tighter requirement in general — WENO3 is
-        // routinely observed to behave closer to 2nd order than 3rd order
-        // in practice for this reason, not a defect of this implementation.
-        // Threshold set to what's actually, repeatedly measured, with a
-        // small margin — not aspirational.
+    /// Apparent order of convergence of `op` between `n_coarse` and
+    /// `n_fine` cells, from [`smooth_wave_error`].
+    fn apparent_order<O>(op: &O, n_coarse: usize, n_fine: usize) -> f64
+    where
+        O: FluxDivergenceOperator<MeshType = UniformGrid1D>,
+    {
+        let ratio = smooth_wave_error(op, n_coarse) / smooth_wave_error(op, n_fine);
+        ratio.ln() / (n_fine as f64 / n_coarse as f64).ln()
+    }
+
+    /// WENO3 reaches its third order only once the grid is fine enough.
+    ///
+    /// On coarse grids the nonlinear weights stay far from their ideal
+    /// values `(1/3, 2/3)`, and that deviation dominates the error: the
+    /// apparent order is 1.5 between 21 and 41 cells, 1.65 between 41 and
+    /// 81, 2.8 between 81 and 161. The deviation then vanishes faster than
+    /// the third-order truncation error, so the apparent order overshoots
+    /// (above 5 between 161 and 1 281 cells) before settling back towards
+    /// 3 (3.2 between 1 281 and 2 561 cells). A refinement test therefore
+    /// has to sit in that last regime; one on the coarse grids measures the
+    /// weights, not the scheme.
+    #[test]
+    fn weno3_reaches_third_order_on_fine_grids() {
+        let order = apparent_order(&WENO3::new(1.0, 0.0, FluxBoundary::Periodic), 1281, 2561);
         assert!(
-            ratio > 2.5,
-            "expected order clearly better than 1st (ratio > 2.5) — see comment above on WENO3's known weight-tolerance limitation, got {ratio}"
+            order > 2.8,
+            "expected an apparent order close to 3, got {order}"
         );
     }
 
+    /// WENO5 shows its fifth order from coarse grids on: the apparent order
+    /// is 5.1 between 21 and 41 cells and 5.0 between 41 and 81.
     #[test]
-    fn weno5_smooth_periodic_solution_converges_faster_than_third_order() {
-        let errors: Vec<f64> = [21usize, 41]
-            .iter()
-            .map(|&n| {
-                let m = periodic_mesh(n);
-                let dx = m.characteristic_length();
-                let sinc = sinc_factor(dx);
-                let x: Vec<f64> = (0..n).map(|i| i as f64 * dx).collect();
-                let u =
-                    DVector::from_vec(x.iter().map(|&xi| (2.0 * PI * xi).sin() * sinc).collect());
-                let op = WENO5::new(1.0, 0.0, FluxBoundary::Periodic);
-                let field = ContextValue::ScalarField(u);
-                let result = op.apply(&field, &m, &ctx(1e-6)).unwrap();
-                let div = result.as_scalar_field().unwrap().clone();
-                let analytical: Vec<f64> = x
-                    .iter()
-                    .map(|&xi| 2.0 * PI * (2.0 * PI * xi).cos() * sinc)
-                    .collect();
-                rms_error(&div, &analytical)
-            })
-            .collect();
-
-        let ratio = errors[0] / errors[1];
-        // Previously passed (>8, then >12) even with plain point-sampled
-        // test data and/or Jiang-Shu weighting — WENO5's own O(dx⁵) error
-        // was apparently small enough to stay under those thresholds
-        // despite the same O(dx²) cell-average/point-sample test-data
-        // artifact that was masking WENO3's convergence. Now that the test
-        // data is a true cell average (see `sinc_factor`), expect this to
-        // pass even more comfortably (theoretical ratio ≈28 for a clean 5th
-        // order at this refinement) — not run locally to confirm, please
-        // tighten once you have.
-        assert!(
-            ratio > 15.0,
-            "expected clearly better than 3rd order (ratio > 15), got {ratio}"
-        );
+    fn weno5_reaches_fifth_order_on_coarse_grids() {
+        let op = WENO5::new(1.0, 0.0, FluxBoundary::Periodic);
+        for (n_coarse, n_fine) in [(21, 41), (41, 81)] {
+            let order = apparent_order(&op, n_coarse, n_fine);
+            assert!(
+                order > 4.8,
+                "expected an apparent order close to 5 between {n_coarse} and {n_fine} cells, got {order}"
+            );
+        }
     }
 
     // ── No spurious oscillations on a step profile ────────────────────────
@@ -810,15 +806,34 @@ mod tests {
         assert!(matches!(err, OxiflowError::InvalidDomain(_)));
     }
 
-    // ── CFL check (shared helper, sanity check of the wiring) ─────────────
+    // ── Stability (DA-073) ──────────────────────────────────────────────────
 
     #[test]
-    fn weno5_rejects_cfl_violation() {
+    fn weno_schemes_do_not_depend_on_the_time_step() {
+        // Courant number 40 on this grid: no stability check in the schemes.
         let m = mesh(5);
-        let op = WENO5::new(10.0, 0.0, FluxBoundary::Periodic);
+        let u = ContextValue::ScalarField(DVector::from_vec(vec![0.2, 1.3, -0.7, 2.1, 0.0]));
+        let weno3 = WENO3::new(10.0, 0.0, FluxBoundary::Periodic);
+        let weno5 = WENO5::new(10.0, 0.0, FluxBoundary::Periodic);
+        assert_eq!(
+            weno3.apply(&u, &m, &ctx(1.0)).unwrap(),
+            weno3.apply(&u, &m, &ctx(1e-3)).unwrap()
+        );
+        assert_eq!(
+            weno5.apply(&u, &m, &ctx(1.0)).unwrap(),
+            weno5.apply(&u, &m, &ctx(1e-3)).unwrap()
+        );
+    }
+
+    // ── Wave speed (DA-073) ─────────────────────────────────────────────────
+
+    #[test]
+    fn weno_schemes_declare_the_absolute_advection_velocity() {
         let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
-        let err = op.apply(&u, &m, &ctx(1.0)).unwrap_err();
-        assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
+        let weno3 = WENO3::new(-3.0, 0.1, FluxBoundary::Periodic);
+        let weno5 = WENO5::new(-3.0, 0.1, FluxBoundary::Periodic);
+        assert_eq!(weno3.max_wave_speed(&u, &ctx(0.01)).unwrap(), 3.0);
+        assert_eq!(weno5.max_wave_speed(&u, &ctx(0.01)).unwrap(), 3.0);
     }
 
     // ── Truncation boundary treatment (#DD-042 amendment scope) ───────────

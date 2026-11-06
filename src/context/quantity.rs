@@ -1,6 +1,6 @@
 //! # Module `context::quantity`
 //!
-//! Type-safe physical quantity identifiers for multi-component fields (DD-010).
+//! Type-safe physical quantity identifiers for multi-component fields ([DD-010](https://github.com/biface/oxiflow/issues/10)).
 //!
 //! ## Design
 //!

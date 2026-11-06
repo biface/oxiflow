@@ -2,11 +2,11 @@
 //!
 //! Time-varying injection profiles for a domain inlet, and the
 //! [`BoundaryCondition`] that exposes one as a ghost value —
-//! [`InjectionInlet`]. Motivated by #138 (competitive-adsorption
+//! [`InjectionInlet`]. Motivated by [#138](https://github.com/biface/oxiflow/issues/138) (competitive-adsorption
 //! chromatography): the inlet concentration is a genuine function of time
 //! (a pulse, a ramp, a sustained feed), not a fixed Robin/Danckwerts-style
 //! formula — see [`ghost_value`](crate::boundary::BoundaryCondition::ghost_value)'s
-//! own docs for why that needed a signature change (DD-042's two original
+//! own docs for why that needed a signature change ([DD-042](https://github.com/biface/oxiflow/issues/100)'s two original
 //! motivating cases were both steady-state).
 //!
 //! ## Dirac is deliberately not one of these profiles
@@ -38,6 +38,7 @@ use nalgebra::DVector;
 /// change (mirrors `FluxBoundary`'s own convention in `operators::mod`).
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum TemporalInjection {
     /// Constant `concentration` on `[start, end)`, zero outside — a single
     /// rectangular pulse.
@@ -151,8 +152,9 @@ impl TemporalInjection {
 /// profile only supplies the ghost value `FluxBoundary::GhostCell` needs to
 /// close its face-flux/gradient stencil at the boundary. Interior evolution
 /// (including the boundary node itself) proceeds through the normal
-/// transport equation, same posture as `DanckwertsInlet`'s `apply()`
-/// leaving interior dynamics to `compute_physics`.
+/// transport equation. It therefore declares no constrained node, unlike
+/// [`DanckwertsInlet`](crate::boundary::DanckwertsInlet), whose `apply()`
+/// sets the inlet node ([DD-070](https://github.com/biface/oxiflow/issues/200)).
 #[derive(Debug, Clone)]
 pub struct InjectionInlet {
     profile: TemporalInjection,
@@ -211,6 +213,26 @@ impl BoundaryCondition for InjectionInlet {
 /// differently from chrom-rs (a boundary-flux impulse there).
 ///
 /// Returns a zero vector unchanged if `n_dof == 0`.
+///
+/// # Assumptions
+///
+/// Nothing here is checked, since the function takes a DOF count, not a mesh:
+///
+/// - **1D ordered grid, node `0` = inlet.** On any other mesh (an
+///   unstructured mesh, [#151](https://github.com/biface/oxiflow/issues/151)) node `0` is an arbitrary node. Use it with the
+///   same meshes as [`DanckwertsInlet`](crate::boundary::danckwerts::DanckwertsInlet).
+/// - **`amount` is a nodal value, not a mass.** The integral of the result
+///   is `amount` times the control volume of node `0`, which depends on the
+///   mesh.
+///
+/// The signature is kept as is for 0.10.0: a form taking a mesh would also
+/// need an explicit location and a mass-to-nodal-value conversion once
+/// unstructured meshes exist, so it is left to that cycle ([#151](https://github.com/biface/oxiflow/issues/151)) rather than
+/// broken twice ([#187](https://github.com/biface/oxiflow/issues/187)). The location now has its mechanism: a
+/// [`BoundaryRegion`](crate::mesh::BoundaryRegion) resolved by
+/// [`Mesh::boundary_nodes`] ([DA-071](https://github.com/biface/oxiflow/issues/203)), as
+/// the Danckwerts conditions do. Only the mass conversion, which needs the
+/// control volume of a node, still holds the signature back until [#151](https://github.com/biface/oxiflow/issues/151).
 pub fn dirac_initial_state(n_dof: usize, amount: f64) -> DVector<f64> {
     let mut v = DVector::zeros(n_dof);
     if n_dof > 0 {

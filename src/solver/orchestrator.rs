@@ -1,16 +1,16 @@
 //! # Module `solver::orchestrator`
 //!
-//! Multi-domain orchestration — DD-031.
+//! Multi-domain orchestration — [DA-031](https://github.com/biface/oxiflow/issues/82).
 //!
 //! ## Why this exists
 //!
 //! [`Solver`](crate::solver::Solver) is deliberately single-domain — it
-//! drives one [`Domain`](crate::solver::scenario::Domain) through a full
+//! drives one [`Domain`] through a full
 //! time range. Coupled scenarios
-//! (lahar–lake, #40) need several domains advancing together, each
+//! (lahar–lake, [#40](https://github.com/biface/oxiflow/issues/40)) need several domains advancing together, each
 //! exchanging state with the others via
-//! [`CouplingOperator`](crate::coupling::CouplingOperator) (INV-3,
-//! DD-011) between steps.
+//! [`CouplingOperator`] (INV-3,
+//! [DA-011](https://github.com/biface/oxiflow/issues/11)) between steps.
 //!
 //! Rather than generalising `Solver`/`SimulationResult` for this — which
 //! would force every coupled domain through the same integrator —
@@ -24,7 +24,7 @@
 //! same step before couplings are applied. Per-domain `dt` (multirate /
 //! sub-cycling) is a substantially harder problem — interface time
 //! interpolation, coupling stability — deliberately deferred until a
-//! concrete case requires it (see DD-031).
+//! concrete case requires it (see [DA-031](https://github.com/biface/oxiflow/issues/82)).
 //!
 //! ## Per-step order
 //!
@@ -33,64 +33,95 @@
 //! 1. **Advance every domain** by one step, each via its own registered
 //!    `SteppableSolver` (which itself follows the contractual
 //!    calculators → boundary conditions → `compute_physics` order, see
-//!    [`crate::solver`]). Split into two passes internally (DD-048
+//!    [`crate::solver`]). Split into two passes internally ([DA-048](https://github.com/biface/oxiflow/issues/140)
 //!    consequence): a Jacobi-parallel compute pass (each domain reads
 //!    only the pre-step state, independent by construction, optionally
-//!    dispatched through Rayon above [`MultiDomainOrchestrator::parallel_threshold`])
+//!    dispatched through Rayon above `MultiDomainOrchestrator::parallel_threshold`,
+//!    an indicative default to calibrate on the host with the benchmark of
+//!    [#141](https://github.com/biface/oxiflow/issues/141))
 //!    followed by a sequential apply pass that writes the results back
 //!    into [`MultiDomainState`]/history. See
-//!    [`MultiDomainOrchestrator::compute_domain_steps`] for why the split
+//!    `MultiDomainOrchestrator::compute_domain_steps` for why the split
 //!    exists and what it does and does not parallelize.
 //! 2. **Apply every registered `CouplingOperator`**, in declaration order,
 //!    each reading the just-updated [`MultiDomainState`] and returning an
 //!    updated one. Always sequential, and always after every domain's
-//!    Phase-1 write has completed (INV-3).
+//!    Phase-1 write has completed (INV-3). Before each operator, the
+//!    variables it requires are computed on the current state of each side
+//!    of its interface and passed in a
+//!    [`CouplingContext`] ([DA-011](https://github.com/biface/oxiflow/issues/11)
+//!    amendment 1, [#231](https://github.com/biface/oxiflow/issues/231)): an
+//!    operator sees the values of the state the previous one returned. The
+//!    calculators are those of the shared chain.
 //! 3. **Guard against divergence** across all domains.
 
 use std::collections::HashMap;
 
-use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
 use crate::context::quantity::PhysicalQuantity;
 use crate::context::state::MultiDomainState;
 use crate::context::{ContextCalculator, ContextValue};
+use crate::coupling::{CouplingContext, CouplingOperator};
 use crate::solver::chain::build_calculator_chain;
 use crate::solver::config::{StepControl, TimeConfiguration};
-use crate::solver::methods::{check_finite, SteppableSolver};
+use crate::solver::methods::{
+    check_finite, context_for, enforce_boundary_conditions, SteppableSolver,
+};
 #[cfg(feature = "parallel")]
 use crate::solver::parallel::ParallelThreshold;
 use crate::solver::scenario::{Domain, DomainId, Scenario};
 
-/// Default Phase-1 dispatch threshold — a back-of-envelope estimate, not
-/// a measured crossover point like
-/// [`crate::operators::fd::default_parallel_threshold`] (49_999).
+/// Default Phase-1 dispatch threshold: `5_000` nodes of aggregate mesh
+/// volume (`Σ mesh.n_dof()` over the domains of the scenario).
 ///
-/// The two sites dispatch at a different grain, so the numbers are not
-/// comparable directly:
+/// The value is indicative. The crossover depends on the host, on the
+/// number of domains and on the cost of a node for the model and the
+/// solver, and no single aggregate value fits every case. Measure it on the
+/// target host with the calibration benchmark of
+/// [#141](https://github.com/biface/oxiflow/issues/141), then set it with
+/// [`MultiDomainOrchestrator::with_parallel_threshold`] or
+/// [`MultiDomainOrchestrator::set_parallel_threshold`]:
 ///
-/// - `fd.rs` splits `n` elements finely (`into_par_iter()` over a
-///   `Range`), each costing a few flops (~1 ns) -- amortizing Rayon's
-///   per-chunk overhead needs a very large `n`.
-/// - Phase 1 dispatches over *domains* (`.par_iter()`) -- typically a
-///   handful, rarely more -- where each task is an entire
-///   `solver.step()` call (calculator chain + boundary conditions +
-///   physics evaluation, possibly several stages for RK4/BDF2). Few,
-///   large tasks amortize Rayon's fixed join/dispatch overhead (order of
-///   1-few µs) at a much lower total operation count than fine-grained
-///   dispatch does.
+/// ```text
+/// cargo bench --bench oxiflow_parallel --all-features -- orchestrator/
+/// ```
 ///
-/// Rough estimate: a full step costs perhaps 10-50x a bare stencil
-/// evaluation per degree of freedom (~10-50 ns/dof instead of ~1 ns).
-/// With a healthy safety margin (~10x) over Rayon's fixed overhead, the
-/// aggregate mesh volume needs to reach on the order of 10-50 µs worth
-/// of work, i.e. roughly 1,000-5,000 dof. `5_000` is picked from that
-/// range -- **not measured**, unlike `fd.rs`'s 49_999. Replace it with a
-/// real value from
-/// [`calibrate_parallel_threshold`](crate::solver::parallel::calibrate_parallel_threshold)
-/// (representative closure: a full `solver.step()` call, not a
-/// placeholder) via [`MultiDomainOrchestrator::with_parallel_threshold`]
-/// or [`MultiDomainOrchestrator::set_parallel_threshold`] once a real
-/// workload profile is available.
+/// The benchmark times ten steps of K independent Langmuir columns
+/// (explicit Euler, Crank–Nicolson on the banded path), K independent lahar
+/// domains (explicit Euler) and the coupled lahar–lake scenario, with this
+/// threshold forced to `usize::MAX` and to `1`, and the dispatch inside the
+/// domains forced sequential, left at its defaults or forced parallel. On
+/// one host (Intel Core i5-1335U: two performance and eight efficiency
+/// cores, 12 Rayon threads), run from a terminal, the reference run for
+/// v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)) gives, with the dispatch inside the domains forced
+/// sequential:
+///
+/// - two domains lost up to about 2,000 nodes, by up to 1.12x for the
+///   Langmuir columns under explicit Euler and for the lahar, and gained
+///   from 8,000 (0.68x to 0.75x the sequential time); the coupled
+///   lahar–lake scenario gained from 702 nodes on (0.83x);
+/// - four and eight domains gained from the smallest volumes measured:
+///   0.69x to 0.85x for four domains at 1,000 to 2,000 nodes, 0.37x to
+///   0.46x for eight domains at 2,000 to 4,000;
+/// - costly domains gained most: eight Crank–Nicolson columns ran 2.3 to
+///   3.2 times faster.
+///
+/// With the dispatch inside the domains left at its defaults, the parallel
+/// orchestrator mostly gained more, down to 0.2x the sequential time. At
+/// eight domains, forcing the inner dispatch parallel mostly lost, by
+/// 1.06x to 1.9x against keeping it sequential: the domains already fill
+/// the pool.
+///
+/// The default, 5,000 nodes, stays clear of the losing two-domain cases
+/// and leaves the gains of four or more small domains unused. Measure from
+/// a terminal, on an otherwise idle host: the run conditions shift the
+/// figures. [`crate::solver::parallel`] explains how to read a crossover;
+/// the abaques of the reference run are on the wiki:
+/// [Dispatch abaques](https://github.com/biface/oxiflow/wiki/Dispatch-abaques).
+///
+/// Only explicit Euler and Crank–Nicolson are measured so far; the
+/// benchmark is meant to extend to RK4, BDF2 and backward Euler. DoPri45
+/// stays out while the orchestrator accepts fixed steps only.
 #[cfg(feature = "parallel")]
 pub(crate) fn default_parallel_threshold() -> usize {
     5_000
@@ -107,7 +138,7 @@ pub(crate) fn default_parallel_threshold() -> usize {
 #[derive(Debug)]
 pub struct OrchestratorConfig {
     /// Temporal parameters — t_end, step control, save frequency. Only
-    /// `StepControl::Fixed` is supported (DD-031 v1: synchronised `dt`).
+    /// `StepControl::Fixed` is supported ([DA-031](https://github.com/biface/oxiflow/issues/82) v1: synchronised `dt`).
     pub time: TimeConfiguration,
     /// Context variable calculators, shared across all domains — built
     /// once from `scenario.context_requirements()`, which already
@@ -169,7 +200,7 @@ impl MultiDomainSimulationResult {
 
 // ── MultiDomainOrchestrator ───────────────────────────────────────────────────────
 
-/// Drives multiple coupled [`Domain`](crate::solver::scenario::Domain)s,
+/// Drives multiple coupled [`Domain`]s,
 /// each with its own [`SteppableSolver`].
 ///
 /// See [module documentation](self) for the per-step order and the v1
@@ -182,7 +213,7 @@ pub struct MultiDomainOrchestrator {
     /// `tests/coupling_proto.rs` (v0.3.0): the caller picks one explicitly,
     /// `PhysicalModel` does not declare it itself.
     quantities: HashMap<DomainId, PhysicalQuantity>,
-    /// Phase-1 dispatch threshold (DD-048 consequence) — gates the
+    /// Phase-1 dispatch threshold ([DA-048](https://github.com/biface/oxiflow/issues/140) consequence) — gates the
     /// "advance every domain" pass between a sequential loop and a Rayon
     /// dispatch across domains. Measured against the *aggregate* mesh
     /// volume (sum of every domain's [`Mesh::n_dof`](crate::mesh::Mesh::n_dof)
@@ -191,12 +222,16 @@ pub struct MultiDomainOrchestrator {
     /// meshes or two trivial ones, and `n_dof()` already exists on every
     /// domain's mesh with no new API needed.
     ///
-    /// Known limitation, accepted deliberately (DD-048/P5 does not
-    /// require an exact cost measure, only a measured one): this
-    /// approximation does not weight for per-node cost differences
-    /// between solver types — an adaptive integrator costs more per node
-    /// than [`ForwardEulerSolver`](crate::solver::methods::ForwardEulerSolver),
-    /// and the aggregate `n_dof()` sum cannot see that difference.
+    /// Known limitation, measured
+    /// ([#141](https://github.com/biface/oxiflow/issues/141)): the aggregate
+    /// volume sees neither the number of domains nor the cost of a node. On
+    /// the same Langmuir columns, a Crank–Nicolson step on the banded path
+    /// cost 15 to 20 times an explicit Euler step, and at the same aggregate
+    /// volume two domains can lose where eight gain.
+    /// [DA-048](https://github.com/biface/oxiflow/issues/140)/P5 asks for a
+    /// measured threshold, not an exact cost model: see
+    /// `default_parallel_threshold` for the measurements and the calibration
+    /// benchmark.
     #[cfg(feature = "parallel")]
     parallel_threshold: ParallelThreshold,
 }
@@ -222,7 +257,7 @@ impl MultiDomainOrchestrator {
     /// # Panics
     ///
     /// Panics when `threshold == 0` — see
-    /// [`ParallelThreshold::set`](crate::solver::parallel::ParallelThreshold::set).
+    /// `ParallelThreshold::set`.
     #[cfg(feature = "parallel")]
     pub fn with_parallel_threshold(self, threshold: usize) -> Self {
         self.parallel_threshold.set(threshold);
@@ -235,15 +270,15 @@ impl MultiDomainOrchestrator {
     /// # Panics
     ///
     /// Panics when `threshold == 0` (see
-    /// [`ParallelThreshold::set`](crate::solver::parallel::ParallelThreshold::set)).
+    /// `ParallelThreshold::set`).
     #[cfg(feature = "parallel")]
     pub fn set_parallel_threshold(&self, threshold: usize) {
         self.parallel_threshold.set(threshold);
     }
 
     /// Returns the configured Phase-1 dispatch threshold, or
-    /// [`default_parallel_threshold`] (`5_000` — a rough estimate, not
-    /// measured; see its own docs) if none was set.
+    /// `default_parallel_threshold` (`5_000`, indicative: calibrate it on
+    /// the host, see its docs) if none was set.
     #[cfg(feature = "parallel")]
     pub fn parallel_threshold(&self) -> usize {
         self.parallel_threshold.get(default_parallel_threshold())
@@ -257,7 +292,14 @@ impl MultiDomainOrchestrator {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
+    /// ```rust
+    /// use oxiflow::context::PhysicalQuantity;
+    /// use oxiflow::solver::methods::{ForwardEulerSolver, RK4Solver};
+    /// use oxiflow::solver::orchestrator::MultiDomainOrchestrator;
+    /// use oxiflow::solver::DomainId;
+    ///
+    /// let lahar_id = DomainId::new("lahar");
+    /// let lake_id = DomainId::new("lake");
     /// let orchestrator = MultiDomainOrchestrator::new()
     ///     .with_domain(lahar_id, Box::new(ForwardEulerSolver), PhysicalQuantity::concentration())
     ///     .with_domain(lake_id, Box::new(RK4Solver), PhysicalQuantity::concentration());
@@ -281,7 +323,7 @@ impl MultiDomainOrchestrator {
     ///   registered solver/quantity, if `scenario` has no domains, or if
     ///   `dt`/`t_end` are invalid.
     /// - `OxiflowError::InvalidDomain` if `config.time.step_control` is not
-    ///   `StepControl::Fixed` (DD-031 v1 scope).
+    ///   `StepControl::Fixed` ([DA-031](https://github.com/biface/oxiflow/issues/82) v1 scope).
     pub fn run(
         &self,
         scenario: &Scenario,
@@ -308,7 +350,7 @@ impl MultiDomainOrchestrator {
             _ => {
                 return Err(OxiflowError::InvalidDomain(
                     "MultiDomainOrchestrator only supports StepControl::Fixed \
-                     (DD-031 v1: dt synchronised across all domains)"
+                     (DA-031 v1: dt synchronised across all domains)"
                         .into(),
                 ))
             }
@@ -342,7 +384,8 @@ impl MultiDomainOrchestrator {
         let mut multi_state = MultiDomainState::new();
         for domain in scenario.domains() {
             let quantity = self.quantity_for(&domain.id)?;
-            let initial = domain.model.initial_state(domain.mesh.as_ref());
+            let mut initial = domain.model.initial_state(domain.mesh.as_ref());
+            enforce_boundary_conditions(domain, &chain, &mut initial, t_start, dt)?;
             multi_state.set(domain.id.clone(), quantity, initial);
         }
 
@@ -367,7 +410,7 @@ impl MultiDomainOrchestrator {
 
             // 1. Advance every domain by one step, each with its own
             //    solver — two-phase Jacobi split (issue tracking this
-            //    consequence of DD-048/#140).
+            //    consequence of DA-048/#140).
             //
             // Domains only read the pre-step (t^n) `multi_state` and never
             // see another domain's post-step value within the same
@@ -386,8 +429,15 @@ impl MultiDomainOrchestrator {
             // `parallel_threshold()`. Phase 1b applies the collected
             // results to `multi_state`/`histories` sequentially -- cheap,
             // O(domain count), not the numerical work itself.
-            let results: Vec<DomainStepResult> =
-                self.compute_domain_steps(scenario, &multi_state, &histories, &chain, t, dt)?;
+            let results: Vec<DomainStepResult> = self.compute_domain_steps(
+                scenario,
+                &multi_state,
+                &histories,
+                &chain,
+                t,
+                dt,
+                t_next,
+            )?;
 
             for result in results {
                 if result.history_depth > 0 {
@@ -402,9 +452,10 @@ impl MultiDomainOrchestrator {
 
             // 2. Exchange state across every coupling interface, in
             //    declaration order -- each operator sees the result of the
-            //    previous one.
-            let ctx = ComputeContext::new(t_next, dt);
+            //    previous one, and so do the values of its context.
             for coupling in scenario.couplings() {
+                let ctx =
+                    self.coupling_context(coupling.as_ref(), &multi_state, &chain, t_next, dt)?;
                 multi_state = coupling.apply(&multi_state, &ctx, coupling.interface())?;
             }
 
@@ -438,14 +489,54 @@ impl MultiDomainOrchestrator {
         })
     }
 
-    /// Phase 1a: computes every domain's next state, independently.
+    /// Borrows the state of `domain_id` in `multi_state`, under its
+    /// registered quantity.
+    fn domain_state<'a>(
+        &self,
+        multi_state: &'a MultiDomainState,
+        domain_id: &DomainId,
+    ) -> Result<&'a ContextValue, OxiflowError> {
+        let quantity = self.quantity_for(domain_id)?;
+        multi_state.get(domain_id, &quantity).ok_or_else(|| {
+            OxiflowError::InvalidDomain(format!(
+                "domain '{domain_id}' has no state for its registered quantity"
+            ))
+        })
+    }
+
+    /// Builds the context of `coupling` at time `t`, step `dt`: on each side
+    /// of its interface, the variables it requires computed on that
+    /// domain's current state in `multi_state` ([DA-011](https://github.com/biface/oxiflow/issues/11) amendment 1,
+    /// [#231](https://github.com/biface/oxiflow/issues/231)).
+    fn coupling_context(
+        &self,
+        coupling: &dyn CouplingOperator,
+        multi_state: &MultiDomainState,
+        chain: &[&dyn ContextCalculator],
+        t: f64,
+        dt: f64,
+    ) -> Result<CouplingContext, OxiflowError> {
+        let requirements = coupling.required_variables();
+        let interface = coupling.interface();
+        let side = |domain_id: &DomainId| {
+            let state = self.domain_state(multi_state, domain_id)?;
+            context_for(requirements.clone(), chain, state, t, dt)
+        };
+        Ok(CouplingContext::from_sides(
+            side(interface.source())?,
+            side(interface.target())?,
+        ))
+    }
+
+    /// Phase 1a: computes every domain's next state, independently, and
+    /// applies its boundary conditions at `t_next` ([DD-070](https://github.com/biface/oxiflow/issues/200)).
     ///
     /// Reads only the pre-step `multi_state`/`histories` (both taken by
     /// shared reference) and writes nothing -- results are collected into
     /// a `Vec`, one domain-local slot each, for [`run`](Self::run)'s
     /// Phase 1b to apply sequentially. Dispatched through Rayon once the
     /// aggregate mesh volume (`Σ domain.mesh.n_dof()`) reaches
-    /// [`parallel_threshold`](Self::parallel_threshold); a plain
+    /// `parallel_threshold` (`parallel` feature); a plain
     /// sequential loop otherwise, and always without the `parallel`
     /// feature.
     ///
@@ -455,6 +546,11 @@ impl MultiDomainOrchestrator {
     /// iteration order) -- domains are independent within a step, so
     /// which one's error is reported first does not change whether the
     /// step as a whole fails.
+    ///
+    /// `dt` and `t_next` are both passed, rather than `t_next` recomputed as
+    /// `t + dt`: the step uses `dt` as before, and the boundary conditions
+    /// are applied at the very time the state is saved with.
+    #[allow(clippy::too_many_arguments)]
     fn compute_domain_steps(
         &self,
         scenario: &Scenario,
@@ -463,25 +559,21 @@ impl MultiDomainOrchestrator {
         chain: &[&dyn ContextCalculator],
         t: f64,
         dt: f64,
+        t_next: f64,
     ) -> Result<Vec<DomainStepResult>, OxiflowError> {
         let compute_one = |domain: &Domain| -> Result<DomainStepResult, OxiflowError> {
             let quantity = self.quantity_for(&domain.id)?;
             let solver = &self.solvers[&domain.id];
 
-            let mut state = multi_state
-                .get(&domain.id, &quantity)
-                .ok_or_else(|| {
-                    OxiflowError::InvalidDomain(format!(
-                        "domain '{}' has no state for its registered quantity",
-                        domain.id
-                    ))
-                })?
-                .clone();
+            let mut state = self.domain_state(multi_state, &domain.id)?.clone();
 
-            let next_state = {
+            let mut next_state = {
                 let history = &histories[&domain.id];
                 solver.step(domain, chain, &mut state, history, t, dt)?
             };
+            // Each domain's state satisfies its boundary conditions before
+            // the coupling exchange (DD-070, #200).
+            enforce_boundary_conditions(domain, chain, &mut next_state, t_next, dt)?;
 
             // `state` was mutated in-place by BC application inside
             // `step()` above -- carry *that* corrected u^n forward for
@@ -544,72 +636,12 @@ mod tests {
     use crate::context::variable::ContextVariable;
     use crate::coupling::{CouplingOperator, Interface};
     use crate::mesh::{Mesh, UniformGrid1D};
-    use crate::model::traits::{PhysicalModel, RequiresContext};
+    use crate::model::traits::RequiresContext;
+    use crate::model::{ExponentialDecay, ZeroDerivative};
     use crate::solver::methods::{ForwardEulerSolver, RK4Solver};
     use crate::solver::scenario::Domain;
-    use nalgebra::DVector;
 
     // ── Fixtures ──────────────────────────────────────────────────────────────
-
-    /// Exponential decay: du/dt = -lambda * u.
-    #[derive(Debug)]
-    struct DecayModel {
-        lambda: f64,
-    }
-
-    impl RequiresContext for DecayModel {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for DecayModel {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.map(|v| -self.lambda * v)))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-        }
-
-        fn name(&self) -> &str {
-            "decay"
-        }
-    }
-
-    /// Passive receiver: du/dt = 0.
-    #[derive(Debug)]
-    struct PassiveModel;
-
-    impl RequiresContext for PassiveModel {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![]
-        }
-    }
-
-    impl PhysicalModel for PassiveModel {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(DVector::zeros(u.len())))
-        }
-
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::zeros(mesh.n_dof()))
-        }
-
-        fn name(&self) -> &str {
-            "passive"
-        }
-    }
 
     /// Transfers a fixed fraction of the source domain's field to the
     /// target domain at every call -- counts invocations for assertions.
@@ -630,7 +662,7 @@ mod tests {
         fn apply(
             &self,
             states: &MultiDomainState,
-            _ctx: &ComputeContext,
+            _ctx: &CouplingContext,
             interface: &Interface,
         ) -> Result<MultiDomainState, OxiflowError> {
             self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -670,10 +702,14 @@ mod tests {
     fn make_scenario() -> (Scenario, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
         let source = Domain::new(
             source_id(),
-            Box::new(DecayModel { lambda: 0.5 }),
+            Box::new(ExponentialDecay { lambda: 0.5 }),
             make_mesh(3),
         );
-        let target = Domain::new(target_id(), Box::new(PassiveModel), make_mesh(3));
+        let target = Domain::new(
+            target_id(),
+            Box::new(ZeroDerivative { initial: 0.0 }),
+            make_mesh(3),
+        );
         let interface = Interface::new(source_id(), target_id());
         let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let coupling = Box::new(CountingMassTransfer {
@@ -784,7 +820,7 @@ mod tests {
         assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 5);
 
         // Cross-check via effect: target received non-zero mass, which
-        // only the coupling (never PassiveModel itself, zero derivative)
+        // only the coupling (never the passive model itself, zero derivative)
         // can produce.
         let final_state = result.states.last().unwrap();
         let target_field = final_state
@@ -793,6 +829,142 @@ mod tests {
             .as_scalar_field()
             .unwrap();
         assert!(target_field.iter().all(|v| *v > 0.0));
+    }
+
+    // ── Coupling context (DA-011 amendment 1, #231) ──────────────────────────────
+
+    /// Requires the gradient of the state and records, at each call, its
+    /// value at node 1 on the source side and on the target side; returns
+    /// the state unchanged.
+    struct SlopeProbe {
+        interface: Interface,
+        seen: std::sync::Arc<std::sync::Mutex<Vec<(f64, f64)>>>,
+    }
+
+    impl RequiresContext for SlopeProbe {
+        fn required_variables(&self) -> Vec<ContextVariable> {
+            vec![ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None,
+            }]
+        }
+    }
+
+    impl CouplingOperator for SlopeProbe {
+        fn apply(
+            &self,
+            states: &MultiDomainState,
+            ctx: &CouplingContext,
+            _interface: &Interface,
+        ) -> Result<MultiDomainState, OxiflowError> {
+            let source = ctx.source().gradient(0)?[1];
+            let target = ctx.target().gradient(0)?[1];
+            self.seen.lock().unwrap().push((source, target));
+            Ok(states.clone())
+        }
+
+        fn interface(&self) -> &Interface {
+            &self.interface
+        }
+    }
+
+    #[test]
+    fn coupling_reads_its_requirements_on_each_side_after_the_previous_coupling() {
+        use crate::context::calculators::{FDGradientCalculator, FDScheme};
+        use crate::model::PrescribedInitialState;
+        use std::sync::{Arc, Mutex};
+
+        // Three nodes on [0, 1]: dx = 0.5. Both domains keep their state
+        // (zero derivative); the source holds u = 2x, slope 2, the target
+        // u = 6x, slope 6.
+        let linear = |slope: f64| {
+            let state = ContextValue::ScalarField(nalgebra::DVector::from_vec(vec![
+                0.0,
+                0.5 * slope,
+                slope,
+            ]));
+            Box::new(PrescribedInitialState::new(
+                Box::new(ZeroDerivative { initial: 0.0 }),
+                state,
+            ))
+        };
+        let interface = Interface::new(source_id(), target_id());
+        let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        // The transfer runs first and writes 0.1 * source into the target:
+        // the probe must see the target slope it returns, 0.2, not 6.
+        let scenario = Scenario::multi(vec![
+            Domain::new(source_id(), linear(2.0), make_mesh(3)),
+            Domain::new(target_id(), linear(6.0), make_mesh(3)),
+        ])
+        .unwrap()
+        .with_coupling(Box::new(CountingMassTransfer {
+            alpha: 0.1,
+            interface: interface.clone(),
+            calls,
+        }))
+        .with_coupling(Box::new(SlopeProbe {
+            interface,
+            seen: seen.clone(),
+        }));
+
+        let mesh: Arc<dyn Mesh> = Arc::new(UniformGrid1D::new(3, 0.0, 1.0).unwrap());
+        let config = make_config(0.2, 0.1).with_calculator(Box::new(FDGradientCalculator::new(
+            mesh,
+            0,
+            None,
+            FDScheme::Central,
+        )));
+        let orchestrator = MultiDomainOrchestrator::new()
+            .with_domain(
+                source_id(),
+                Box::new(ForwardEulerSolver),
+                PhysicalQuantity::concentration(),
+            )
+            .with_domain(
+                target_id(),
+                Box::new(ForwardEulerSolver),
+                PhysicalQuantity::concentration(),
+            );
+        orchestrator.run(&scenario, &config).unwrap();
+
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.len(), 2);
+        for &(source, target) in seen.iter() {
+            assert!((source - 2.0).abs() < 1e-12, "source slope {source}");
+            assert!((target - 0.2).abs() < 1e-12, "target slope {target}");
+        }
+    }
+
+    #[test]
+    fn coupling_context_carries_the_time_of_the_exchange() {
+        let (scenario, _calls) = make_scenario();
+        let orchestrator = MultiDomainOrchestrator::new()
+            .with_domain(
+                source_id(),
+                Box::new(ForwardEulerSolver),
+                PhysicalQuantity::concentration(),
+            )
+            .with_domain(
+                target_id(),
+                Box::new(ForwardEulerSolver),
+                PhysicalQuantity::concentration(),
+            );
+        let mut multi_state = MultiDomainState::new();
+        for id in [source_id(), target_id()] {
+            multi_state.set(
+                id,
+                PhysicalQuantity::concentration(),
+                ContextValue::ScalarField(nalgebra::DVector::zeros(3)),
+            );
+        }
+        let coupling = &scenario.couplings()[0];
+        let ctx = orchestrator
+            .coupling_context(coupling.as_ref(), &multi_state, &[], 0.3, 0.1)
+            .unwrap();
+        assert_eq!(ctx.time(), 0.3);
+        assert_eq!(ctx.time_step(), 0.1);
+        assert_eq!(ctx.target().time(), 0.3);
     }
 
     // ── Mixed integrators per domain ─────────────────────────────────────────────

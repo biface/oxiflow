@@ -1,6 +1,6 @@
 //! # Module `solver::chain`
 //!
-//! Calculator chain — validation and ordered execution (issues #33, #36, DD-009).
+//! Calculator chain — validation and ordered execution (issues [#33](https://github.com/biface/oxiflow/issues/33), [#36](https://github.com/biface/oxiflow/issues/36), [DD-009](https://github.com/biface/oxiflow/issues/9)).
 //!
 //! ## Responsibility
 //!
@@ -8,16 +8,21 @@
 //! scenario has a corresponding calculator in `SolverConfiguration`, then returns
 //! the calculators in a correct execution order.
 //!
-//! ## Ordering strategy (DD-009)
+//! ## Ordering strategy ([DD-009](https://github.com/biface/oxiflow/issues/9))
 //!
 //! A hybrid two-path algorithm is selected at chain-build time:
 //!
 //! **Priority path (fast path)** — no calculator declares a non-empty `depends_on()`.
 //! Calculators are sorted by ascending `priority()` (stable sort, O(n log n)).
 //! A total order by priority cannot contain a cycle. Priority ranges:
-//! - **0–49**: system variables (`Time`, `TimeStep`) — injected directly by the solver
-//! - **50–99**: external data providers
-//! - **100+**: derived quantities (default)
+//! - **0–49**: values that read nothing but the state or the time: the
+//!   system variables (`Time`, `TimeStep`, injected directly by the solver,
+//!   or provided by `TimeCalculator`/`TimeStepCalculator` at 0) and the
+//!   finite-difference derivatives of the state (`FDGradientCalculator`,
+//!   `FDLaplacianCalculator`, at 10)
+//! - **50–99**: external data providers (`ExternalTabulated`,
+//!   `CoefficientField`)
+//! - **100+**: derived quantities (default; `TrapezoidalIntegral`)
 //!
 //! **Topological path (Kahn)** — at least one calculator declares a non-empty
 //! `depends_on()`. A directed acyclic graph is built from the declared dependencies:
@@ -57,7 +62,7 @@ const BUILTIN_VARIABLES: &[ContextVariable] = &[ContextVariable::Time, ContextVa
 /// A variable covered by multiple calculators is accepted — the last one
 /// to execute wins (consistent with `ComputeContext::insert` overwrite).
 ///
-/// # Ordering (DD-009)
+/// # Ordering ([DD-009](https://github.com/biface/oxiflow/issues/9))
 ///
 /// If no calculator declares a non-empty `depends_on()`, calculators are sorted
 /// by ascending `priority()` (stable sort — registration order preserved within

@@ -7,47 +7,157 @@
   code. Features that conflict with the design invariants (see [DEVELOPMENT.md](DEVELOPMENT.md))
   will not be accepted.
 - **Documentation and examples** — always welcome, no prior discussion needed.
-- **Benchmarks and tests** — always welcome, especially for INV components
-  (`mesh`, `coupling`, `solver_spatial`).
+- **Benchmarks and tests** — always welcome, especially for the modules under the FEM
+  invariants (`mesh`, `operators`, `coupling`).
 - **Niche frameworks** — building a domain-specific `oxiflow-*` crate is explicitly
   encouraged. See the dedicated section below.
 
 ## Workflow
 
+Development is organised in sprints, one per milestone. Every pull request
+targets the `update/x.y.z` branch of an open sprint. Sprints follow the
+milestones: when the milestone of an issue has no open sprint yet, the work
+waits for it.
+
+### Branches and versions
+
 ```
-1. Fork the repository on GitHub
-2. Create a branch from develop — not from main
-       git checkout develop
-       git pull upstream develop
-       git checkout -b fix/my-bug        # or feat/, docs/, bench/, chore/
-3. Make your changes
-4. Open a pull request against develop
+update/x.y.z  --PR-->  staging/x.y.z  --PR-->  main  --tag vx.y.z-->  crates.io
 ```
 
-`main` receives merges from `develop` at each release only.
-Direct PRs against `main` will be redirected to `develop`.
+| Branch | Role | Version in `Cargo.toml` |
+|---|---|---|
+| `update/x.y.z` | development branch of the sprint | `x.y.z-rc.N` |
+| `staging/x.y.z` | copy of `main` that receives the sprint, to check that nothing breaks | `x.y.z` |
+| `main` | stable releases only | a release version, no pre-release suffix |
+
+1. Changes are made on `update/x.y.z`, at version `x.y.z-rc.N`.
+2. A pull request from `update/x.y.z` to `staging/x.y.z` runs the full test
+   suites. Once it is merged, the version is set to `x.y.z` and the code is
+   frozen: only `README.*`, `CHANGELOG.md` and similar files may still change.
+3. A pull request from `staging/x.y.z` to `main` adds a packaging rehearsal.
+4. The tag `vx.y.z`, on `main`, publishes the crate to crates.io. The sprint
+   branches are then deleted.
+
+`scripts/check-version.sh` checks the version column, in CI and in the
+pre-push hook. A pull request to `staging/x.y.z` must carry an `x.y.z-rc.N`
+version; one from `staging/x.y.z` to `main`, exactly `x.y.z`.
+
+### Contributing from a fork
+
+```
+1. Fork the repository on GitHub
+2. Branch from the update branch of the sprint
+       git fetch upstream
+       git checkout -b fix/my-bug upstream/update/x.y.z
+3. Enable the git hooks (see below) and make your changes
+4. Open a pull request against update/x.y.z
+```
+
+Branch names are a recommendation: the prefix is the commit type of the change
+(`feat/`, `fix/`, `docs/`, `bench/`, `chore/`…), and a `feature/` branch is
+just as welcome. Contributor branches are consolidated into `update/x.y.z`
+before the sprint goes to `staging/x.y.z`. Contributor pull requests against
+`staging/*` or `main` will be redirected.
+
+## Local git hooks
+
+Versioned hooks live in `.githooks/`. Enable them once per clone:
+
+```
+git config core.hooksPath .githooks
+```
+
+| Hook | What it runs |
+|---|---|
+| `pre-commit` | refuses staged paths matching `oxiflow.privatePath` (below), then `cargo fmt --check` |
+| `commit-msg` | checks the Conventional Commits header (see [Commit messages](#commit-messages)) |
+| `pre-push` | for each pushed branch, the `Cargo.toml` version against the branch; for a tag `vX.Y.Z`, the tag against the version and the tagged commit against `<remote>/main`; then, when a branch is pushed, `cargo clippy --locked --all-features --all-targets -- -D warnings`, `cargo test --locked --lib` and `cargo test --locked --doc` |
+
+The pre-push hook is the local counterpart of the checks CI runs on every push.
+Its `--all-features` build needs the HDF5 development files (`libhdf5-dev` on
+Debian and Ubuntu). Any hook can be bypassed with `--no-verify`
+(`git commit --no-verify`, `git push --no-verify`); CI remains the authority.
+
+**Private paths.** Working files that must never reach the repository can be
+declared locally, one pattern per entry:
+
+```
+git config --add oxiflow.privatePath '*PROJECT_STATUS*'
+```
+
+A pattern is an `sh` `case` pattern, matched against the whole path from the
+root of the repository; unlike shell globbing, `*` also matches `/`. Deleting
+such a file is allowed, so that one committed by mistake can be removed. With
+no pattern configured, nothing is checked.
+
+**Limits.**
+- `cargo fmt --check` and the cargo commands of the pre-push hook work on the
+  working tree, not on the index nor on the commits being pushed. The pre-push
+  hook prints a note when tracked files have uncommitted changes.
+- A tag is checked against `<remote>/main` as known locally: that reference
+  moves on `git fetch` and on a push to `main`. Run `git fetch` first when
+  `main` was merged on GitHub, and push tags through a named remote.
+- IDEs run the hooks too; in RustRover, keep *Run Git hooks* enabled in the
+  commit and push dialogs.
+
+## What CI runs, and when
+
+| Event | Workflows and checks |
+|---|---|
+| Push to any branch | `Format`, `Version check`, `Clippy` (default features, each feature alone, all features), `Unit and doc tests`, `Security audit` |
+| Pull request to `staging/**` or `main` | the above, plus `Test` (one job per feature set), `MSRV`, `SemVer checks`, `Documentation`, `Reference examples`, `Coverage` |
+| Pull request to `main` | in addition, `Publish dry run` |
+| Push to `main` | `Coverage` (Codecov reference), Release Drafter; the documentation is deployed to GitHub Pages once CI succeeds |
+| Tag `vX.Y.Z` | `publish.yml`: `Verify release`, then `Publish to crates.io` |
+| Every Monday, 06:00 UTC | `Security audit` |
+
+Pull requests to `update/x.y.z` run none of these checks in this repository:
+the push checks run in your fork if GitHub Actions is enabled there, and the full suites
+run when the sprint goes to `staging/x.y.z`.
 
 ## Technical requirements
 
 Every pull request must satisfy all of the following before merging.
 
+These are the checks CI runs on a pull request to `staging/x.y.z`; running them
+locally before asking for review saves a round trip. `--all-features` needs the HDF5
+development files (`libhdf5-dev` on Debian and Ubuntu). The one test that needs a GPU
+adapter is ignored; run it with `cargo test --features gpu -- --ignored` on a machine
+that has one.
+
 **Tests**
 - `cargo test --all-features` passes.
 - New public functions have at least one test.
 - `cargo test --test fem_invariants` passes.
+- `scripts/run-examples.sh` runs every example in release, the reference
+  examples included, and collects the figures they draw; it exits with an
+  error if one of them fails.
 
 **Code quality**
-- `cargo fmt --all` applied, no uncommitted formatting changes.
-- `cargo clippy --all-targets --all-features -- -D warnings` clean.
+- `cargo fmt --all -- --check` reports nothing.
+- `cargo clippy --all-targets --all-features -- -D warnings` is clean; CI also runs
+  clippy with each feature alone (`sparse`, `hdf5`, `gpu`, `parallel`, `serde`, `vtk`)
+  and with default features.
+- `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features` builds without warnings.
 
-**Coverage**
-- Overall coverage ≥ 85% (tracked on Codecov).
-- INV components (`mesh`, `coupling`, `solver_spatial`) ≥ 90%.
+**Coverage** (Codecov, `.codecov.yml`)
+- Overall coverage ≥ 85%, with a 2% tolerance between commits.
+- New lines (patch coverage) ≥ 80%.
+- `context`, `model` and `mesh` ≥ 90%, and the modules under the FEM invariants
+  (`mesh`, `operators`, `coupling`) ≥ 90% taken together.
 - If your change drops coverage, add the missing tests before requesting review.
+
+**API stability** ([DQ-016](https://github.com/biface/oxiflow/issues/16))
+- `cargo semver-checks` runs on every pull request to `staging/x.y.z` and `main`.
+  While the crate is in 0.x, a minor version may break the public API, but the break
+  must be declared: `!` in the commit header and a `**Breaking:**` entry in the
+  CHANGELOG.
 
 **CHANGELOG**
 - Add an entry under `[Unreleased]` in `CHANGELOG.md`.
-- Use `### Added`, `### Changed`, `### Fixed`, or `### Breaking`.
+- Use `### Added`, `### Changed`, `### Fixed` or `### Security`; a breaking change is
+  an entry starting with `**Breaking:**`, usually under `### Changed`.
 - One line per logical change.
 
 **Documentation (local, contributor-facing)**
@@ -64,32 +174,38 @@ Every pull request must satisfy all of the following before merging.
 
 ## Design invariants
 
-Any contribution touching `src/mesh/`, `src/coupling/`, `src/solver/spatial/`, or any
+Any contribution touching `src/mesh/`, `src/operators/`, `src/coupling/`, or any
 public trait must preserve the four design invariants:
 
 - **INV-1** — `Mesh` remains abstract; no public API exposes `dx`, `nx` or raw indices.
 - **INV-2** — `DiscreteOperator` remains abstract; integrators stay generic over the scheme.
 - **INV-3** — Inter-domain coupling goes through `CouplingOperator` only, never into a solver.
-- **INV-4** — All public traits remain object-safe; no breaking change for external crates.
+- **INV-4** — All public traits remain object-safe and implementable from an external
+  crate, without access to the engine's internals.
 
-INV-4 is critical from v0.30.0 onwards: niche frameworks published by third parties on
-crates.io depend on the engine's public API being stable and object-safe. Violations block
-merging regardless of test results.
+INV-1 to INV-3 are active (since v0.1.0, v0.5.0 and v0.3.0); `tests/fem_invariants.rs`
+checks INV-1 and INV-3 from outside the crate, the way a downstream crate would. INV-4
+becomes binding at v0.30.0 [J30], with the plugin architecture of
+[DA-017](https://github.com/biface/oxiflow/issues/17): niche frameworks published by third
+parties on crates.io depend on the engine's public traits staying object-safe. Until then,
+a change that makes a public trait no longer object-safe is a breaking change, declared as
+such.
 
 ## Building a niche framework
 
 If you are developing a domain-specific framework (`oxiflow-chrom`, `oxiflow-geo`,
 or any other domain), here is the recommended approach:
 
-**Before starting**, open a GitHub Discussion describing the domain, the models you plan
-to implement, and the target audience. This avoids overlap with ongoing work and allows
-the framework to be listed in the official ecosystem.
+**Before starting**, open a [GitHub
+Discussion](https://github.com/biface/oxiflow/discussions) describing the domain, the
+models you plan to implement, and the target audience. This avoids overlap with ongoing
+work and allows the framework to be listed in the official ecosystem.
 
 **Structure of a niche framework crate:**
 
 ```
 oxiflow-yourdom/
-├── Cargo.toml          # depends on oxiflow = "2", separate versioning
+├── Cargo.toml          # depends on oxiflow = "0.10", separate versioning
 ├── NOTICE              # required by Apache 2.0 — must mention oxiflow's copyright
 ├── LICENSE             # your own Apache 2.0 (or compatible) license
 ├── src/
@@ -97,15 +213,21 @@ oxiflow-yourdom/
 │   ├── models/         # PhysicalModel implementations
 │   ├── boundary/       # BoundaryCondition implementations
 │   ├── calculators/    # ContextCalculator implementations
-│   └── config.rs       # TOML deserialization (optional, for CLI integration)
+│   └── config.rs       # TOML configuration (optional, for the CLI)
 ├── examples/
 └── tests/
 ```
 
-**Registration pattern** — implement the plugin registration function so that
-your framework can integrate with the `oxiflow` CLI (v3.0):
+While oxiflow is in 0.x, each minor version may break the public API
+([DQ-016](https://github.com/biface/oxiflow/issues/16)): depend on one minor version
+(`"0.10"` allows 0.10.x only) and move to the next one deliberately.
 
-```rust
+**Registration pattern (planned)** — the `oxiflow` CLI and its plugin registry come at
+v0.30.0 [J30] ([DA-017](https://github.com/biface/oxiflow/issues/17),
+[DT-018](https://github.com/biface/oxiflow/issues/18)); `PluginRegistry` does not exist in
+the crate yet. The intended registration function looks like this:
+
+```rust,ignore
 // In oxiflow-yourdom/src/lib.rs
 pub fn register(registry: &mut oxiflow::PluginRegistry) {
     registry.register_model("your-model-name", YourModelFactory);
@@ -120,18 +242,21 @@ but makes discovery easier and signals compatibility with the engine.
 `cargo-llvm-cov` + Codecov setup as the engine if you want a coverage badge.
 
 **Once published**, open a PR against the engine repository to add your crate to the
-ecosystem list in `DEVELOPMENT.md`. This is the only contribution to the engine repository
-required for a third-party framework.
+ecosystem list in `DEVELOPMENT.md` (§15, Known Ecosystem Frameworks). This is the only
+contribution to the engine repository required for a third-party framework.
 
 ## Pull request checklist
 
 - [ ] `cargo test --all-features` passes
 - [ ] `cargo test --test fem_invariants` passes
-- [ ] `cargo fmt --all` applied
+- [ ] `cargo fmt --all -- --check` reports nothing
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings` clean
-- [ ] Codecov ≥ 85% overall and ≥ 90% on INV components
+- [ ] `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features` clean
+- [ ] Coverage: 85% overall, 80% on new lines, 90% on `context`, `model`, `mesh` and
+      the FEM-invariant modules
+- [ ] Breaking change, if any, declared (`!` in the commit header, `**Breaking:**` entry)
 - [ ] `CHANGELOG.md` updated under `[Unreleased]`
-- [ ] PR targets `develop`, not `main`
+- [ ] PR targets the `update/x.y.z` branch of the open sprint
 
 ## Commit messages
 
@@ -141,11 +266,19 @@ type(scope): short description in imperative form
 Optional body explaining the why, not the what.
 ```
 
-Types: `fix`, `feat`, `docs`, `bench`, `test`, `chore`, `refactor`.
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`,
+`ci`, `chore`, `revert`, `bench`.
+
+The scope is optional (lowercase letters, digits, `.`, `_`, `/`, `-`). A `!`
+before the colon marks a breaking change, as in
+`fix(mesh)!: return OxiflowError from UniformGrid1D::new`. Headers generated by
+git (`Merge …`, `Revert "…"`, `fixup! …`, `squash! …`, `amend! …`) are
+accepted. The `commit-msg` hook checks the header.
 
 ## Questions
 
-Open an issue with label `question` or start a GitHub Discussion.
+Start a [GitHub Discussion](https://github.com/biface/oxiflow/discussions) for usage
+questions and informal proposals; open an issue for a bug or a feature request.
 
 ## License
 
