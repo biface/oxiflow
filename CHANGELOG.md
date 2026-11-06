@@ -9,6 +9,10 @@ oxiflow adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.10.0] - 2026-11-06
+
 ### Added
 
 - `PhysicalModel::max_wave_speed` returns the largest advective wave speed
@@ -977,7 +981,12 @@ config-driven integrator selection DTO (`IntegratorSpec`).
 
 ---
 
-[Unreleased]: https://github.com/biface/oxiflow/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/biface/oxiflow/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/biface/oxiflow/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/biface/oxiflow/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/biface/oxiflow/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/biface/oxiflow/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/biface/oxiflow/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/biface/oxiflow/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/biface/oxiflow/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/biface/oxiflow/compare/v0.2.0...v0.3.0
