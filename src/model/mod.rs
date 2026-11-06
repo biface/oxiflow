@@ -9,9 +9,283 @@
 
 pub mod composite;
 pub mod discretized;
+pub mod initial_condition;
+pub mod spec;
 pub mod traits;
 
 pub use composite::CompositeModel;
 pub use discretized::DiscretizedModel;
+pub use initial_condition::PrescribedInitialState;
+pub use spec::{InitialStateSpec, ModelSpec};
 pub use traits::PhysicalModel;
 pub use traits::RequiresContext;
+
+// ── Test models ───────────────────────────────────────────────────────────────
+//
+// Scalar models shared by the unit tests of the solvers, each with no
+// context requirement. Defined once here rather than in every test module.
+
+#[cfg(test)]
+use crate::context::{
+    compute::ComputeContext, error::OxiflowError, value::ContextValue, variable::ContextVariable,
+};
+#[cfg(test)]
+use crate::mesh::Mesh;
+#[cfg(test)]
+use nalgebra::DVector;
+
+/// `du/dt = -lambda * u`, from `u = 1` at every node. Exact solution
+/// `u(t) = exp(-lambda * t)`.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct ExponentialDecay {
+    pub(crate) lambda: f64,
+}
+
+#[cfg(test)]
+impl RequiresContext for ExponentialDecay {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl PhysicalModel for ExponentialDecay {
+    fn compute_physics(
+        &self,
+        state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let u = state.as_scalar_field()?;
+        Ok(ContextValue::ScalarField(u.map(|v| -self.lambda * v)))
+    }
+
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+    }
+
+    fn name(&self) -> &str {
+        "exponential_decay"
+    }
+}
+
+/// A model that declares every kind of context need — two required
+/// variables, an optional one, a dependency and a non-default priority —
+/// plus a description; `du/dt = u`, from `u = 0` at every node. For the
+/// tests of the traits' defaults and of the wrappers that delegate them.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct FullModel;
+
+#[cfg(test)]
+impl RequiresContext for FullModel {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![
+            ContextVariable::Time,
+            ContextVariable::SpatialGradient {
+                dimension: 0,
+                component: None,
+            },
+        ]
+    }
+
+    fn optional_variables(&self) -> Vec<ContextVariable> {
+        vec![ContextVariable::External {
+            name: "T_amb".into(),
+        }]
+    }
+
+    fn depends_on(&self) -> Vec<ContextVariable> {
+        vec![ContextVariable::Time]
+    }
+
+    fn priority(&self) -> u32 {
+        200
+    }
+}
+
+#[cfg(test)]
+impl PhysicalModel for FullModel {
+    fn compute_physics(
+        &self,
+        state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let u = state.as_scalar_field()?;
+        Ok(ContextValue::ScalarField(u.clone()))
+    }
+
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 0.0))
+    }
+
+    fn name(&self) -> &str {
+        "full_model"
+    }
+
+    fn description(&self) -> Option<&str> {
+        Some("test model")
+    }
+}
+
+/// `du/dt = 0`: the field keeps its initial value, `initial` at every node.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct ZeroDerivative {
+    pub(crate) initial: f64,
+}
+
+#[cfg(test)]
+impl RequiresContext for ZeroDerivative {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl PhysicalModel for ZeroDerivative {
+    fn compute_physics(
+        &self,
+        state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let u = state.as_scalar_field()?;
+        Ok(ContextValue::ScalarField(DVector::zeros(u.len())))
+    }
+
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), self.initial))
+    }
+
+    fn name(&self) -> &str {
+        "zero_derivative"
+    }
+}
+
+/// `du/dt = -u^3`, from `u = 1` at every node: nonlinear, for the
+/// iterated Newton tests of the implicit solvers.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct CubicDecay;
+
+#[cfg(test)]
+impl RequiresContext for CubicDecay {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl PhysicalModel for CubicDecay {
+    fn compute_physics(
+        &self,
+        state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let u = state.as_scalar_field()?;
+        Ok(ContextValue::ScalarField(u.map(|v| -v * v * v)))
+    }
+
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+    }
+
+    fn name(&self) -> &str {
+        "cubic_decay"
+    }
+}
+
+/// `du_i/dt = D·(u[i-1] − 2u[i] + u[i+1])`, zero outside the domain, from a
+/// unit spike at the middle node: a genuinely local, bandwidth-1 coupling
+/// between neighbours, for the tests of the finite-difference Jacobians
+/// (boundary conditions × the perturbed Jacobian) and of the banded path.
+/// Not a real `BoundaryCondition`.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct TridiagonalDiffusion {
+    pub(crate) diffusion: f64,
+}
+
+#[cfg(test)]
+impl RequiresContext for TridiagonalDiffusion {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl PhysicalModel for TridiagonalDiffusion {
+    fn compute_physics(
+        &self,
+        state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let u = state.as_scalar_field()?;
+        let n = u.len();
+        let d = self.diffusion;
+        let out = DVector::from_fn(n, |i, _| {
+            let left = if i > 0 { u[i - 1] } else { 0.0 };
+            let right = if i + 1 < n { u[i + 1] } else { 0.0 };
+            d * (left - 2.0 * u[i] + right)
+        });
+        Ok(ContextValue::ScalarField(out))
+    }
+
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        let n = mesh.n_dof();
+        ContextValue::ScalarField(DVector::from_fn(
+            n,
+            |i, _| if i == n / 2 { 1.0 } else { 0.0 },
+        ))
+    }
+
+    fn name(&self) -> &str {
+        "tridiagonal_diffusion"
+    }
+}
+
+/// `du/dt = 0` from `u = 1` at every node, declaring an advective wave
+/// speed `speed` without transporting anything: exercises the forwarding
+/// of [`PhysicalModel::max_wave_speed`] and the advective step limit of
+/// the explicit integrators on a field that does not move
+/// ([DA-073](https://github.com/biface/oxiflow/issues/229)).
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct DeclaredWaveSpeed {
+    pub(crate) speed: f64,
+}
+
+#[cfg(test)]
+impl RequiresContext for DeclaredWaveSpeed {
+    fn required_variables(&self) -> Vec<ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl PhysicalModel for DeclaredWaveSpeed {
+    fn compute_physics(
+        &self,
+        state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<ContextValue, OxiflowError> {
+        let u = state.as_scalar_field()?;
+        Ok(ContextValue::ScalarField(DVector::zeros(u.len())))
+    }
+
+    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+    }
+
+    fn name(&self) -> &str {
+        "declared_wave_speed"
+    }
+
+    fn max_wave_speed(
+        &self,
+        _state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<Option<f64>, OxiflowError> {
+        Ok(Some(self.speed))
+    }
+}

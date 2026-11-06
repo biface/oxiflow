@@ -1,6 +1,6 @@
 //! # Module `context::error`
 //!
-//! Main error type of the oxiflow engine (DD-004, issue #28).
+//! Main error type of the oxiflow engine ([DD-004](https://github.com/biface/oxiflow/issues/4), issue [#28](https://github.com/biface/oxiflow/issues/28)).
 //!
 //! `OxiflowError` is a typed enum built with `thiserror` covering all engine
 //! failure cases. Every public function returns `Result<_, OxiflowError>` —
@@ -27,7 +27,7 @@ use crate::context::variable::ContextVariable;
 /// The `ComputationFailed` variant holds a `Box<dyn std::error::Error + Send + Sync>`
 /// (a trait object), which cannot be serialised directly. Error context for
 /// post-mortem analysis is captured as a `String` in `SimulationSnapshot`
-/// (DD-025 Option B, v0.6.0).
+/// ([DT-025](https://github.com/biface/oxiflow/issues/66) Option B, v0.6.0).
 ///
 /// # Examples
 ///
@@ -103,7 +103,7 @@ pub enum OxiflowError {
 
     /// A `SimulationSnapshot` read/write operation failed — file I/O or
     /// (de)serialisation (JSON or bincode). See
-    /// [`crate::solver::snapshot`] (DD-025 Option B / DD-029, issue #71).
+    /// [`crate::solver::snapshot`] ([DT-025](https://github.com/biface/oxiflow/issues/66) Option B / [DD-029](https://github.com/biface/oxiflow/issues/77), issue [#71](https://github.com/biface/oxiflow/issues/71)).
     #[error("snapshot persistence error: {0}")]
     Persistence(String),
 
@@ -113,9 +113,49 @@ pub enum OxiflowError {
     /// Distinct from [`SolverDivergence`]: this is a failure of the
     /// *nonlinear correction* to converge, not a non-finite field value —
     /// though both are routed through [`crate::solver::Solver::on_divergence`]
-    /// before being returned (DD-044, issue #109).
+    /// before being returned ([DD-044](https://github.com/biface/oxiflow/issues/109)).
+    ///
+    /// # Settings to adjust
+    ///
+    /// The three implicit solvers ([`BackwardEulerSolver`],
+    /// [`CrankNicolsonSolver`], [`BDF2Solver`]) start from one Newton
+    /// correction with the Jacobian frozen at the start of the step
+    /// ([`JacobianStrategy::ModifiedFrozen`]), accepted when the Euclidean
+    /// norm of the residual over all unknowns falls below
+    /// `tol_abs + tol_rel·‖u‖`, with `tol_abs = 1e-5` and `tol_rel = 1e-6`
+    /// ([`NewtonConvergence::ResidualOnly`]). These defaults are exact on a
+    /// model affine in `u` and are meant to be adjusted for any other case,
+    /// on each solver or through the fields of the same names in
+    /// `IntegratorSpec` (`sparse` feature):
+    ///
+    /// - the budget, `with_max_newton_iterations` (`max_iterations`), the
+    ///   first setting to raise;
+    /// - the Jacobian strategy, `with_jacobian_strategy`
+    ///   (`jacobian_strategy`): [`JacobianStrategy::FullNewton`] reassembles
+    ///   the Jacobian at every iteration, for a strongly nonlinear model;
+    /// - the criterion and its tolerances, `with_newton_convergence`
+    ///   (`newton_convergence`).
+    ///
+    /// Two typical cases need more than the defaults:
+    ///
+    /// - a model nonlinear in `u`: one frozen-Jacobian correction is then a
+    ///   first-order approximation of the step, and the loop reports it
+    ///   instead of returning it;
+    /// - a fine grid, typically on the banded path of the `sparse` feature:
+    ///   the residual norm is taken over every unknown while `tol_abs` stays
+    ///   fixed, so a correction accepted on a coarse grid can fail on a fine
+    ///   one. On the multi-compound Langmuir benchmark, for a tolerance of
+    ///   about 1e-5, one Backward Euler step passes at 1,000 nodes but leaves
+    ///   a residual of 1.02e-5 at 10,000 nodes and 7.14e-5 at 50,000; two
+    ///   iterations converge in both cases.
     ///
     /// [`SolverDivergence`]: OxiflowError::SolverDivergence
+    /// [`BackwardEulerSolver`]: crate::solver::methods::backward_euler::BackwardEulerSolver
+    /// [`CrankNicolsonSolver`]: crate::solver::methods::crank_nicolson::CrankNicolsonSolver
+    /// [`BDF2Solver`]: crate::solver::methods::bdf2::BDF2Solver
+    /// [`JacobianStrategy::ModifiedFrozen`]: crate::solver::methods::newton::JacobianStrategy::ModifiedFrozen
+    /// [`JacobianStrategy::FullNewton`]: crate::solver::methods::newton::JacobianStrategy::FullNewton
+    /// [`NewtonConvergence::ResidualOnly`]: crate::solver::methods::newton::NewtonConvergence::ResidualOnly
     #[error("Newton iteration did not converge after {iterations} iterations (residual = {residual:.4e})")]
     NewtonNotConverged {
         /// Number of iterations actually performed (equals the configured
@@ -126,10 +166,10 @@ pub enum OxiflowError {
         residual: f64,
     },
 
-    /// No compatible GPU adapter was found (DD-045, `gpu` feature).
+    /// No compatible GPU adapter was found ([DT-045](https://github.com/biface/oxiflow/issues/128), `gpu` feature).
     ///
-    /// Returned by [`crate::solver::gpu::GpuContext::new`] — never a silent
-    /// CPU fallback (DD-045's explicit-error policy). The caller decides
+    /// Returned by `solver::gpu::GpuContext::new` — never a silent
+    /// CPU fallback ([DT-045](https://github.com/biface/oxiflow/issues/128)'s explicit-error policy). The caller decides
     /// which CPU solver to fall back to. Present unconditionally (not
     /// `#[cfg(feature = "gpu")]`), consistent with `Persistence` above,
     /// which is likewise feature-agnostic in the enum's shape even though

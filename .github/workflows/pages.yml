@@ -1,0 +1,60 @@
+# =============================================================================
+# Pages — API documentation on GitHub Pages
+# =============================================================================
+# Runs after a successful CI run on a push to main, never on its own trigger:
+# the documentation published is always that of a commit that passed CI.
+# This is the only workflow granted `contents: write` (gh-pages branch), so
+# ci.yml stays read-only (#184).
+#
+# The public site covers the public API only (`--no-deps --all-features`);
+# `--document-private-items` is a contributor-side command, see
+# CONTRIBUTING.md.
+# =============================================================================
+
+name: Pages
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deploy:
+    name: Deploy documentation
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: ./.github/actions/setup-rust
+        with:
+          hdf5: true
+          cache-key: doc
+      - name: cargo doc — build with KaTeX header
+        env:
+          RUSTDOCFLAGS: --html-in-header docs/katex-header.html
+        run: cargo doc --locked --no-deps --all-features
+      - name: Add root redirect to oxiflow/index.html
+        run: |
+          echo '<meta http-equiv="refresh" content="0; url=oxiflow/index.html">' \
+            > target/doc/index.html
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+          enable_jekyll: false

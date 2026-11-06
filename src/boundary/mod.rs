@@ -1,7 +1,7 @@
 //! # Module `boundary`
 //!
-//! Boundary conditions — [`BoundaryCondition`] trait (DD-008, issue #34)
-//! and built-in implementations (issue #35).
+//! Boundary conditions — [`BoundaryCondition`] trait ([DA-008](https://github.com/biface/oxiflow/issues/8), issue [#34](https://github.com/biface/oxiflow/issues/34))
+//! and built-in implementations (issue [#35](https://github.com/biface/oxiflow/issues/35)).
 //!
 //! ## Classification
 //!
@@ -20,15 +20,33 @@
 //!
 //! | Type | `BoundaryType` | `BoundaryLocation` |
 //! |---|---|---|
+//! | [`Dirichlet`] | `Dirichlet` | `None` |
 //! | [`DanckwertsInlet`] | `Robin` | `Some(Inlet)` |
 //! | [`DanckwertsOutlet`] | `Neumann` | `Some(Outlet)` |
+//! | [`InjectionInlet`] | `Dirichlet` | `None` |
+//!
+//! Each acts on a boundary region of the mesh
+//! ([`BoundaryRegion`](crate::mesh::BoundaryRegion), [DA-071](https://github.com/biface/oxiflow/issues/203)), resolved by
+//! the mesh, rather than on node indices.
 //!
 //! ## Role
 //!
 //! A boundary condition constrains the primary field $u$ at the boundary of a
-//! spatial domain. It is applied **after** the context calculators have run and
-//! **before** `PhysicalModel::compute_physics` is called, so the full
-//! [`ComputeContext`] is available when `apply` executes.
+//! spatial domain. At every derivative evaluation ([DD-070](https://github.com/biface/oxiflow/issues/200)), the solver
+//! runs the calculators providing the variables the conditions require, then
+//! applies the conditions, then runs the remaining calculators and calls
+//! `PhysicalModel::compute_physics`: the calculators that read the state (a
+//! gradient, a Laplacian) see the constrained state.
+//!
+//! ## Constrained nodes ([DD-070](https://github.com/biface/oxiflow/issues/200))
+//!
+//! A condition that sets node values declares them through
+//! [`BoundaryCondition::constrained_nodes`]. These nodes are algebraic, not
+//! differential: the solver sets the derivative to zero there, so neither an
+//! integrator nor a Newton iteration moves them, and the solver drivers
+//! re-apply every condition to the state at the end of each step and to the
+//! initial state. Every saved state therefore satisfies the conditions,
+//! including a value that depends on time or on neighbouring nodes.
 //!
 //! ## RequiresContext integration
 //!
@@ -40,13 +58,16 @@
 //! | `required_variables()` | — (required) | Variables that must be present in `ctx` |
 //! | `optional_variables()` | `vec![]` | Variables used if present |
 //! | `depends_on()` | `vec![]` | Ordering relative to other BCs (reserved) |
-//! | `priority()` | `100` | Execution order when multiple BCs are registered |
+//! | `priority()` | `100` | Ordering relative to other BCs (reserved) |
 //!
 //! ## Execution order
 //!
-//! Multiple boundary conditions on the same domain are applied in ascending
-//! `priority()` order. `depends_on()` is available but not consumed by the
-//! engine — it is reserved for complex BC ordering, with no milestone assigned.
+//! The solver applies the boundary conditions of a domain in the order they
+//! were declared with `Domain::with_boundary_conditions`. `priority()` and
+//! `depends_on()` are available but not consumed for boundary conditions —
+//! ordering them is reserved, with no milestone assigned. Conditions that
+//! set distinct nodes and read none of the nodes another one sets do not
+//! depend on that order; conditions that share nodes do.
 //!
 //! ## Object safety
 //!
@@ -70,8 +91,14 @@ use nalgebra::DVector;
 pub mod danckwerts;
 pub use danckwerts::{DanckwertsInlet, DanckwertsOutlet};
 
+pub mod dirichlet;
+pub use dirichlet::Dirichlet;
+
 pub mod injection;
 pub use injection::{dirac_initial_state, InjectionInlet, TemporalInjection};
+
+pub mod spec;
+pub use spec::{BoundaryConditionSpec, TimeFunctionSpec};
 
 // ── BoundaryType ──────────────────────────────────────────────────────────────
 
@@ -170,7 +197,7 @@ pub enum BoundaryLocation {
     /// Relevant for Stefan problems, solidification fronts, boiling,
     /// condensation. The interface position may evolve during the simulation.
     PhaseInterface,
-    /// Coupling interface between two domains (INV-3, J3+).
+    /// Coupling interface between two domains (INV-3, J3).
     ///
     /// Managed by `CouplingOperator` — reserved from v0.3.0.
     CouplingInterface,
@@ -187,11 +214,30 @@ pub enum BoundaryLocation {
 ///
 /// # Contract
 ///
-/// - `apply` is called once per time step, after context calculators and before
-///   `PhysicalModel::compute_physics`.
+/// - `apply` is called at every derivative evaluation, after the calculators
+///   providing the variables declared in `required_variables()` and before
+///   the other calculators and `PhysicalModel::compute_physics` ([DD-070](https://github.com/biface/oxiflow/issues/200)). The
+///   solver drivers also call it on the initial state and at the end of each
+///   step.
 /// - `apply` must not modify `ctx` or `mesh` — only `state`.
 /// - Variables declared in `required_variables()` are guaranteed to be present
-///   in `ctx` when `apply` is called.
+///   in `ctx` when `apply` is called. They are computed on the state *before*
+///   the conditions are applied, so a condition should only require variables
+///   that do not depend on the state (time, a feed concentration): a gradient
+///   read there would come from the unconstrained state.
+/// - `apply` only modifies the nodes returned by
+///   [`constrained_nodes`](Self::constrained_nodes), if it declares any.
+///
+/// # State variants
+///
+/// `apply` receives a single field, so it applies to `ScalarField` states
+/// only: a domain whose state is a `VectorField` and that has boundary
+/// conditions attached fails with `OxiflowError::TypeMismatch` at the first
+/// derivative evaluation. The boundaries of a `VectorField` state are
+/// closed at the operator level instead, through
+/// [`Self::ghost_value`] (as in the `langmuir_multi` and `lahar_multifield`
+/// examples). Conditions applied component by component belong with the
+/// mixed finite-element spaces ([#150](https://github.com/biface/oxiflow/issues/150)).
 ///
 /// # Classification
 ///
@@ -203,8 +249,11 @@ pub enum BoundaryLocation {
 ///
 /// `BoundaryCondition` does not implement `serde::Serialize` / `serde::Deserialize`.
 /// Concrete implementations may hold arbitrary state that cannot be serialised
-/// generically. If persistence is required, provide a dedicated configuration
-/// type and reconstruct the BC from it — see `SimulationSnapshot` (DD-025).
+/// generically (a closure, for a time-dependent [`Dirichlet`] value). The
+/// conditions of this crate are described as data by [`BoundaryConditionSpec`]
+/// ([#108](https://github.com/biface/oxiflow/issues/108)), which builds them from a configuration; a condition defined
+/// outside the crate provides its own configuration type and reconstructs
+/// itself from it, as `SimulationSnapshot` ([DT-025](https://github.com/biface/oxiflow/issues/66)) expects.
 ///
 /// # Examples
 ///
@@ -243,9 +292,9 @@ pub enum BoundaryLocation {
 /// [`RequiresContext`]: crate::model::RequiresContext
 /// [`ComputeContext`]: crate::context::ComputeContext
 ///
-/// # `Send + Sync` (DD-037)
+/// # `Send + Sync` ([DA-037](https://github.com/biface/oxiflow/issues/90))
 ///
-/// Added alongside DD-037 (#45): [`crate::solver::methods::imex::SplitOperator`]
+/// Added alongside [DA-037](https://github.com/biface/oxiflow/issues/90) ([#45](https://github.com/biface/oxiflow/issues/45)): [`crate::solver::methods::imex::SplitOperator`]
 /// is the first place in the engine where a `Domain` is *owned* by a type
 /// that must itself be `Send + Sync` (`Solver: Send + Sync`) rather than
 /// only borrowed as `&Domain`. Without this bound, `Box<dyn BoundaryCondition>`
@@ -273,13 +322,15 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
 
     /// Applies the boundary condition to `state`.
     ///
-    /// Called once per time step, after all context calculators have run.
-    /// Modifies `state` in-place to enforce the constraint.
+    /// Called at every derivative evaluation and by the solver drivers (see
+    /// the *Contract* section). Modifies `state` in-place to enforce the
+    /// constraint.
     ///
     /// # Parameters
     ///
     /// - `state` — current field $u$ as a DOF vector; modified in-place.
-    /// - `ctx`   — fully populated context (time, step, spatial quantities).
+    /// - `ctx`   — context holding the time, the time step and the variables
+    ///   declared in `required_variables()`.
     /// - `mesh`  — spatial discretisation of the domain.
     ///
     /// # Errors
@@ -292,8 +343,35 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
         mesh: &dyn Mesh,
     ) -> Result<(), OxiflowError>;
 
+    /// Indices of the nodes [`apply`](Self::apply) sets, for `mesh` ([DD-070](https://github.com/biface/oxiflow/issues/200),
+    /// [#200](https://github.com/biface/oxiflow/issues/200)).
+    ///
+    /// The solver treats these nodes as algebraic: it sets the derivative to
+    /// zero there at every evaluation, so that the integrators and the Newton
+    /// iterations of the implicit methods leave them alone (their rows of the
+    /// implicit system become identity rows), and the condition alone fixes
+    /// their value, within a step as well as at its end.
+    ///
+    /// Defaults to an empty list: a condition that declares nothing keeps the
+    /// derivative the model gives its nodes. The solver drivers still restore
+    /// it at the end of each step, but its nodes move within the step: a
+    /// direct call to `SteppableSolver::step` returns them moved, and the
+    /// error estimate of an adaptive method or the residual of a Newton
+    /// iteration includes that movement. Return only nodes `apply` actually
+    /// sets — a declared node that `apply` leaves alone would keep its
+    /// initial value.
+    ///
+    /// # Errors reported by the solver
+    ///
+    /// An index outside the state is reported as
+    /// `OxiflowError::PreconditionFailed` at the first derivative evaluation.
+    fn constrained_nodes(&self, mesh: &dyn Mesh) -> Vec<usize> {
+        let _ = mesh;
+        Vec::new()
+    }
+
     /// Ghost-cell value for this boundary condition, at reflection depth
-    /// `depth` (DD-042, amendment 1).
+    /// `depth` ([DD-042](https://github.com/biface/oxiflow/issues/100), amendment 1).
     ///
     /// `FluxBoundary::GhostCell` (`operators::fv`, `operators::weno`) needs
     /// values *outside* the real domain to close its face-flux computation
@@ -309,18 +387,18 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
     /// interior node `k−1` (so `depth = 1` pairs with the nearest interior
     /// neighbor, `depth = 2` with the next one, etc.). Each layer is derived
     /// directly from this real interior value, not from a previously
-    /// computed ghost layer — deliberately, so a Robin condition (e.g.
-    /// [`DanckwertsInlet`]) stays exact at every depth instead of eroding
+    /// computed ghost layer — deliberately, so that a Robin condition
+    /// stays exact at every depth instead of eroding
     /// through repeated extrapolation. A chained scheme (each ghost derived
     /// from the previous one) was considered and rejected for exactly this
-    /// reason — see DD-042, amendment 1.
+    /// reason — see [DD-042](https://github.com/biface/oxiflow/issues/100), amendment 1.
     ///
     /// Defaults to `None` — non-breaking for every existing or external
     /// implementation. A generic Dirichlet/Neumann formula is deliberately
     /// *not* supplied here as a fallback: a Robin condition has no generic
     /// ghost value independent of its own α/β coefficients, and silently
     /// approximating one for it would be wrong, not merely imprecise — see
-    /// DD-042 for the two concrete consumers (lahar-lake, chromatography)
+    /// [DD-042](https://github.com/biface/oxiflow/issues/100) for the two concrete consumers (lahar-lake, chromatography)
     /// that motivated this method and why a generic-by-`BoundaryType`
     /// fallback was rejected in favor of per-implementation exactness.
     ///
@@ -331,7 +409,7 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
     /// approximation of its own.
     ///
     /// Takes `ctx` (added alongside [`InjectionInlet`]) so a ghost value can
-    /// depend on simulation time — the two motivating cases at DD-042
+    /// depend on simulation time — the two motivating cases at [DD-042](https://github.com/biface/oxiflow/issues/100)
     /// (lahar-lake, Danckwerts) were both steady-state, so the original
     /// signature had no way to express a time-varying boundary; a
     /// competitive-adsorption inlet (chromatography) needs exactly that
@@ -346,6 +424,93 @@ pub trait BoundaryCondition: RequiresContext + std::fmt::Debug + Send + Sync {
     ) -> Option<f64> {
         let _ = (depth, interior_at_depth, dx, ctx);
         None
+    }
+}
+
+// ── Test condition ────────────────────────────────────────────────────────────
+
+/// Test condition setting some nodes to a value that may depend on time,
+/// declared as constrained nodes ([DD-070](https://github.com/biface/oxiflow/issues/200)) or not, and counting its
+/// applications. Shared by the solver tests.
+#[cfg(test)]
+pub(crate) struct PinnedNodes {
+    nodes: Vec<usize>,
+    value: Box<dyn Fn(f64) -> f64 + Send + Sync>,
+    declared: Vec<usize>,
+    calls: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+#[cfg(test)]
+impl PinnedNodes {
+    /// Sets `nodes` to `value(t)` without declaring them, as a condition
+    /// written before [DD-070](https://github.com/biface/oxiflow/issues/200).
+    pub(crate) fn new(nodes: &[usize], value: impl Fn(f64) -> f64 + Send + Sync + 'static) -> Self {
+        Self {
+            nodes: nodes.to_vec(),
+            value: Box::new(value),
+            declared: Vec::new(),
+            calls: Default::default(),
+        }
+    }
+
+    /// Declares the pinned nodes through `constrained_nodes`.
+    pub(crate) fn declared(self) -> Self {
+        let nodes = self.nodes.clone();
+        self.declaring(&nodes)
+    }
+
+    /// Declares `nodes` through `constrained_nodes`, whatever `apply` sets —
+    /// for the tests of an inconsistent declaration.
+    pub(crate) fn declaring(mut self, nodes: &[usize]) -> Self {
+        self.declared = nodes.to_vec();
+        self
+    }
+
+    /// Counter of the calls to `apply`.
+    pub(crate) fn calls(&self) -> std::sync::Arc<std::sync::atomic::AtomicUsize> {
+        std::sync::Arc::clone(&self.calls)
+    }
+}
+
+#[cfg(test)]
+impl std::fmt::Debug for PinnedNodes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PinnedNodes")
+            .field("nodes", &self.nodes)
+            .field("declared", &self.declared)
+            .finish()
+    }
+}
+
+#[cfg(test)]
+impl RequiresContext for PinnedNodes {
+    fn required_variables(&self) -> Vec<crate::context::variable::ContextVariable> {
+        vec![]
+    }
+}
+
+#[cfg(test)]
+impl BoundaryCondition for PinnedNodes {
+    fn boundary_type(&self) -> BoundaryType {
+        BoundaryType::Dirichlet
+    }
+
+    fn apply(
+        &self,
+        state: &mut DVector<f64>,
+        ctx: &ComputeContext,
+        _mesh: &dyn Mesh,
+    ) -> Result<(), OxiflowError> {
+        let value = (self.value)(ctx.time());
+        for &i in &self.nodes {
+            state[i] = value;
+        }
+        self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn constrained_nodes(&self, _mesh: &dyn Mesh) -> Vec<usize> {
+        self.declared.clone()
     }
 }
 

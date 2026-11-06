@@ -1,18 +1,22 @@
-//! # Example: lahar–lake coupled prototype (#40, J3 exit criterion)
+//! # Example: lahar–lake coupled prototype ([#40](https://github.com/biface/oxiflow/issues/40), J3 exit criterion)
 //!
-//! Demonstrates `MultiDomainOrchestrator` (DD-031) driving two coupled
+//! Demonstrates `MultiDomainOrchestrator` ([DA-031](https://github.com/biface/oxiflow/issues/82)) driving two coupled
 //! domains — a lahar (volcanic mudflow) losing mass and a lake receiving
-//! it — through `CouplingOperator` (INV-3, DD-011).
+//! it — through `CouplingOperator` (INV-3, [DA-011](https://github.com/biface/oxiflow/issues/11)).
 //!
 //! Run with: `cargo run --example lahar_lake_proto`
+//!
+//! The two models and the coupling operator are defined once in
+//! `rsc/models/lahar_lake.rs`, included below as the `lahar_lake_model`
+//! module and shared with `tests/lahar_lake_proto.rs`.
 //!
 //! ## Simplified physics
 //!
 //! Both domains are intentionally 0D-per-node ODEs, not real Bingham
-//! viscoplastic rheology or shallow-water flux divergence — those need
-//! `DiscreteOperator` (INV-2), which lands at J4b/v0.5.0. This prototype
-//! validates the multi-domain *architecture* (INV-1, INV-3), not spatial
-//! accuracy:
+//! viscoplastic rheology or shallow-water flux divergence — those needed
+//! the spatial operators (INV-2) that came at J5, after this J3 prototype;
+//! `lahar_lake_wave` is the full version ([#180](https://github.com/biface/oxiflow/issues/180)). This prototype validates
+//! the multi-domain *architecture* (INV-1, INV-3), not spatial accuracy:
 //!
 //! - **Lahar** (granular flow stand-in): `dC/dt = -lambda * C` — mass
 //!   leaving the flow at rate `lambda`.
@@ -25,15 +29,10 @@
 //!   entry is written here — the lahar's loss happens through its own
 //!   `compute_physics`, using the *same* `lambda`.
 
-use nalgebra::DVector;
 use oxiflow::{
-    context::{
-        compute::ComputeContext, error::OxiflowError, quantity::PhysicalQuantity,
-        state::MultiDomainState, value::ContextValue, variable::ContextVariable,
-    },
-    coupling::{CouplingOperator, Interface},
-    mesh::{Mesh, UniformGrid1D},
-    model::traits::{PhysicalModel, RequiresContext},
+    context::{quantity::PhysicalQuantity, state::MultiDomainState},
+    coupling::Interface,
+    mesh::UniformGrid1D,
     solver::{
         config::{StepControl, TimeConfiguration},
         methods::ForwardEulerSolver,
@@ -50,137 +49,10 @@ const LAMBDA: f64 = 0.2;
 const T_END: f64 = 20.0;
 const DT: f64 = 0.01;
 
-// ── Models ──────────────────────────────────────────────────────────────────
+#[path = "../rsc/models/lahar_lake.rs"]
+mod lahar_lake_model;
 
-/// Granular flow stand-in — exponential mass loss, `dC/dt = -lambda * C`.
-struct GranularFlow {
-    lambda: f64,
-}
-
-impl RequiresContext for GranularFlow {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![]
-    }
-}
-
-impl PhysicalModel for GranularFlow {
-    fn compute_physics(
-        &self,
-        state: &ContextValue,
-        _ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        let c = state.as_scalar_field()?;
-        Ok(ContextValue::ScalarField(c.map(|ci| -self.lambda * ci)))
-    }
-
-    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
-    }
-
-    fn name(&self) -> &str {
-        "granular_flow"
-    }
-
-    fn description(&self) -> Option<&str> {
-        Some("Bingham-like granular flow stand-in — exponential decay, #40 multi-domain proto")
-    }
-}
-
-/// Shallow-water stand-in — passive receiver, `dC/dt = 0`.
-struct ShallowWaterReceiver;
-
-impl RequiresContext for ShallowWaterReceiver {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![]
-    }
-}
-
-impl PhysicalModel for ShallowWaterReceiver {
-    fn compute_physics(
-        &self,
-        state: &ContextValue,
-        _ctx: &ComputeContext,
-    ) -> Result<ContextValue, OxiflowError> {
-        let c = state.as_scalar_field()?;
-        Ok(ContextValue::ScalarField(DVector::zeros(c.len())))
-    }
-
-    fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-        ContextValue::ScalarField(DVector::zeros(mesh.n_dof()))
-    }
-
-    fn name(&self) -> &str {
-        "shallow_water_receiver"
-    }
-
-    fn description(&self) -> Option<&str> {
-        Some("Shallow-water stand-in — passive receiver, #40 multi-domain proto")
-    }
-}
-
-// ── Coupling ──────────────────────────────────────────────────────────────────
-
-/// Transfers mass from the lahar to the lake at exactly the lahar's own
-/// decay rate. Only writes the target entry — never modifies the source,
-/// per `CouplingOperator`'s contract.
-struct MassTransfer {
-    lambda: f64,
-    interface: Interface,
-}
-
-impl RequiresContext for MassTransfer {
-    fn required_variables(&self) -> Vec<ContextVariable> {
-        vec![]
-    }
-}
-
-impl CouplingOperator for MassTransfer {
-    fn apply(
-        &self,
-        states: &MultiDomainState,
-        ctx: &ComputeContext,
-        interface: &Interface,
-    ) -> Result<MultiDomainState, OxiflowError> {
-        let dt = ctx.time_step();
-        let quantity = PhysicalQuantity::concentration();
-
-        let source = states
-            .get(interface.source(), &quantity)
-            .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context: "MassTransfer",
-                message: format!(
-                    "source domain '{}' has no Concentration field",
-                    interface.source()
-                ),
-            })?
-            .as_scalar_field()?;
-        let target = states
-            .get(interface.target(), &quantity)
-            .ok_or_else(|| OxiflowError::PreconditionFailed {
-                context: "MassTransfer",
-                message: format!(
-                    "target domain '{}' has no Concentration field",
-                    interface.target()
-                ),
-            })?
-            .as_scalar_field()?;
-
-        let flux = source.map(|c| self.lambda * c);
-        let new_target: DVector<f64> = target.clone() + flux * dt;
-
-        let mut result = states.clone();
-        result.set(
-            interface.target().clone(),
-            quantity,
-            ContextValue::ScalarField(new_target),
-        );
-        Ok(result)
-    }
-
-    fn interface(&self) -> &Interface {
-        &self.interface
-    }
-}
+use lahar_lake_model::{GranularFlow, MassTransfer, ShallowWaterReceiver};
 
 // ── Scenario ──────────────────────────────────────────────────────────────────
 
@@ -248,7 +120,7 @@ fn main() {
     let final_mass = total_mass(result.states.last().expect("at least one state"), &quantity);
     let relative_drift = (final_mass - initial_mass).abs() / initial_mass;
 
-    println!("oxiflow — lahar-lake prototype (#40, DD-031)");
+    println!("oxiflow — lahar-lake prototype (#40, DA-031)");
     println!("  steps run:      {}", result.n_steps);
     println!("  initial mass:   {initial_mass:.6}");
     println!("  final mass:     {final_mass:.6}");

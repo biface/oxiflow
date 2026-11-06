@@ -16,22 +16,25 @@
 //! | [`FDLaplacianCalculator`] | `ContextVariable::External { name }` | FD Laplacian |
 //! | [`TrapezoidalIntegral`] | `ContextVariable::External { name }` | Spatial quadrature |
 //! | [`ExternalTabulated`] | `ContextVariable::External { name }` | Tabulated f(t) interpolation |
+//! | [`CoefficientField`] | `ContextVariable::Coefficient { name }` | c(x) or c(x, t) on the mesh nodes |
 //!
 //! ## Mesh ownership
 //!
 //! Spatial calculators ([`FDGradientCalculator`], [`FDLaplacianCalculator`],
-//! [`TrapezoidalIntegral`]) hold an [`Arc<dyn Mesh>`] internally. This is an
-//! implementation detail consistent with INV-1 (DD-007): the mesh never appears
+//! [`TrapezoidalIntegral`], [`CoefficientField`]) hold an [`Arc<dyn Mesh>`]
+//! internally. This is an
+//! implementation detail consistent with INV-1 ([DA-007](https://github.com/biface/oxiflow/issues/7)): the mesh never appears
 //! in the public `ContextCalculator` API. `FDGradientCalculator` and
 //! `FDLaplacianCalculator` delegate their stencil math to a concrete
 //! [`DiscreteOperator`] implementation from [`crate::operators::fd`] (INV-2,
-//! DD-012, #47) with zero change to the `ContextCalculator` trait signature.
+//! [DA-012](https://github.com/biface/oxiflow/issues/12), [#47](https://github.com/biface/oxiflow/issues/47)) with zero change to the `ContextCalculator` trait signature.
 //!
 //! [`ContextCalculator`]: crate::context::calculator::ContextCalculator
 //! [`SolverConfiguration`]: crate::solver::config::SolverConfiguration
 //! [`Arc<dyn Mesh>`]: std::sync::Arc
 //! [`DiscreteOperator`]: crate::operators
 
+pub mod coefficient;
 pub mod integral;
 pub mod spatial;
 pub mod tabulated;
@@ -39,6 +42,7 @@ pub mod time;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 
+pub use coefficient::CoefficientField;
 pub use integral::TrapezoidalIntegral;
 pub use spatial::{FDGradientCalculator, FDLaplacianCalculator};
 pub use tabulated::{ExternalTabulated, Interpolation};

@@ -2,29 +2,57 @@
 //!
 //! `DiscretizedModel<Op>` — wraps a [`FluxDivergenceOperator`] scheme (FV,
 //! WENO) as an ordinary [`PhysicalModel`], returning only the `-∇·F(u, ∇u)`
-//! contribution of the canonical form (DD-038, #93).
+//! contribution of the canonical form ([DA-038](https://github.com/biface/oxiflow/issues/92), [#93](https://github.com/biface/oxiflow/issues/93)).
 //!
 //! ## Why
 //!
-//! FD (gradient/Laplacian, DD-012) is consumed transparently through
+//! FD (gradient/Laplacian, [DA-012](https://github.com/biface/oxiflow/issues/12)) is consumed transparently through
 //! [`crate::context::ContextCalculator`] — a model declares a required
-//! context variable and never knows which scheme produced it. FV (#48) and
-//! WENO/limiters (#49) are different: they compute the complete `∇·F` term
+//! context variable and never knows which scheme produced it. FV ([#48](https://github.com/biface/oxiflow/issues/48)) and
+//! WENO/limiters ([#49](https://github.com/biface/oxiflow/issues/49)) are different: they compute the complete `∇·F` term
 //! directly — exactly what `PhysicalModel::compute_physics` must return.
 //! `DiscretizedModel<Op>` is the insertion point for that case: a spatial
 //! composite, cousin of
-//! [`crate::solver::methods::imex::SplitOperator`] (DD-037, temporal
+//! [`crate::solver::methods::imex::SplitOperator`] ([DA-037](https://github.com/biface/oxiflow/issues/90), temporal
 //! composition) but for wiring a single spatial scheme into the engine.
 //!
 //! A trait `SourceTerm` mirroring `DiscreteOperator`'s `S(u, x, t)` was
-//! considered and rejected (DD-038, amendment 1) — nothing in the v0.5.0
-//! scope (#48, #49) needs a source term richer than an ordinary
+//! considered and rejected ([DA-038](https://github.com/biface/oxiflow/issues/92), amendment 1) — nothing in the v0.5.0
+//! scope ([#48](https://github.com/biface/oxiflow/issues/48), [#49](https://github.com/biface/oxiflow/issues/49)) needs a source term richer than an ordinary
 //! `PhysicalModel` already expresses. When a source term exists, it composes
 //! with `DiscretizedModel<Op>` through
-//! [`crate::model::CompositeModel`] (DD-037) — already delivered, already
+//! [`crate::model::CompositeModel`] ([DA-037](https://github.com/biface/oxiflow/issues/90)) — already delivered, already
 //! tested, no new trait:
 //!
-//! ```rust,ignore
+//! ```rust
+//! # use std::sync::Arc;
+//! # use oxiflow::mesh::UniformGrid1D;
+//! # use oxiflow::model::{CompositeModel, DiscretizedModel};
+//! # use oxiflow::operators::{fv::FVUpwindFlux, FluxBoundary};
+//! # use nalgebra::DVector;
+//! # use oxiflow::context::{ComputeContext, ContextValue, ContextVariable, OxiflowError};
+//! # use oxiflow::mesh::Mesh;
+//! # use oxiflow::model::{PhysicalModel, RequiresContext};
+//! # struct Decay;
+//! # impl RequiresContext for Decay {
+//! #     fn required_variables(&self) -> Vec<ContextVariable> { vec![] }
+//! # }
+//! # impl PhysicalModel for Decay {
+//! #     fn compute_physics(
+//! #         &self,
+//! #         state: &ContextValue,
+//! #         _ctx: &ComputeContext,
+//! #     ) -> Result<ContextValue, OxiflowError> {
+//! #         Ok(ContextValue::ScalarField(-state.as_scalar_field()?.clone()))
+//! #     }
+//! #     fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+//! #         ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+//! #     }
+//! #     fn name(&self) -> &str { "decay" }
+//! # }
+//! # let scheme = Arc::new(FVUpwindFlux::new(1.0, 0.0, FluxBoundary::Periodic));
+//! # let mesh = Arc::new(UniformGrid1D::new(50, 0.0, 1.0)?);
+//! # let my_source_model = Decay;
 //! let full_model = CompositeModel::new(
 //!     vec![
 //!         Box::new(DiscretizedModel::new(scheme, mesh, "advection")),
@@ -32,10 +60,11 @@
 //!     ],
 //!     "advection_reaction",
 //! )?;
+//! # Ok::<(), OxiflowError>(())
 //! ```
 //!
-//! `Op` is bound to [`FluxDivergenceOperator`] (DD-039), not
-//! `DiscreteOperator` (DD-038, amendment 2) — an FD scheme cannot be plugged
+//! `Op` is bound to [`FluxDivergenceOperator`] ([DA-039](https://github.com/biface/oxiflow/issues/95)), not
+//! `DiscreteOperator` ([DA-038](https://github.com/biface/oxiflow/issues/92), amendment 2) — an FD scheme cannot be plugged
 //! in here; that is a compile error, not a silent runtime bug.
 
 use std::borrow::Cow;
@@ -70,9 +99,9 @@ fn negate_context_value(value: ContextValue) -> Result<ContextValue, OxiflowErro
 }
 
 /// Computes the flux via `scheme` — not yet registered in any
-/// `ContextCalculator` chain (DD-038: private posture). `instance_id` is
-/// reserved, unused today, to allow multi-instance naming (DD-031, DD-037)
-/// the day DD-027 requires publication into `ComputeContext` (VTK/HDF5
+/// `ContextCalculator` chain ([DA-038](https://github.com/biface/oxiflow/issues/92): private posture). `instance_id` is
+/// reserved, unused today, to allow multi-instance naming ([DA-031](https://github.com/biface/oxiflow/issues/82), [DA-037](https://github.com/biface/oxiflow/issues/90))
+/// the day [DT-027](https://github.com/biface/oxiflow/issues/75) requires publication into `ComputeContext` (VTK/HDF5
 /// export, v0.6.0). No concrete need justifies publishing it sooner.
 #[allow(dead_code)]
 struct FluxDivergenceCalculator<Op: FluxDivergenceOperator> {
@@ -83,7 +112,7 @@ struct FluxDivergenceCalculator<Op: FluxDivergenceOperator> {
 
 /// Wraps a spatial discretization scheme as an ordinary [`PhysicalModel`] —
 /// the `-∇·F(u, ∇u)` contribution of the canonical form, nothing else.
-/// Cousin of [`crate::solver::methods::imex::SplitOperator`] (DD-037), but
+/// Cousin of [`crate::solver::methods::imex::SplitOperator`] ([DA-037](https://github.com/biface/oxiflow/issues/90)), but
 /// spatial rather than temporal.
 ///
 /// See the module documentation for how to compose a source term via
@@ -91,7 +120,7 @@ struct FluxDivergenceCalculator<Op: FluxDivergenceOperator> {
 pub struct DiscretizedModel<Op: FluxDivergenceOperator> {
     scheme: Arc<Op>,
     mesh: Arc<Op::MeshType>,
-    // Not read yet — reserved for DD-027 (VTK/HDF5 export, v0.6.0). See
+    // Not read yet — reserved for DT-027 (VTK/HDF5 export, v0.6.0). See
     // FluxDivergenceCalculator's doc comment for why publication is deferred.
     #[allow(dead_code)]
     flux_calculator: FluxDivergenceCalculator<Op>,
@@ -157,7 +186,18 @@ impl<Op: FluxDivergenceOperator> PhysicalModel for DiscretizedModel<Op> {
     }
 
     fn description(&self) -> Option<&str> {
-        Some("discretized model — wraps a FluxDivergenceOperator as -∇·F(u, ∇u) (DD-038)")
+        Some("discretized model — wraps a FluxDivergenceOperator as -∇·F(u, ∇u) (DA-038)")
+    }
+
+    /// The speed of the wrapped scheme
+    /// ([DA-073](https://github.com/biface/oxiflow/issues/229)): always declared, since every
+    /// [`FluxDivergenceOperator`] states one.
+    fn max_wave_speed(
+        &self,
+        state: &ContextValue,
+        ctx: &ComputeContext,
+    ) -> Result<Option<f64>, OxiflowError> {
+        self.scheme.max_wave_speed(state, ctx).map(Some)
     }
 }
 
@@ -167,6 +207,8 @@ impl<Op: FluxDivergenceOperator> PhysicalModel for DiscretizedModel<Op> {
 mod tests {
     use super::*;
     use crate::mesh::structured::UniformGrid1D;
+    use crate::operators::fv::FVUpwindFlux;
+    use crate::operators::FluxBoundary;
 
     /// Minimal `FluxDivergenceOperator` fixture: returns a constant field,
     /// declares one required variable to exercise delegation.
@@ -195,6 +237,15 @@ mod tests {
             // Constant output, no neighbor access at all.
             0
         }
+
+        fn max_wave_speed(
+            &self,
+            _field: &ContextValue,
+            _ctx: &ComputeContext,
+        ) -> Result<f64, OxiflowError> {
+            // Constant output, nothing is transported.
+            Ok(0.0)
+        }
     }
 
     fn fixture(value: f64) -> DiscretizedModel<ConstantFlux> {
@@ -213,6 +264,16 @@ mod tests {
             .unwrap()
             .iter()
             .all(|&v| (v + 3.0).abs() < 1e-12));
+    }
+
+    #[test]
+    fn max_wave_speed_is_that_of_the_scheme() {
+        let mesh = Arc::new(UniformGrid1D::new(4, 0.0, 1.0).unwrap());
+        let scheme = Arc::new(FVUpwindFlux::new(-2.0, 0.1, FluxBoundary::Periodic));
+        let model = DiscretizedModel::new(scheme, mesh, "upwind_speed_test");
+        let state = ContextValue::ScalarField(DVector::from_element(4, 1.0));
+        let ctx = ComputeContext::new(0.0, 0.01);
+        assert_eq!(model.max_wave_speed(&state, &ctx).unwrap(), Some(2.0));
     }
 
     #[test]

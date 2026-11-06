@@ -24,7 +24,7 @@
 //! **MassTransferCoupling** — transfers a fraction `alpha` of the lahar
 //! concentration field to the lake at each coupling call.
 //!
-//! ## Acceptance criteria (DD-011, INV-3)
+//! ## Acceptance criteria ([DA-011](https://github.com/biface/oxiflow/issues/11), INV-3)
 //!
 //! - `Scenario::multi()` accepts two domains without error
 //! - `with_coupling()` registers the operator and its interface
@@ -39,7 +39,7 @@ use oxiflow::{
         compute::ComputeContext, error::OxiflowError, quantity::PhysicalQuantity,
         state::MultiDomainState, value::ContextValue, variable::ContextVariable,
     },
-    coupling::{CouplingOperator, Interface},
+    coupling::{CouplingContext, CouplingOperator, Interface},
     mesh::{Mesh, UniformGrid1D},
     model::traits::{PhysicalModel, RequiresContext},
     solver::scenario::{Domain, DomainId, Scenario},
@@ -140,7 +140,7 @@ impl CouplingOperator for MassTransferCoupling {
     fn apply(
         &self,
         states: &MultiDomainState,
-        _ctx: &ComputeContext,
+        _ctx: &CouplingContext,
         interface: &Interface,
     ) -> Result<MultiDomainState, OxiflowError> {
         let source_id = interface.source();
@@ -269,7 +269,7 @@ fn j3_coupling_apply_writes_to_target_domain() {
         ContextValue::ScalarField(DVector::zeros(N_NODES)),
     );
 
-    let ctx = ComputeContext::new(0.0, 0.1);
+    let ctx = CouplingContext::new(0.0, 0.1);
     let result = coupling.apply(&states, &ctx, interface).unwrap();
 
     // Target domain receives alpha * source
@@ -304,7 +304,7 @@ fn j3_coupling_does_not_mutate_source_domain() {
         ContextValue::ScalarField(DVector::zeros(N_NODES)),
     );
 
-    let ctx = ComputeContext::new(0.0, 0.1);
+    let ctx = CouplingContext::new(0.0, 0.1);
     let result = coupling.apply(&states, &ctx, interface).unwrap();
 
     // Source domain entry must be unchanged

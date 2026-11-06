@@ -1,16 +1,16 @@
 //! # Module `model::traits`
 //!
-//! Core traits for physical model components (DD-005, issue #29, #32).
+//! Core traits for physical model components ([DA-005](https://github.com/biface/oxiflow/issues/5), issue [#29](https://github.com/biface/oxiflow/issues/29), [#32](https://github.com/biface/oxiflow/issues/32)).
 //!
 //! ## `RequiresContext`
 //!
-//! Standalone trait — `required_variables()` is mandatory (DD-005).
+//! Standalone trait — `required_variables()` is mandatory ([DA-005](https://github.com/biface/oxiflow/issues/5)).
 //!
 //! ## `PhysicalModel`
 //!
 //! Supertrait of `RequiresContext`. Declares the physical equations and computes
 //! field derivatives. The method is named `compute_physics` — the `_v2` suffix
-//! from chrom-rs is dropped because oxiflow never had a v1 (DD-006).
+//! from chrom-rs is dropped because oxiflow never had a v1 ([DA-006](https://github.com/biface/oxiflow/issues/6)).
 
 use crate::context::compute::ComputeContext;
 use crate::context::error::OxiflowError;
@@ -40,7 +40,7 @@ pub trait RequiresContext {
 
     /// Variables that must be computed before this component runs.
     ///
-    /// Used by `chain.rs` for topological ordering (DD-009, J2).
+    /// Used by `chain.rs` for topological ordering ([DD-009](https://github.com/biface/oxiflow/issues/9), J2).
     fn depends_on(&self) -> Vec<ContextVariable> {
         vec![]
     }
@@ -67,7 +67,7 @@ pub trait RequiresContext {
 ///
 /// The method is named `compute_physics` (not `compute_physics_v2`).
 /// oxiflow never had a v1 API — the `_v2` suffix was a chrom-rs migration
-/// artifact that does not apply here (DD-006).
+/// artifact that does not apply here ([DA-006](https://github.com/biface/oxiflow/issues/6)).
 ///
 /// # Examples
 ///
@@ -135,6 +135,40 @@ pub trait PhysicalModel: RequiresContext + Send + Sync {
     fn description(&self) -> Option<&str> {
         None
     }
+
+    /// Maximum absolute wave speed of the advective terms of the model on
+    /// `state`, if the model declares one ([DA-073](https://github.com/biface/oxiflow/issues/229)).
+    ///
+    /// The explicit integrators derive their advective step limit from it.
+    /// `None` by default: a model without an advective term, or one that
+    /// does not declare it, has no advective limit. The value, when given,
+    /// must be finite and non-negative.
+    ///
+    /// The models of this crate that wrap or combine other models forward
+    /// it: [`DiscretizedModel`](crate::model::DiscretizedModel) returns the
+    /// speed of its scheme
+    /// ([`FluxDivergenceOperator::max_wave_speed`](crate::operators::FluxDivergenceOperator::max_wave_speed)),
+    /// [`CompositeModel`](crate::model::CompositeModel) the sum of the speeds
+    /// its contributions declare, a bound for a sum of advective terms, and
+    /// [`PrescribedInitialState`](crate::model::PrescribedInitialState) the
+    /// speed of the model it wraps.
+    ///
+    /// # Decorators
+    ///
+    /// A model that wraps another `PhysicalModel` must forward this method,
+    /// as it forwards `compute_physics`. The default would hide the speed of
+    /// the wrapped model, whose advective limit would then not be checked.
+    ///
+    /// # Errors
+    ///
+    /// Whatever reading `state` or `ctx` raises.
+    fn max_wave_speed(
+        &self,
+        _state: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<Option<f64>, OxiflowError> {
+        Ok(None)
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -143,53 +177,10 @@ pub trait PhysicalModel: RequiresContext + Send + Sync {
 mod tests {
     use super::*;
     use crate::mesh::structured::UniformGrid1D;
+    use crate::model::FullModel;
     use nalgebra::DVector;
 
     // ── Fixtures ──────────────────────────────────────────────────────────────
-
-    struct FullModel;
-    impl RequiresContext for FullModel {
-        fn required_variables(&self) -> Vec<ContextVariable> {
-            vec![
-                ContextVariable::Time,
-                ContextVariable::SpatialGradient {
-                    dimension: 0,
-                    component: None,
-                },
-            ]
-        }
-        fn optional_variables(&self) -> Vec<ContextVariable> {
-            vec![ContextVariable::External {
-                name: "T_amb".into(),
-            }]
-        }
-        fn depends_on(&self) -> Vec<ContextVariable> {
-            vec![ContextVariable::Time]
-        }
-        fn priority(&self) -> u32 {
-            200
-        }
-    }
-
-    impl PhysicalModel for FullModel {
-        fn compute_physics(
-            &self,
-            state: &ContextValue,
-            _ctx: &ComputeContext,
-        ) -> Result<ContextValue, OxiflowError> {
-            let u = state.as_scalar_field()?;
-            Ok(ContextValue::ScalarField(u.clone()))
-        }
-        fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
-            ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 0.0))
-        }
-        fn name(&self) -> &str {
-            "full_model"
-        }
-        fn description(&self) -> Option<&str> {
-            Some("test model")
-        }
-    }
 
     struct MinimalModel;
     impl RequiresContext for MinimalModel {

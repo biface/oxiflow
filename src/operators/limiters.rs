@@ -2,8 +2,8 @@
 //!
 //! Flux-limited (MUSCL-style) advective flux + centered diffusive flux for
 //! [`UniformGrid1D`] — [`Limiter`] (`MinMod`, `VanLeer`, `Superbee`) and
-//! [`LimitedFlux`] (#99, split out of `#49` at closing time — DD-012,
-//! DD-039, DD-041).
+//! [`LimitedFlux`] ([#99](https://github.com/biface/oxiflow/issues/99), split out of `#49` at closing time — [DA-012](https://github.com/biface/oxiflow/issues/12),
+//! [DA-039](https://github.com/biface/oxiflow/issues/95), [DD-041](https://github.com/biface/oxiflow/issues/98)).
 //!
 //! ## Why a limiter, alongside FV and WENO
 //!
@@ -50,8 +50,8 @@
 //!
 //! ## Cell semantics
 //!
-//! Same cell-average interpretation as `operators::fv` (DD-040) and
-//! `operators::weno` (DD-041) — `u[i]` is the average of `u` over the cell
+//! Same cell-average interpretation as `operators::fv` ([DD-040](https://github.com/biface/oxiflow/issues/96)) and
+//! `operators::weno` ([DD-041](https://github.com/biface/oxiflow/issues/98)) — `u[i]` is the average of `u` over the cell
 //! whose faces sit at nodes `i` and `i+1`.
 //!
 //! ## `r = 0/0` (locally constant field)
@@ -67,10 +67,15 @@
 //! non-oscillatory choice a genuine extremum would demand, not an arbitrary
 //! one.
 //!
-//! ## `FluxBoundary` and CFL
+//! ## `FluxBoundary` and stability
 //!
-//! Reuses [`crate::operators::FluxBoundary`], `crate::operators::check_cfl`,
-//! and the same wide-stencil boundary helpers `operators::weno` uses
+//! Like the FV and WENO schemes, `LimitedFlux` checks no stability
+//! condition and declares the absolute value of `velocity` as its wave
+//! speed, from which the explicit integrators derive their advective step
+//! limit ([DA-073](https://github.com/biface/oxiflow/issues/229)).
+//!
+//! Reuses [`crate::operators::FluxBoundary`] and the same wide-stencil
+//! boundary helpers `operators::weno` uses
 //! (`periodic_wide_divergence`, `truncated_wide_divergence`,
 //! `ghost_cell_wide_divergence`, relocated to `operators` — see their
 //! module-level doc there) — `LimitedFlux`'s stencil footprint is exactly
@@ -101,8 +106,8 @@ use crate::mesh::structured::UniformGrid1D;
 use crate::mesh::Mesh;
 use crate::model::traits::RequiresContext;
 use crate::operators::{
-    check_cfl, ghost_cell_wide_divergence, periodic_wide_divergence, truncated_wide_divergence,
-    wrap, FluxBoundary, FluxDivergenceOperator,
+    ghost_cell_wide_divergence, periodic_wide_divergence, truncated_wide_divergence, wrap,
+    FluxBoundary, FluxDivergenceOperator,
 };
 
 /// Ratio of consecutive slopes with a safe `0/0` fallback — see the module
@@ -133,6 +138,7 @@ fn ratio(numer: f64, denom: f64) -> f64 {
 /// criterion, checked directly in the tests below.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Deserialize))]
 pub enum Limiter {
     /// `φ(r) = max(0, min(1, r))` — most diffusive of the three.
     MinMod,
@@ -204,7 +210,7 @@ impl LimitedFlux {
 impl RequiresContext for LimitedFlux {
     fn required_variables(&self) -> Vec<ContextVariable> {
         // Constant velocity/diffusion — nothing to resolve from ComputeContext
-        // (the "simple case" of DD-039, same posture as FV/WENO).
+        // (the "simple case" of DA-039, same posture as FV/WENO).
         vec![]
     }
 }
@@ -220,7 +226,6 @@ impl FluxDivergenceOperator for LimitedFlux {
     ) -> Result<ContextValue, OxiflowError> {
         let u = field.as_scalar_field()?;
         let dx = mesh.characteristic_length();
-        check_cfl("LimitedFlux", self.velocity, ctx.time_step(), dx)?;
 
         let div = match &self.boundary {
             FluxBoundary::Periodic => {
@@ -304,6 +309,15 @@ impl FluxDivergenceOperator for LimitedFlux {
     fn stencil_radius(&self) -> usize {
         // Same stencil footprint as WENO3 — see the module doc.
         2
+    }
+
+    fn max_wave_speed(
+        &self,
+        _field: &ContextValue,
+        _ctx: &ComputeContext,
+    ) -> Result<f64, OxiflowError> {
+        // Constant advection velocity: the same speed on any field.
+        Ok(self.velocity.abs())
     }
 }
 
@@ -547,15 +561,27 @@ mod tests {
         assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
     }
 
-    // ── CFL check ───────────────────────────────────────────────────────────
+    // ── Stability (DA-073) ──────────────────────────────────────────────────
 
     #[test]
-    fn rejects_cfl_violation() {
+    fn does_not_depend_on_the_time_step() {
+        // Courant number 40 on this grid: no stability check in the scheme.
         let m = mesh(5); // dx = 0.25
         let op = LimitedFlux::new(10.0, 0.0, Limiter::VanLeer, FluxBoundary::Periodic);
+        let u = ContextValue::ScalarField(DVector::from_vec(vec![0.2, 1.3, -0.7, 2.1, 0.0]));
+        assert_eq!(
+            op.apply(&u, &m, &ctx(1.0)).unwrap(),
+            op.apply(&u, &m, &ctx(1e-3)).unwrap()
+        );
+    }
+
+    // ── Wave speed (DA-073) ─────────────────────────────────────────────────
+
+    #[test]
+    fn declares_the_absolute_advection_velocity() {
+        let op = LimitedFlux::new(-3.0, 0.1, Limiter::MinMod, FluxBoundary::Periodic);
         let u = ContextValue::ScalarField(DVector::from_element(5, 1.0));
-        let err = op.apply(&u, &m, &ctx(1.0)).unwrap_err();
-        assert!(matches!(err, OxiflowError::PreconditionFailed { .. }));
+        assert_eq!(op.max_wave_speed(&u, &ctx(0.01)).unwrap(), 3.0);
     }
 
     // ── RequiresContext ─────────────────────────────────────────────────────

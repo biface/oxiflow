@@ -1,26 +1,53 @@
 //! # Module `solver::parallel`
 //!
-//! Shared Rayon-dispatch-threshold mechanism (DD-014, DD-048) — a small,
+//! Shared Rayon-dispatch-threshold mechanism ([DT-014](https://github.com/biface/oxiflow/issues/14), [DA-048](https://github.com/biface/oxiflow/issues/140)) — a small,
 //! reusable building block for every site in the crate that decides, per
 //! element, whether to run a computation sequentially or through Rayon.
 //! Extracted after the same field/builder/guard triplet was written
 //! twice, verbatim, on `FDGradientCalculator` and `FDLaplacianCalculator`
-//! (DD-014, #51) — see DD-048 for the full rationale (architecture
+//! ([DT-014](https://github.com/biface/oxiflow/issues/14), [#51](https://github.com/biface/oxiflow/issues/51)) — see [DA-048](https://github.com/biface/oxiflow/issues/140) for the full rationale (architecture
 //! principles P1-P5) behind this module's shape.
 //!
 //! ## What this is not
 //!
 //! Not a trait imposed on `ContextCalculator`/`DiscreteOperator`/
-//! `FluxDivergenceOperator` — DD-048 explicitly rejects that shape,
-//! mirroring the precedent already set twice (DD-012 amendment 2, DD-039
+//! `FluxDivergenceOperator` — [DA-048](https://github.com/biface/oxiflow/issues/140) explicitly rejects that shape,
+//! mirroring the precedent already set twice ([DA-012](https://github.com/biface/oxiflow/issues/12) amendment 2, [DA-039](https://github.com/biface/oxiflow/issues/95)
 //! option A): forcing an orthogonal capability onto every implementer of
 //! a shared trait, when only some of them benefit from it. Each site that
-//! wants Rayon dispatch holds a [`ParallelThreshold`] field and reads it
+//! wants Rayon dispatch holds a `ParallelThreshold` field and reads it
 //! itself — a plain data-holding type, not a behavioural contract.
 //!
 //! Entirely gated behind the `parallel` feature, at the module
 //! declaration itself (`solver::mod`) — mirrors `solver::sparse`/
 //! `solver::gpu`'s own gating, not merely the items inside it.
+//!
+//! ## Sizing a threshold
+//!
+//! A dispatch pays once the work it splits outweighs the cost of handing
+//! it to the Rayon pool. That work reads best as the sequential time of
+//! one call of the dispatched loop, the number of items times the cost of
+//! one item, rather than as a node count, which means nothing without the
+//! cost of a node. On the design machine (Intel Core i5-1335U, 12 Rayon
+//! threads), the reference run of the `oxiflow_parallel` benchmarks for
+//! v0.10.0 ([#214](https://github.com/biface/oxiflow/issues/214)) puts the crossover early for loops limited by
+//! arithmetic: parallel loses while one call lasts 10 to 30 µs
+//! sequentially, and wins from about 100 µs for heavy items (a Langmuir
+//! row, a lahar source node) and 300 µs for the lightest (a closed-form
+//! coefficient), that is from about 10³ items at 100 ns each or 10⁵ items
+//! at 3 ns each. Loops limited by memory bandwidth cross much later:
+//! between 0.4 and 4 ms of sequential work for the lahar flux, around
+//! 30 ms for the FD Laplacian.
+//!
+//! Two effects move the crossover in a full run. Inside a time step, a
+//! dispatch sits between sequential phases and costs more than in a
+//! back-to-back benchmark loop. Under `MultiDomainOrchestrator`, the
+//! dispatch inside each domain competes with the dispatch across domains.
+//! Every default in the crate is therefore an indicative starting point:
+//! measure the target workload with [`calibrate_parallel_threshold`] or the
+//! benchmarks under `benches/`, then set the threshold of each site. The
+//! abaques of the reference run, with the charts and tables of every site,
+//! are on the wiki: [Dispatch abaques](https://github.com/biface/oxiflow/wiki/Dispatch-abaques).
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -32,11 +59,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// without extra indirection). [`Self::get`] resolves the sentinel to a
 /// caller-supplied default rather than materializing that default at
 /// construction — one authoritative default, consulted on demand, rather
-/// than copied into every instance (DD-048; closer to chrom-rs's single
+/// than copied into every instance ([DA-048](https://github.com/biface/oxiflow/issues/140); closer to chrom-rs's single
 /// process-wide default than to a per-instance constant).
 ///
 /// Deliberately per-instance, not a shared `static` (chrom-rs's own
-/// design) — `MultiDomainOrchestrator` (DD-031) can run several domains,
+/// design) — `MultiDomainOrchestrator` ([DA-031](https://github.com/biface/oxiflow/issues/82)) can run several domains,
 /// each with its own solver, in the same process; a single global would
 /// force them to share one setting, with a "last writer wins" race
 /// between domains adjusting it independently. Reconfigurable at runtime
@@ -62,12 +89,12 @@ impl ParallelThreshold {
     /// should want anyway: it would force parallel dispatch on every
     /// non-empty input, never the intended behaviour (mirrors chrom-rs's
     /// own `set_parallel_threshold` guard). No other value is validated
-    /// — DD-048 deliberately leaves "how low is too low" to the caller's
+    /// — [DA-048](https://github.com/biface/oxiflow/issues/140) deliberately leaves "how low is too low" to the caller's
     /// own measurement (see [`calibrate_parallel_threshold`]), consistent
-    /// with `sparse_threshold`/`jacobian_bandwidth` (DD-043), which
+    /// with `sparse_threshold`/`jacobian_bandwidth` ([DA-043](https://github.com/biface/oxiflow/issues/103)), which
     /// validate nothing at all: there is no threshold floor that is
     /// universally sensible across workloads (chrom-rs's 999 is nearly a
-    /// total loss for the FD stencils DD-014 calibrated 49999 against).
+    /// total loss for the FD stencils [DT-014](https://github.com/biface/oxiflow/issues/14) calibrated 49999 against).
     pub(crate) fn set(&self, threshold: usize) {
         assert!(threshold > 0, "parallel threshold must be at least 1");
         self.0.store(threshold, Ordering::Relaxed);
@@ -85,7 +112,7 @@ impl ParallelThreshold {
 /// Empirically measures the sequential/parallel crossover point for a
 /// given per-element workload, on the machine actually running the code
 /// — rather than assuming a number calibrated for a different workload
-/// or a different machine (DD-048).
+/// or a different machine ([DA-048](https://github.com/biface/oxiflow/issues/140)).
 ///
 /// Tries each of `candidate_sizes`, in order, timing a sequential loop
 /// and a Rayon `into_par_iter` dispatch of `work` over `0..n` elements;
@@ -97,7 +124,7 @@ impl ParallelThreshold {
 /// `work` should be representative of the real per-element cost it will
 /// be used to threshold for — measuring a cheap placeholder closure and
 /// applying the result to a heavier one (or vice versa) defeats the
-/// purpose. Feeds #53 (the Criterion benchmark suite) rather than
+/// purpose. Feeds [#53](https://github.com/biface/oxiflow/issues/53) (the Criterion benchmark suite) rather than
 /// duplicating its own crossover measurement.
 ///
 /// # Examples

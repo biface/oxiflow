@@ -8,9 +8,9 @@
 //! ## Submodules
 //!
 //! - [`variable`] — Type `ContextVariable`: typed key for context variables
-//! - [`error`]    — Type `OxiflowError`: typed engine error enum (DD-004)
-//! - [`value`]    — Type `ContextValue`: typed value enum (DD-003)
-//! - [`compute`]  — Type `ComputeContext` and trait `RequiresContext` (DD-005, DD-006)
+//! - [`error`]    — Type `OxiflowError`: typed engine error enum ([DD-004](https://github.com/biface/oxiflow/issues/4))
+//! - [`value`]    — Type `ContextValue`: typed value enum ([DD-003](https://github.com/biface/oxiflow/issues/3))
+//! - [`compute`]  — Type `ComputeContext` and trait `RequiresContext` ([DA-005](https://github.com/biface/oxiflow/issues/5), [DA-006](https://github.com/biface/oxiflow/issues/6))
 
 pub mod calculator;
 pub mod calculators;

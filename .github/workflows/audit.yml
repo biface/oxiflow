@@ -1,0 +1,40 @@
+# =============================================================================
+# Audit — RustSec advisories against the committed Cargo.lock
+# =============================================================================
+# On every push and pull request, plus once a week: an advisory published
+# between two commits still surfaces, even when nothing changes in the
+# repository (#184). Renovate's lockfile updates are complementary, not a
+# substitute. No toolchain is needed: cargo-audit reads Cargo.lock only.
+# =============================================================================
+
+name: Audit
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["staging/**", "main"]
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      # No ignored advisory: any RustSec advisory against Cargo.lock fails the
+      # check. Add an `--ignore` only with a tracking issue, as #191 did.
+      - name: cargo audit
+        run: cargo-audit audit

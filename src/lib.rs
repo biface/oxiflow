@@ -25,22 +25,26 @@
 //! propagation) are reduced to this form by introducing `v = ∂u/∂t` as a
 //! second field component: the state `(u, v)` evolves as a first-order
 //! system. No dedicated second-order integrator (RKN, Newmark-β, HHT-α) is
-//! planned: order reduction is the retained approach (DD-030, #81).
+//! planned: order reduction is the retained approach ([DD-030](https://github.com/biface/oxiflow/issues/81)).
 //!
 //! ## Physical domains
 //!
 //! oxiflow covers any problem expressible as the canonical form above.
 //!
-//! | Domain | Primary field `u` | Milestone |
+//! | Domain | Primary field `u` | Reference example (J10) |
 //! |---|---|---|
-//! | Chromatographic transport | concentration `c(z,t)` | J1 |
-//! | Transient heat conduction | temperature `T(x,t)` | J2+ |
-//! | Reaction-diffusion | species `(u,v)` | J2+ |
-//! | Flow in porous media (Darcy) | water content `θ` | J2+ |
-//! | Shallow water (Saint-Venant) | depth `h`, momentum `hv` | J3 |
-//! | Electrochemical (Nernst-Planck) | ionic concentrations `cᵢ` | J3+ |
-//! | Resistive magnetic diffusion | flux density `B` | J10 (prototype, #179) |
-//! | Structural dynamics | displacement `u`, velocity `v` | J4+ |
+//! | Chromatographic transport | concentrations `cᵢ(z,t)` | `competitive_frontal_analysis` ([#174](https://github.com/biface/oxiflow/issues/174)) |
+//! | Transient heat conduction | temperature `T(x,t)` | `heat_transfer_1d` ([#175](https://github.com/biface/oxiflow/issues/175)) |
+//! | Reaction-diffusion | species `(u,v)` | `gray_scott_1d` ([#176](https://github.com/biface/oxiflow/issues/176)) |
+//! | Viscous flow (Burgers) | velocity `u(x,t)` | `burgers_boundary_layer` ([#177](https://github.com/biface/oxiflow/issues/177)) |
+//! | Porous media consolidation (Terzaghi) | excess pore pressure `u(z,t)` | `consolidation_1d` ([#178](https://github.com/biface/oxiflow/issues/178)) |
+//! | Resistive magnetic diffusion | flux density `B` | `magnetic_diffusion_1d` (prototype, [#179](https://github.com/biface/oxiflow/issues/179)) |
+//! | Shallow water (Saint-Venant) | depth `h`, momentum `hv` | `lahar_lake_wave` ([#180](https://github.com/biface/oxiflow/issues/180)) |
+//!
+//! Other problems of the canonical form are candidates without a reference
+//! example yet: Darcy flow (water content `θ`), Nernst-Planck (ionic
+//! concentrations `cᵢ`), structural dynamics (displacement `u`, velocity `v`,
+//! through order reduction, [DD-030](https://github.com/biface/oxiflow/issues/81)).
 //!
 //! For full equations, physical derivations, and numerical details,
 //! see the **[project wiki](https://github.com/biface/oxiflow/wiki)**.
@@ -59,7 +63,7 @@
 //! | Time integration | `Solver` — Euler, RK4, … (J4) |
 //! | Boundary conditions | `BoundaryCondition: RequiresContext` (J2) |
 //! | Multi-domain coupling | `CouplingOperator` (INV-3, J3) |
-//! | Spatial operators | `DiscreteOperator<M: Mesh>` (INV-2, J4b) |
+//! | Spatial operators | `DiscreteOperator<M: Mesh>` (INV-2, J5) |
 //!
 //! ## Architecture — WHAT / HOW separation
 //!
@@ -87,7 +91,7 @@
 //! - [`solver`]    — [`solver::Scenario`], [`solver::SolverConfiguration`],
 //!   [`solver::Solver`], [`solver::SimulationResult`]
 //! - [`boundary`]  — `BoundaryCondition` trait (J2)
-//! - [`operators`] — `DiscreteOperator<M: Mesh>` (INV-2, J4b)
+//! - [`operators`] — `DiscreteOperator<M: Mesh>` (INV-2, J5)
 //! - [`coupling`]  — `CouplingOperator` (INV-3, J3)
 //!
 //! ## FEM invariants — forward compatibility
@@ -100,40 +104,57 @@
 //! | INV-1 | No `dx`/`nx` in public API — all spatial access via [`mesh::Mesh`] | v0.1.0 |
 //! | INV-2 | Integrators decoupled from spatial scheme via `DiscreteOperator<M>` | v0.5.0 |
 //! | INV-3 | Inter-domain coupling only via `CouplingOperator` | v0.3.0 |
-//! | INV-4 | All public traits object-safe — external crates can implement them | v0.30.0 (DA-017) |
+//! | INV-4 | All public traits object-safe — external crates can implement them | v0.30.0 ([DA-017](https://github.com/biface/oxiflow/issues/17)) |
 //!
 //! ## Getting started (J1)
 //!
-//! ```rust,ignore
+//! ```rust
+//! use nalgebra::DVector;
 //! use oxiflow::{
-//!     context::ContextVariable,
+//!     context::{ComputeContext, ContextValue, ContextVariable, OxiflowError},
 //!     mesh::{Mesh, UniformGrid1D},
 //!     model::{PhysicalModel, RequiresContext},
-//!     solver::{Scenario, SolverConfiguration, TimeConfiguration,
-//!              StepControl, IntegratorKind},
+//!     solver::{methods::ForwardEulerSolver, IntegratorKind, Scenario, Solver,
+//!              SolverConfiguration, StepControl, TimeConfiguration},
 //! };
 //!
-//! // 1. Declare the physical model
+//! // 1. Declare the physical model: du/dt = -u
 //! struct MyModel;
 //! impl RequiresContext for MyModel {
 //!     fn required_variables(&self) -> Vec<ContextVariable> {
 //!         vec![ContextVariable::Time]
 //!     }
 //! }
-//! impl PhysicalModel for MyModel { /* … */ }
+//! impl PhysicalModel for MyModel {
+//!     fn compute_physics(
+//!         &self,
+//!         state: &ContextValue,
+//!         _ctx: &ComputeContext,
+//!     ) -> Result<ContextValue, OxiflowError> {
+//!         Ok(ContextValue::ScalarField(-state.as_scalar_field()?.clone()))
+//!     }
+//!     fn initial_state(&self, mesh: &dyn Mesh) -> ContextValue {
+//!         ContextValue::ScalarField(DVector::from_element(mesh.n_dof(), 1.0))
+//!     }
+//!     fn name(&self) -> &str {
+//!         "my_model"
+//!     }
+//! }
 //!
 //! // 2. Declare the problem (WHAT)
-//! let mesh = UniformGrid1D::new(100, 0.0, 1.0).unwrap();
+//! let mesh = UniformGrid1D::new(100, 0.0, 1.0)?;
 //! let scenario = Scenario::single(Box::new(MyModel), Box::new(mesh));
 //!
 //! // 3. Configure solving (HOW)
 //! let config = SolverConfiguration::new(
-//!     TimeConfiguration::new(600.0, StepControl::Fixed { dt: 0.1 }),
+//!     TimeConfiguration::new(1.0, StepControl::Fixed { dt: 0.1 }),
 //!     IntegratorKind::Euler,
 //! );
 //!
-//! // 4. Solve (J4 — integrator implementations land at v0.4.0)
-//! // let result = EulerSolver.solve(&scenario, &config)?;
+//! // 4. Solve
+//! let result = ForwardEulerSolver.solve(&scenario, &config)?;
+//! assert_eq!(result.states.len(), result.times.len());
+//! # Ok::<(), OxiflowError>(())
 //! ```
 
 pub mod boundary;

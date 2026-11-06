@@ -1,13 +1,13 @@
 //! # Module `solver::config`
 //!
-//! Solving configuration — `SolverConfiguration` (HOW pole, DD-021, issue #32).
+//! Solving configuration — `SolverConfiguration` (HOW pole, [DA-021](https://github.com/biface/oxiflow/issues/58), issue [#32](https://github.com/biface/oxiflow/issues/32)).
 //!
 //! ## Design
 //!
 //! `dt: f64` is never exposed directly in the public API. Instead, `StepControl`
 //! encapsulates both fixed-step and adaptive-step strategies. `TimeConfiguration`
-//! groups all temporal parameters. This prevents the breaking change that would
-//! occur at J4 when adaptive integrators (DoPri45, BDF2) are introduced (DD-021).
+//! groups all temporal parameters. This avoided the breaking change that would
+//! have occurred at J4, when the adaptive integrator (DoPri45) arrived ([DA-021](https://github.com/biface/oxiflow/issues/58)).
 
 use crate::context::calculator::ContextCalculator;
 
@@ -15,8 +15,8 @@ use crate::context::calculator::ContextCalculator;
 
 /// Time step control strategy.
 ///
-/// At J1, only `Fixed` is used. `Adaptive` is reserved for J4 (DoPri45, BDF2)
-/// and added as a new variant — non-breaking for all J1/J2 code.
+/// `Fixed` exists since J1. `Adaptive` was added at J4 as a new variant,
+/// without breaking J1/J2 code; only `DoPri45Solver` accepts it.
 ///
 /// # Examples
 ///
@@ -32,15 +32,20 @@ use crate::context::calculator::ContextCalculator;
 pub enum StepControl {
     /// Fixed time step — J1.
     ///
-    /// Stability for explicit methods requires the CFL condition:
+    /// With an advective term, an explicit method needs a Courant number
+    /// of at most 1,
     ///
-    /// $$\text{CFL} = \frac{v \, \Delta t}{\Delta x} \leq 1$$
+    /// $$C = \frac{s \cdot \Delta t}{\Delta x} \leq 1$$
+    ///
+    /// with `s` the wave speed the model declares and `Δx` the
+    /// characteristic length of the mesh; forward Euler and RK4 refuse a
+    /// larger step ([DA-073](https://github.com/biface/oxiflow/issues/229)). The implicit methods have no such limit.
     Fixed {
         /// Time step size.
         dt: f64,
     },
 
-    /// Adaptive step-size control — RESERVED J4 (DoPri45, BDF2, DD-021).
+    /// Adaptive step-size control — J4 (DoPri45, [DA-021](https://github.com/biface/oxiflow/issues/58)).
     ///
     /// The integrator adjusts $\Delta t$ to keep the local truncation error
     /// within the tolerance band:
@@ -85,7 +90,7 @@ impl StepControl {
 /// Temporal integration method.
 ///
 /// `Euler` is active since J1; `RK4`, `BackwardEuler`, `CrankNicolson`,
-/// `BDF2`, `DoPri45`, `Imex` since J4a (#41, #43, #44, #42, #45).
+/// `BDF2`, `DoPri45`, `Imex` since J4 ([#41](https://github.com/biface/oxiflow/issues/41), [#43](https://github.com/biface/oxiflow/issues/43), [#44](https://github.com/biface/oxiflow/issues/44), [#42](https://github.com/biface/oxiflow/issues/42), [#45](https://github.com/biface/oxiflow/issues/45)).
 ///
 /// # Examples
 ///
@@ -101,22 +106,22 @@ impl StepControl {
 pub enum IntegratorKind {
     /// Forward Euler — explicit, 1st order — J1.
     Euler,
-    /// Runge-Kutta 4 — explicit, 4th order — J4a (#41).
+    /// Runge-Kutta 4 — explicit, 4th order — J4 ([#41](https://github.com/biface/oxiflow/issues/41)).
     RK4,
-    /// Backward Euler — implicit, 1st order — J4a (#43, DD-013, DD-033).
+    /// Backward Euler — implicit, 1st order — J4 ([#43](https://github.com/biface/oxiflow/issues/43), [DT-013](https://github.com/biface/oxiflow/issues/13), [DD-033](https://github.com/biface/oxiflow/issues/86)).
     BackwardEuler,
-    /// Crank-Nicolson — semi-implicit, 2nd order — J4a (#43, DD-013, DD-033).
+    /// Crank-Nicolson — semi-implicit, 2nd order — J4 ([#43](https://github.com/biface/oxiflow/issues/43), [DT-013](https://github.com/biface/oxiflow/issues/13), [DD-033](https://github.com/biface/oxiflow/issues/86)).
     CrankNicolson,
-    /// BDF2 — implicit multi-step, 2nd order — J4a (#44, DD-034). Fixed
+    /// BDF2 — implicit multi-step, 2nd order — J4 ([#44](https://github.com/biface/oxiflow/issues/44), [DD-034](https://github.com/biface/oxiflow/issues/87)). Fixed
     /// `dt` only; see `BDF2Solver` module docs for the deferred
     /// variable-step formula.
     BDF2,
-    /// Dormand-Prince DoPri45 — explicit, adaptive step, order 5 — J4a
-    /// (#42, DD-036). `Solver` only, not `SteppableSolver` — see
+    /// Dormand-Prince DoPri45 — explicit, adaptive step, order 5 — J4
+    /// ([#42](https://github.com/biface/oxiflow/issues/42), [DD-036](https://github.com/biface/oxiflow/issues/89)). `Solver` only, not `SteppableSolver` — see
     /// `DoPri45Solver` module docs.
     DoPri45,
     /// Operator splitting (Strang) — n ≥ 2 sub-models, each with its own
-    /// integrator — J4a (#45, DD-037). `Solver` only, not
+    /// integrator — J4 ([#45](https://github.com/biface/oxiflow/issues/45), [DA-037](https://github.com/biface/oxiflow/issues/90)). `Solver` only, not
     /// `SteppableSolver` — see `OperatorSplittingSolver` module docs.
     /// Neither purely explicit nor purely implicit — excluded from
     /// `is_explicit()`.
@@ -200,15 +205,17 @@ impl TimeConfiguration {
 /// Solving configuration — HOW pole.
 ///
 /// Groups the integration method, temporal parameters, and context calculators.
-/// `DiscreteOperator` (INV-2, J4b) is **not** a configuration field — it is
-/// an implementation detail inside spatial `ContextCalculator`s.
+/// The spatial scheme (INV-2, J5) is **not** a configuration field: an FD
+/// `DiscreteOperator` sits inside spatial `ContextCalculator`s, and a
+/// `FluxDivergenceOperator` (FV, WENO) is wrapped by `DiscretizedModel` on
+/// the WHAT side ([DA-038](https://github.com/biface/oxiflow/issues/92)).
 ///
 /// # Serialisation
 ///
 /// `SolverConfiguration` does not implement `serde::Serialize` / `serde::Deserialize`.
 /// The `calculators` field holds `Vec<Box<dyn ContextCalculator>>` (trait objects),
 /// which cannot be serialised directly. The serialisable subset of configuration
-/// is captured in `SimulationSnapshot` (DD-025 Option B, v0.6.0).
+/// is captured in `SimulationSnapshot` ([DT-025](https://github.com/biface/oxiflow/issues/66) Option B, v0.6.0).
 ///
 /// # Examples
 ///
